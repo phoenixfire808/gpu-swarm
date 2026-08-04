@@ -37,5 +37,5 @@ python examples/use_pool_from_script.py --cuda
 
 - Allowlisted jobs only: `probe`, `pytorch_cuda_probe`
 - No Docker / no mocks / no arbitrary shell on workers
-- Do not expose scheduler to the public internet
+- Private Tailscale/LAN pool — not exposed to the open internet; friends join via Tailscale
 - Do not wipe Hermes MEMORY/USER/SOUL/credentials/vault

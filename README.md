@@ -68,7 +68,7 @@ Default URLs on Drew’s host (Tailscale):
 
 **Friend flow**
 
-1. Join the private Tailscale network (ask Drew — do **not** put the scheduler on the public internet).
+1. Install Tailscale and join Drew’s private network (ask Drew). Private Tailscale/LAN pool — not exposed to the open internet.
 2. Open the portal URL → sign in with **invite code / pool password** + display name (OAuth comes later).
 3. **Home** shows three big paths: **Contribute** · **Utilize** · **Connect** (URLs, Discord commands, CLI/SDK — [`CONNECTING.md`](CONNECTING.md)).
 4. **Contribute — register this machine** — set dedication caps:

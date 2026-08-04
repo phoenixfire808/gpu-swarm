@@ -51,8 +51,8 @@ Docs: CONNECTING.md · examples/ollama_or_local_offload.md
 
 **Laptop / no NVIDIA GPU? (still useful)**
 You do **not** need a GPU to join the crew.
-1. Join Tailscale (ask Drew) — pool is Tailscale-private, **not** on the
-   public internet. “Can’t reach it from Chrome without Tailscale” is normal.
+1. Join Tailscale (ask Drew) — private Tailscale/LAN pool, not exposed to
+   the open internet. “Can’t reach it from Chrome without Tailscale” is normal.
 2. Open the portal with the **full URL including port**:
    http://100.85.165.84:8767/portal
    Scheduler API (CLI / env): http://100.85.165.84:8766
@@ -68,14 +68,20 @@ You do **not** need a GPU to join the crew.
   (not the portal URL, not bare host without port)
 - Black / blank portal → hard refresh (Ctrl+F5) or reopen latest portal URL
   after Drew updates; confirm Tailscale is connected
-- Expecting public internet → won’t work; stay on Tailscale
+- Expecting open-internet URL → won’t work; install/login Tailscale + join Drew’s tailnet
+
+**How friends connect**
+1. Install Tailscale
+2. Get invited to Drew’s Glitch Factor tailnet
+3. Open portal http://100.85.165.84:8767/portal or run the EXE
+4. Contribute or Utilize (invite: glitch-factor)
 
 **Honest v1 limits**
 Jobs actually run on GPU/CPU. RAM + SSD numbers are capacity you advertise
 for scheduling — not a magic shared hard drive or pooled RAM across PCs yet.
 
 Leave anytime (EXE Leave / portal Leave / app Leave / Ctrl+C on CLI).
-Do **not** expose the scheduler or portal to the public internet.
+Private Tailscale/LAN pool — not exposed to the open internet (by design).
 Never share `.env` or bot tokens.
 ```
 
@@ -85,7 +91,7 @@ You can still use the pool without a GPU.
 
 | Point | Detail |
 |-------|--------|
-| Private by design | Scheduler + portal are **Tailscale-only**, not public internet. That is normal. |
+| Private by design | Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use these URLs. |
 | Full URLs + ports | Portal `http://100.85.165.84:8767/portal` · Scheduler `http://100.85.165.84:8766` |
 | Utilize first | Login → **Utilize** → submit jobs; pool GPUs (e.g. Drew’s) run them |
 | Optional Contribute | Advertise CPU/RAM/disk only; leave GPU/VRAM at 0. CUDA probes need an NVIDIA worker online |

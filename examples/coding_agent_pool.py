@@ -48,7 +48,10 @@ def _request(method: str, url: str, body: dict[str, Any] | None = None, timeout:
     except urllib.error.URLError as exc:
         raise SystemExit(
             f"Cannot reach scheduler at {url}: {exc.reason}\n"
-            "Is the pool up? Try: curl http://127.0.0.1:8766/status"
+            "Private Tailscale/LAN pool — not exposed to the open internet.\n"
+            "Fix: install/login Tailscale, join Drew’s tailnet, then retry.\n"
+            "Same PC as Drew: curl http://127.0.0.1:8766/status\n"
+            "Members: curl http://100.85.165.84:8766/status"
         ) from exc
     if not raw:
         return {}

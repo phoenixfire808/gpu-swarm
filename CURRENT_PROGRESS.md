@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:05 CDT · Desktop Home UX — Contribute / Utilize / Connect first-class.
+**Updated:** 2026-08-04 ~12:10 CDT · Clarified Tailscale/LAN “not on public internet” UX (actionable, not broken).
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -13,28 +13,34 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 
 **Discord:** App **GPU Pool** · Primary guild **Glitch Factor** · Invite code `glitch-factor`  
 **v1 jobs only:** `probe`, `pytorch_cuda_probe` · Auth MVP: invite/password (OAuth later)  
-**Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files
+**Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files  
+**Network model:** Private Tailscale/LAN only (binds `0.0.0.0` on host for Tailscale reachability — not open WAN)
 
 ---
 
-## Live scorecard (fresh LIVE probe 2026-08-04 ~12:05 CDT)
+## Live scorecard (fresh LIVE probe 2026-08-04 ~12:10 CDT)
 
 | # | Check | Result |
 |---|--------|--------|
-| 1 | Scheduler `:8766` `/status` + workers + resource fields | **PASS** — `workers_online=1` |
-| 2 | Worker online with real GPUs | **PASS** — Drew-Home; RTX 5060 Ti + 2070 SUPER |
-| 3 | Utilize e2e `probe` + `pytorch_cuda_probe` (app_backend path) | **PASS** — probe + CUDA completed; `cuda:0` 5060 Ti |
-| 4 | Desktop Home UX — 3 big modes | **PASS** — Home cards + tabs Contribute / Utilize / Connect; Run Probe / Run CUDA Job |
-| 5 | Portal Tailscale + invite | **PASS** (prior) — invite `glitch-factor` |
-| 6 | Discord GPU Pool bot | **PASS** (prior) — slash cmds synced |
-| 7 | GitHub `phoenixfire808/gpu-swarm` | **PASS** — push this UX commit |
-| 8 | GPUPool.exe Release | **NEEDS REBUILD** — packaging Worker must rebuild from this source |
+| 1 | Scheduler Tailscale `/status` | **PASS** — HTTP 200 @ `http://100.85.165.84:8766/status` |
+| 2 | Portal Tailscale `/portal` | **PASS** — HTTP 200; new “How friends connect” + private-network copy live |
+| 3 | `tailscale ip -4` | **PASS** — still `100.85.165.84` (defaults unchanged) |
+| 4 | Desktop Connect/Utilize Tailscale status helpers | **PASS** — `test_scheduler` / `pool_status` return actionable Tailscale hints |
+| 5 | GPUPool.exe Release | **NEEDS REBUILD** — no release asset yet / packaging Worker must rebuild from this source |
 
-**Demo verdict:** MOSTLY — Home makes Utilize + Connect obvious; live jobs complete. EXE Release (if any) needs rebuild to pick up UI.
+**Demo verdict:** MOSTLY — private-by-design messaging is clear; friends path is Tailscale → portal/EXE → Contribute/Utilize.
 
 ---
 
 ## Done (with dates)
+
+### Tailscale/LAN UX copy (2026-08-04)
+- [x] Softened “public internet” wording everywhere → private Tailscale/LAN + friends join via Tailscale
+- [x] Portal: network note, How friends connect card (Home + Connect), clearer dash error
+- [x] Desktop: Test Tailscale connection on Utilize/Connect; no vague “DOWN/pool is down”
+- [x] `app_backend.PRIVATE_NETWORK_BLURB` + `scheduler_reachability_hint` + `get_friends_connect_text`
+- [x] Docs: DOWNLOAD / CONNECTING / DISCORD_MEMBER_QUICKSTART / README / examples
+- [x] Portal restarted on `0.0.0.0:8767` to serve new HTML/API
 
 ### Desktop UX — Utilize + Connect first-class (2026-08-04)
 - [x] Home screen with three large mode cards (Contribute / Utilize / Connect)

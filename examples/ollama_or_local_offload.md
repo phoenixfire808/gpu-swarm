@@ -94,6 +94,6 @@ Files to touch:
 
 ## Safety reminders
 
-- Scheduler/portal stay on Tailscale / LAN — not the public internet.
+- Private Tailscale/LAN pool — not exposed to the open internet; friends join via Tailscale.
 - Never put Discord bot tokens in agent prompts or example scripts.
 - No Docker in this project’s ops path.
