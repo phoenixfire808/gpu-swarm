@@ -31,6 +31,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 - Desktop Home three-mode UX: Contribute / Utilize / Connect.
 - Windows EXE packaging path (`build_exe.ps1`, `GPUPool.exe`, Release docs).
 
+### Fixed
+
+- **Desktop app Tk threading** — worker threads no longer call `self.after()` directly (fixes `RuntimeError: main thread is not in main loop` on Workspace refresh and all background UI updates). Uses `GpuPoolApp.post_ui()` + main-loop queue drain.
+
 ### Changed
 
 - Packaging spec bundles `scripts/install-prereqs.*`, joiner/check prereq scripts, and `SHARED_AGENT_DEV.md` for next EXE.

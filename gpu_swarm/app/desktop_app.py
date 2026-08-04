@@ -7,6 +7,7 @@ Calls only gpu_swarm.app_backend stable APIs (no mocks).
 
 from __future__ import annotations
 
+import queue
 import threading
 import time
 from typing import Any, Callable
@@ -51,6 +52,8 @@ class GpuPoolApp(ctk.CTk):
         self.settings = be.load_config()
         self._poll_after: str | None = None
         self._busy = False
+        self._ui_queue: queue.Queue[Callable[[], None]] = queue.Queue()
+        self._ui_drain_after: str | None = None
 
         self._container = ctk.CTkFrame(self, fg_color=BG)
         self._container.pack(fill="both", expand=True)
@@ -61,6 +64,51 @@ class GpuPoolApp(ctk.CTk):
             self._show_main()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._ensure_ui_drain()
+
+    def post_ui(self, fn: Callable[[], None]) -> None:
+        """Run *fn* on the Tk main thread (safe from worker threads)."""
+        if threading.current_thread() is threading.main_thread():
+            if not self.winfo_exists():
+                return
+            try:
+                fn()
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        self._ui_queue.put(fn)
+        self._ensure_ui_drain()
+
+    def _ensure_ui_drain(self) -> None:
+        if self._ui_drain_after is not None:
+            return
+        try:
+            if self.winfo_exists():
+                self._ui_drain_after = self.after(50, self._drain_ui_queue)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _drain_ui_queue(self) -> None:
+        self._ui_drain_after = None
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:  # noqa: BLE001
+            return
+        while True:
+            try:
+                fn = self._ui_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                fn()
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            if self.winfo_exists() and not self._ui_queue.empty():
+                self._ensure_ui_drain()
+        except Exception:  # noqa: BLE001
+            pass
 
     def _clear(self) -> None:
         for child in self._container.winfo_children():
@@ -79,6 +127,17 @@ class GpuPoolApp(ctk.CTk):
         MainFrame(self._container, self).pack(fill="both", expand=True)
 
     def _on_close(self) -> None:
+        if self._ui_drain_after:
+            try:
+                self.after_cancel(self._ui_drain_after)
+            except Exception:  # noqa: BLE001
+                pass
+            self._ui_drain_after = None
+        while True:
+            try:
+                self._ui_queue.get_nowait()
+            except queue.Empty:
+                break
         if self._poll_after:
             try:
                 self.after_cancel(self._poll_after)
@@ -423,7 +482,7 @@ class WizardFrame(ctk.CTkFrame):
                 skip_virtualbox=skip_virtualbox,
                 skip_vagrant=skip_vagrant,
             )
-            self.after(0, lambda: self._prereqs_done(result, detect_only=detect_only))
+            self.app.post_ui(lambda: self._prereqs_done(result, detect_only=detect_only))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -639,7 +698,7 @@ class WizardFrame(ctk.CTkFrame):
             elif pct is None or int(pct or 0) in (0, 100) or pkg:
                 self._append_log(self.deps_log, line)
 
-        self.after(0, apply)
+        self.app.post_ui(apply)
 
     def _bootstrap_python(self) -> None:
         self.deps_log.delete("1.0", "end")
@@ -659,7 +718,7 @@ class WizardFrame(ctk.CTkFrame):
                 with_requirements=True,
                 on_progress=self._on_install_progress,
             )
-            self.after(0, lambda: self._bootstrap_done(result))
+            self.app.post_ui(lambda: self._bootstrap_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -703,7 +762,7 @@ class WizardFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.install_requirements(on_progress=self._on_install_progress)
-            self.after(0, lambda: self._deps_done(result))
+            self.app.post_ui(lambda: self._deps_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -768,7 +827,7 @@ class WizardFrame(ctk.CTkFrame):
                 display_name=self.settings.discord_user or self.settings.worker_name,
                 invite_code=PORTAL_INVITE_CODE,
             )
-            self.after(0, lambda: self._diag_submit_done(result, written))
+            self.app.post_ui(lambda: self._diag_submit_done(result, written))
 
         if hasattr(self, "deps_diag_lbl"):
             self.deps_diag_lbl.configure(text="Submitting diagnostics…", text_color=MUTED)
@@ -832,7 +891,7 @@ class WizardFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.install_torch_cuda(on_progress=self._on_install_progress)
-            self.after(0, lambda: self._torch_done(result))
+            self.app.post_ui(lambda: self._torch_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -957,7 +1016,7 @@ class WizardFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.auto_detect_scheduler_url(probe=True, timeout=2.5)
-            self.after(0, lambda: self._auto_detect_done(result))
+            self.app.post_ui(lambda: self._auto_detect_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -992,7 +1051,7 @@ class WizardFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.test_scheduler(url)
-            self.after(0, lambda: self._test_done(result))
+            self.app.post_ui(lambda: self._test_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -1248,7 +1307,7 @@ class WizardFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.start_worker(settings, wait_online_sec=10.0)
-            self.after(0, lambda: self._join_now_done(result))
+            self.app.post_ui(lambda: self._join_now_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -1772,7 +1831,7 @@ class MainFrame(ctk.CTkFrame):
             url = self._scheduler_url_for_jobs()
             st = be.pool_status(url)
             info = be.get_agent_vms_info()
-            self.after(0, lambda: self._render_home_pool(st, info))
+            self.app.post_ui(lambda: self._render_home_pool(st, info))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2502,7 +2561,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.test_scheduler(url)
-            self.after(0, lambda: self._apply_scheduler_test_label(self.test_lbl, result, short=True))
+            self.app.post_ui(lambda: self._apply_scheduler_test_label(self.test_lbl, result, short=True))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2514,7 +2573,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.test_scheduler(url or None)
-            self.after(0, lambda: self._apply_scheduler_test_label(self.utilize_conn_lbl, result))
+            self.app.post_ui(lambda: self._apply_scheduler_test_label(self.utilize_conn_lbl, result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2526,7 +2585,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.test_scheduler(url or None)
-            self.after(0, lambda: self._apply_scheduler_test_label(self.connect_status_lbl, result))
+            self.app.post_ui(lambda: self._apply_scheduler_test_label(self.connect_status_lbl, result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2559,7 +2618,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.start_worker(settings, wait_online_sec=10.0)
-            self.after(0, lambda: self._join_done(result))
+            self.app.post_ui(lambda: self._join_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2583,7 +2642,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.stop_worker()
-            self.after(0, lambda: self._leave_done(result))
+            self.app.post_ui(lambda: self._leave_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2687,7 +2746,7 @@ class MainFrame(ctk.CTkFrame):
             except Exception as exc:  # noqa: BLE001
                 st = {"ok": False, "message": str(exc), "vm_status": "error"}
                 plan = {}
-            self.after(0, lambda: self._render_workspace(st, plan))
+            self.app.post_ui(lambda: self._render_workspace(st, plan))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2744,15 +2803,14 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.open_workspace(open_rdp=True, start_if_needed=True)
-            self.after(0, lambda: self._workspace_action_done(result))
+            self.app.post_ui(lambda: self._workspace_action_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
     def _open_workspace_rdp(self) -> None:
         def work() -> None:
             result = be.open_workspace_rdp()
-            self.after(
-                0,
+            self.app.post_ui(
                 lambda: self.workspace_status_lbl.configure(
                     text=str(result.get("message") or result),
                     text_color=OK_GREEN if result.get("ok") else DANGER,
@@ -2771,7 +2829,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.halt_workspace()
-            self.after(0, lambda: self._workspace_action_done(result))
+            self.app.post_ui(lambda: self._workspace_action_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2794,7 +2852,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             st = be.local_endpoint_status()
-            self.after(0, lambda: self._render_local_endpoint(st))
+            self.app.post_ui(lambda: self._render_local_endpoint(st))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2857,7 +2915,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.start_local_endpoint(scheduler_url=sched)
-            self.after(0, lambda: self._local_endpoint_action_done(result, starting=True))
+            self.app.post_ui(lambda: self._local_endpoint_action_done(result, starting=True))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2869,7 +2927,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.stop_local_endpoint()
-            self.after(0, lambda: self._local_endpoint_action_done(result, starting=False))
+            self.app.post_ui(lambda: self._local_endpoint_action_done(result, starting=False))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2913,7 +2971,7 @@ class MainFrame(ctk.CTkFrame):
         def work() -> None:
             url = self._scheduler_url_for_jobs()
             st = be.pool_status(url)
-            self.after(0, lambda: self._render_pool_utilize(st))
+            self.app.post_ui(lambda: self._render_pool_utilize(st))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2988,13 +3046,13 @@ class MainFrame(ctk.CTkFrame):
         def work() -> None:
             submitted = be.submit_job(job_type, scheduler_url=url, submitted_by=by or "desktop-utilize")
             if not submitted.get("ok"):
-                self.after(0, lambda: self._utilize_done(submitted, None))
+                self.app.post_ui(lambda: self._utilize_done(submitted, None))
                 return
             jid = submitted.get("job_id") or ""
             # Persist URL that accepted the job for status polling
             used = submitted.get("url") or url
             waited = be.wait_for_job(jid, scheduler_url=used, timeout_sec=90.0)
-            self.after(0, lambda: self._utilize_done(submitted, waited))
+            self.app.post_ui(lambda: self._utilize_done(submitted, waited))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -3049,8 +3107,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.get_job(jid, scheduler_url=url)
-            self.after(
-                0,
+            self.app.post_ui(
                 lambda: (
                     self.job_box.delete("1.0", "end"),
                     self.job_box.insert("1.0", json.dumps(result.get("job") or result, indent=2, default=str)),
@@ -3094,7 +3151,7 @@ class MainFrame(ctk.CTkFrame):
     def _poll_status(self) -> None:
         def work() -> None:
             status = be.get_status()
-            self.after(0, lambda: self._render_status(status))
+            self.app.post_ui(lambda: self._render_status(status))
 
         threading.Thread(target=work, daemon=True).start()
 

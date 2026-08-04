@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for the private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~13:35 CDT · **Share/Invite grow + personal-name scrub** pushed.
+**Updated:** 2026-08-04 ~13:50 CDT · **Try-out live** — portal restarted @ tip; Drew-Home + host_protect; desktop app Tk threading fix shipped.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -65,6 +65,7 @@ Workspace RDP: `mstsc /v:127.0.0.1:3390` · `vagrant`/`vagrant`.
 
 ## Done (this turn)
 
+- [x] **Desktop Tk threading fix** — `GpuPoolApp.post_ui()` queue drain; all worker `self.after(0,…)` → `self.app.post_ui(…)` (Workspace, Invite, Contribute, bootstrap, poll)
 - [x] Personal-name scrub (friend anecdotes, sample display names, “ask Drew” → host/pool admin)
 - [x] Renamed `FRIEND_LAPTOP.md` → `NO_GPU_LAPTOP.md`
 - [x] Share / Invite grow flow (`gpu_swarm/share_invite.py`, portal hub, desktop Home)
