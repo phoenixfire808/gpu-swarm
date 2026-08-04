@@ -1,10 +1,11 @@
 # gpu-swarm — Private GPU Pool Co-op
 
-Members of a **private Discord** (and friends on Tailscale) plug home PCs into a shared compute pool. Workers advertise GPU / CPU / RAM / disk capacity, pull allowlisted jobs from a central scheduler, and return real results.
+Members of a **private Discord** (and friends on Tailscale) plug home PCs into a shared compute pool. **Share spare GPU/CPU, run jobs, chat, and suggest improvements** — workers advertise real GPU / CPU / RAM / disk capacity, pull allowlisted jobs, and return real results.
 
-This is a co-op pool — **not** a public marketplace.
+This is a co-op pool — **not** a public marketplace. **No Docker.**
 
-**Friends: how to log in → [`LOGIN.md`](LOGIN.md)** (invite code, where to get it, public / Tailscale / EXE paths).
+**Friends: how to log in → [`LOGIN.md`](LOGIN.md)** (what it’s for, invite code, public / Tailscale / EXE paths).  
+**Download / install progress → [`DOWNLOAD.md`](DOWNLOAD.md)** (verbose steps, SmartScreen, no-NVIDIA path).
 
 ## Product vision (v1)
 
@@ -34,7 +35,7 @@ Product one-pager: [`VISION.md`](VISION.md).
 Living plan: [`ROADMAP.md`](ROADMAP.md) · [`TODO.md`](TODO.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`DESIGN.md`](DESIGN.md) · [`CURRENT_PROGRESS.md`](CURRENT_PROGRESS.md).  
 **Download GPU Pool for Windows:**  
 https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
-([v0.1.0](https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe) · [release notes](https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.0) · [`DOWNLOAD.md`](DOWNLOAD.md))  
+([v0.1.0](https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe) · publish **v0.1.1+** for hub/workspace/host_protect · [`DOWNLOAD.md`](DOWNLOAD.md) · [`RELEASE.md`](RELEASE.md))  
 
 **Login (friends):** [`LOGIN.md`](LOGIN.md).  
 Connect paths (Contribute / Utilize / code): [`CONNECTING.md`](CONNECTING.md).  
@@ -114,9 +115,11 @@ REM EXE rebuild (packaging Worker): rebuild from this source so Home / Utilize /
 
 | Mode | What it does |
 |------|----------------|
-| **1 · Contribute** | Install/join as a worker — wizard, caps, **Join / Leave** |
-| **2 · Utilize** | Use the pool **now** — live workers/GPUs, **Run Probe**, **Run CUDA Job**, status + result panel |
-| **3 · Connect** | Plug in from code/tools — scheduler/portal copy, `GPUPool` snippet, `python -m gpu_swarm utilize …`, Discord tips |
+| **1 · Contribute** | Share spare GPU/CPU — wizard, caps, **Join / Leave** (host GPU safety ON by default) |
+| **2 · Utilize** | Run jobs on the pool **now** — no NVIDIA required on your laptop |
+| **3 · Connect** | Plug in tools — URLs, local model endpoint, SDK / CLI / Discord tips |
+| **4 · Workspace** | Optional Linux desktop (CPU/RAM share only — no NVIDIA passthrough) |
+| **Chat / Suggest** | Web Network Hub — pool chat + improvement inbox |
 
 **Contribute**
 

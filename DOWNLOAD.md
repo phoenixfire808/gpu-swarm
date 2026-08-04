@@ -7,15 +7,29 @@ Get the Windows desktop joiner from GitHub Releases — no Python install requir
 **Repo:** https://github.com/phoenixfire808/gpu-swarm  
 **Releases:** https://github.com/phoenixfire808/gpu-swarm/releases  
 
+### What GPU Pool is for
+
+A **private co-op** for Glitch Factor friends — share spare GPU/CPU, run allowlisted jobs, chat on the Network Hub, and suggest improvements. Not a public marketplace. Not Docker.
+
+| Mode | What it does | Who it’s for |
+|------|--------------|--------------|
+| **Contribute** | Lend spare GPU/CPU with **your** caps; host GPU safety ON by default | Anyone with spare compute (VRAM=0 = CPU-only) |
+| **Utilize** | Run jobs on online workers | Everyone — **no NVIDIA required** on your laptop |
+| **Connect** | Copy URLs; start a local OpenAI-style model endpoint | Coders / Open WebUI / agents |
+| **Workspace** | Optional Linux desktop (Hermes agent-vms) | Power users — **CPU/RAM only**; GPU stays on the host worker |
+| **Chat / Suggest** | Pool chat + improvement inbox | Everyone (web Network Hub) |
+
 ### Download GPU Pool for Windows
 
 | | URL |
 |--|-----|
 | **Latest EXE** | https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe |
 | **v0.1.0 (pinned)** | https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe |
-| **Release page** | https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.0 |
+| **Release page** | https://github.com/phoenixfire808/gpu-swarm/releases |
 
-Asset name: **`GPUPool.exe`** (~29 MB onefile). Includes Contribute / Utilize / Connect, portable Python bootstrap, and Copy log / Submit diagnostics.
+Asset name: **`GPUPool.exe`** (~29 MB onefile).
+
+> **Ship note (honest):** Published **v0.1.0** is older than current `master` (missing host_protect, Workspace bridge, Network Hub/chat in the frozen EXE). Prefer **from source** (`start-gpu-pool-app.cmd`) until Drew publishes **v0.1.1+**. Source on GitHub tip already has hub / chat / workspace / host_protect.
 
 ---
 
@@ -24,7 +38,8 @@ Asset name: **`GPUPool.exe`** (~29 MB onefile). Includes Contribute / Utilize / 
 | Path | Tailscale? | How |
 |------|------------|-----|
 | **Public portal URL** (preferred) | **No** | Open Drew’s current `https://….trycloudflare.com/portal` → invite **`glitch-factor`** + display name → Utilize (or Contribute CPU) |
-| **Installer / EXE** | Optional | Download EXE → wizard auto-detects `data/public_endpoints.json` → public `/pool-api` when present; else Tailscale |
+| **Installer / EXE** | Optional | Download EXE → wizard shows **live install progress** → public `/pool-api` when present; else Tailscale |
+| **From source** | Optional | Clone → `scripts\install_joiner_deps.cmd` (verbose steps) → `start-gpu-pool-app.cmd` |
 | **Tailscale** (optional private path) | Yes | Join Drew’s tailnet → `http://100.85.165.84:8767/portal` |
 
 Drew starts public access on the host with `start-public-access.cmd` (Cloudflare quick tunnel → portal `:8767`; `/pool-api` proxies the scheduler so **one** public URL works). Invite-code auth stays on.
@@ -38,6 +53,21 @@ Drew starts public access on the host with `start-public-access.cmd` (Cloudflare
 1. **Access** — either Drew’s **public portal URL** (no Tailscale) **or** Tailscale on Drew’s private network (ask in Discord).
 2. **Invite code** — `glitch-factor` (Glitch Factor Discord). Use it with your display name at portal login / app join.
 3. **NVIDIA drivers** — only if you want to **Contribute a GPU**. Install current Game Ready / Studio drivers so `nvidia-smi` works. **No GPU?** Skip this — use Utilize (and optional CPU contribute) below.
+
+---
+
+## What you’ll see during install
+
+Installers and the desktop wizard print **plain step labels** and keep logs on screen (failures are not hidden):
+
+1. **Creating GPUPool folder…** — `%LOCALAPPDATA%\GPUPool\`
+2. **Downloading Python runtime…** — percent progress when a portable CPython is needed
+3. **Creating isolated Python environment…** — private venv (never global site-packages)
+4. **Installing dependencies (1/5)…** — package names stream as pip works
+5. **Checking GPU…** — optional; Utilize works without NVIDIA
+6. **Setup ready.** / **Connecting to pool…** — after you Save + Join
+
+PowerShell also shows a progress bar (`Write-Progress`). First-run EXE bootstrap writes `%LOCALAPPDATA%\GPUPool\logs\first-run-bootstrap.log`.
 
 ---
 
@@ -61,6 +91,7 @@ Friends on MacBooks, Intel/AMD laptops, or any PC without NVIDIA are still welco
 | CLI / script can’t connect | Public: `GPU_SWARM_SCHEDULER_URL=https://….trycloudflare.com/pool-api` · Tailscale: `http://100.85.165.84:8766` |
 | Black / blank portal screen | Hard refresh (**Ctrl+F5**), reopen the latest portal URL Drew posted |
 | Tunnel URL expired | Quick tunnels rotate when Drew restarts `start-public-access.cmd` — ask for a fresh link |
+| SmartScreen blocks EXE | **More info** → **Run anyway** (only if you trust [this repo’s Releases](https://github.com/phoenixfire808/gpu-swarm/releases)) |
 
 Login walkthrough: [`LOGIN.md`](LOGIN.md).  
 Paste-ready Discord blurb (includes no-GPU path): [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).
@@ -70,13 +101,14 @@ Paste-ready Discord blurb (includes no-GPU path): [`DISCORD_MEMBER_QUICKSTART.md
 ## Install & join (EXE)
 
 1. Open [Releases](https://github.com/phoenixfire808/gpu-swarm/releases) → download the Windows EXE from the latest release.
-2. Run the EXE (Windows SmartScreen may warn on unsigned builds — “More info” → Run anyway if you trust Drew’s release).
+2. Run the EXE. Windows SmartScreen may warn on **unsigned** builds → **More info** → **Run anyway** if you trust Drew’s release.
 3. Prefer the **public portal / pool-api** URLs Drew shared. Tailscale is optional.
 4. In the wizard:
-   - **Python & Deps** — if system Python is missing/broken, click **Bootstrap portable Python** (isolated under `%LOCALAPPDATA%\GPUPool\`, never global site-packages). GPUPool.exe also bootstraps in the background on first run when needed.
+   - **Welcome** — what Contribute / Utilize / Connect / Workspace / Chat are for.
+   - **Python & Deps** — progress bar + live log. Click **Bootstrap portable Python** if needed (isolated under `%LOCALAPPDATA%\GPUPool\`). GPUPool.exe also bootstraps in the background on first run when needed.
    - Scheduler defaults: public `/pool-api` when available, else Tailscale host (`100.85.165.84`).
    - Sign in with invite code **`glitch-factor`** + your Discord display name.
-   - Set caps for GPU VRAM, CPU, RAM, and disk (**VRAM=0** is fine for CPU-only).
+   - Set caps for GPU VRAM, CPU, RAM, and disk (**VRAM=0** is fine for CPU-only). **Host GPU safety** stays ON by default so Windows doesn’t freeze.
    - **Save + Join** so the worker heartbeats into the pool.
 5. In Discord (**Glitch Factor**): `/pool` and `/workers` — your machine should appear.
 
@@ -84,10 +116,10 @@ Leave anytime from the app (**Leave**) or by quitting the EXE.
 
 ### If install / join fails — report to Drew
 
-1. Wizard → **Copy log** or **Submit diagnostics** (Python & Deps or Join step).
+1. Wizard → **Copy log** or **Submit diagnostics** (Python & Deps or Join step). Keep the log visible — don’t close the window until you’ve copied it.
 2. **Submit** POSTs a redacted log to portal `/api/diagnostics` (invite session or invite code).
 3. If portal is down, **Copy log** → paste to Drew in Discord.
-4. On disk: `%LOCALAPPDATA%\GPUPool\logs\error-*.log`
+4. On disk: `%LOCALAPPDATA%\GPUPool\logs\error-*.log` · first-run: `first-run-bootstrap.log`
 
 Tokens/passwords are redacted before copy/submit.
 
@@ -125,7 +157,7 @@ Share the printed portal URL + invite `glitch-factor`. Files (gitignored): `data
 | Path | How |
 |------|-----|
 | **Browser portal** | Public URL or Tailscale → invite + name → Utilize / register machine |
-| **From source** | Clone repo → `start-gpu-pool-app.cmd` (needs Python) |
+| **From source** | Clone repo → `scripts\install_joiner_deps.cmd` (verbose) → `start-gpu-pool-app.cmd` |
 | **CLI** | `python -m gpu_swarm worker --name YourName --discord-user YourName` |
 
 Login: [`LOGIN.md`](LOGIN.md).  
@@ -156,7 +188,7 @@ scripts\install_joiner_deps.cmd
 "%LOCALAPPDATA%\GPUPool\venv\Scripts\python.exe" -m gpu_swarm.app
 ```
 
-Optional GPU contributor torch (large):
+Optional GPU contributor torch (large — verbose pip output):
 
 ```bat
 scripts\install_joiner_deps.cmd --with-torch-cuda
@@ -167,6 +199,7 @@ scripts\install_joiner_deps.cmd --with-torch-cuda
 ## Rules
 
 - Invite code required on the portal (public or Tailscale). Do not disable auth for public mode.
-- Allowlisted jobs only (`probe`, `pytorch_cuda_probe` in v1).
+- Allowlisted jobs only (`probe`, `pytorch_cuda_probe`, `llm_chat` in current tip).
 - Never share `.env` or Discord bot tokens — invite code in Discord is fine; tokens are not.
 - No Docker for this stack.
+- Honest limits: host GPU safety protects contributors; Utilize needs no NVIDIA; Workspace VM has **no** NVIDIA passthrough.

@@ -9,18 +9,22 @@ Strategy:
   4. GPUPool.exe UI/worker stays frozen; portable Python is for pip/torch/source path.
 
 Dry-run: ensure_portable_python(dry_run=True) reports the plan without downloading.
+
+Progress: pass on_progress(step_label, detail_dict) for visible install UX
+(desktop wizard log, PowerShell wrappers, first-run).
 """
 
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.request import urlretrieve
 
 from gpu_swarm.paths import (
@@ -30,6 +34,43 @@ from gpu_swarm.paths import (
     gpu_pool_home,
     is_frozen,
 )
+
+# Human-readable step labels (wizard / console).
+STEP_CREATE_FOLDER = "Creating GPUPool folder…"
+STEP_CHECK_PYTHON = "Checking for a usable Python…"
+STEP_DOWNLOAD_PYTHON = "Downloading Python runtime…"
+STEP_EXTRACT_PYTHON = "Extracting Python runtime…"
+STEP_CREATE_VENV = "Creating isolated Python environment…"
+STEP_INSTALL_DEPS = "Installing dependencies…"
+STEP_CHECK_GPU = "Checking GPU…"
+STEP_DONE = "Setup ready."
+
+ProgressFn = Callable[[str, dict[str, Any]], None]
+
+
+def _emit(on_progress: ProgressFn | None, label: str, **detail: Any) -> None:
+    """Emit a progress line to callback and/or stdout; never raise into callers."""
+    pct = detail.get("percent")
+    pkg = detail.get("package") or detail.get("current")
+    extra = ""
+    if pct is not None:
+        try:
+            extra += f" [{int(pct)}%]"
+        except (TypeError, ValueError):
+            pass
+    if pkg:
+        extra += f" — {pkg}"
+    line = f"[GPU Pool] {label}{extra}"
+    try:
+        print(line, flush=True)
+    except Exception:  # noqa: BLE001
+        pass
+    if on_progress is None:
+        return
+    try:
+        on_progress(label, detail)
+    except Exception:  # noqa: BLE001
+        return
 
 # Pin a known-good Windows x64 CPython. NuGet package includes full stdlib + venv.
 PORTABLE_PYTHON_VERSION = "3.12.8"
@@ -205,13 +246,48 @@ def find_usable_python(*, allow_frozen_self: bool = False) -> dict[str, Any]:
     }
 
 
-def _download(url: str, dest: Path) -> None:
+def _download(
+    url: str,
+    dest: Path,
+    *,
+    on_progress: ProgressFn | None = None,
+    label: str = STEP_DOWNLOAD_PYTHON,
+) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    urlretrieve(url, str(dest))  # noqa: S310 — fixed NuGet URL
+    last_pct = [-1]
+
+    def _hook(block_num: int, block_size: int, total_size: int) -> None:
+        if total_size <= 0:
+            _emit(on_progress, label, percent=None, bytes=block_num * block_size)
+            return
+        done = min(block_num * block_size, total_size)
+        pct = int(done * 100 / total_size)
+        if pct == last_pct[0] and pct not in (0, 100):
+            return
+        if pct - last_pct[0] < 2 and pct not in (0, 100):
+            return
+        last_pct[0] = pct
+        _emit(
+            on_progress,
+            label,
+            percent=pct,
+            bytes=done,
+            total_bytes=total_size,
+            package=f"CPython {PORTABLE_PYTHON_VERSION}",
+        )
+
+    urlretrieve(url, str(dest), reporthook=_hook)  # noqa: S310 — fixed NuGet URL
+    _emit(on_progress, label, percent=100, package=f"CPython {PORTABLE_PYTHON_VERSION}")
 
 
-def _extract_nuget_python(nupkg: Path, dest: Path) -> Path:
+def _extract_nuget_python(
+    nupkg: Path,
+    dest: Path,
+    *,
+    on_progress: ProgressFn | None = None,
+) -> Path:
     """Extract NuGet python package; return path to python.exe."""
+    _emit(on_progress, STEP_EXTRACT_PYTHON, percent=0)
     if dest.exists():
         shutil.rmtree(dest, ignore_errors=True)
     dest.mkdir(parents=True, exist_ok=True)
@@ -219,8 +295,16 @@ def _extract_nuget_python(nupkg: Path, dest: Path) -> Path:
         members = [m for m in zf.namelist() if m.startswith("tools/")]
         if not members:
             raise RuntimeError("NuGet python package missing tools/ tree")
-        for name in members:
+        total = len(members)
+        for i, name in enumerate(members, start=1):
             zf.extract(name, dest)
+            if i == 1 or i == total or i % max(1, total // 20) == 0:
+                _emit(
+                    on_progress,
+                    STEP_EXTRACT_PYTHON,
+                    percent=int(i * 100 / total),
+                    current=f"{i}/{total} files",
+                )
     tools = dest / "tools"
     exe = tools / "python.exe"
     if not exe.is_file():
@@ -237,16 +321,27 @@ def _extract_nuget_python(nupkg: Path, dest: Path) -> Path:
     final = dest / "python.exe"
     if not final.is_file():
         raise RuntimeError(f"flatten failed; missing {final}")
+    _emit(on_progress, STEP_EXTRACT_PYTHON, percent=100)
     return final
 
 
-def download_portable_python(*, dry_run: bool = False) -> dict[str, Any]:
+def download_portable_python(
+    *,
+    dry_run: bool = False,
+    on_progress: ProgressFn | None = None,
+) -> dict[str, Any]:
     """Download NuGet CPython into %LOCALAPPDATA%\\GPUPool\\python\\."""
     dest = PORTABLE_PYTHON_DIR
     existing = portable_python_exe()
     if existing.is_file():
         ok, ver = _version_ok(str(existing))
         if ok:
+            _emit(
+                on_progress,
+                "Python runtime already installed — skipping download.",
+                percent=100,
+                skipped=True,
+            )
             return {
                 "ok": True,
                 "skipped": True,
@@ -268,13 +363,22 @@ def download_portable_python(*, dry_run: bool = False) -> dict[str, Any]:
         ),
     }
     if dry_run:
+        _emit(on_progress, plan["message"], dry_run=True)
         return plan
 
+    _emit(on_progress, STEP_CREATE_FOLDER, path=str(gpu_pool_home()))
     gpu_pool_home().mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="gpupool-py-") as tmp:
         nupkg = Path(tmp) / "python.nupkg"
         try:
-            _download(NUGET_PACKAGE_URL, nupkg)
+            _emit(
+                on_progress,
+                STEP_DOWNLOAD_PYTHON,
+                percent=0,
+                package=f"CPython {PORTABLE_PYTHON_VERSION}",
+                url=NUGET_PACKAGE_URL,
+            )
+            _download(NUGET_PACKAGE_URL, nupkg, on_progress=on_progress)
         except Exception as exc:  # noqa: BLE001
             return {
                 "ok": False,
@@ -283,7 +387,7 @@ def download_portable_python(*, dry_run: bool = False) -> dict[str, Any]:
                 "url": NUGET_PACKAGE_URL,
             }
         try:
-            exe = _extract_nuget_python(nupkg, dest)
+            exe = _extract_nuget_python(nupkg, dest, on_progress=on_progress)
         except Exception as exc:  # noqa: BLE001
             return {
                 "ok": False,
@@ -307,12 +411,23 @@ def download_portable_python(*, dry_run: bool = False) -> dict[str, Any]:
     }
 
 
-def ensure_venv(*, python_exe: str | None = None, dry_run: bool = False) -> dict[str, Any]:
+def ensure_venv(
+    *,
+    python_exe: str | None = None,
+    dry_run: bool = False,
+    on_progress: ProgressFn | None = None,
+) -> dict[str, Any]:
     """Create %LOCALAPPDATA%\\GPUPool\\venv if missing; return venv python path."""
     vpy = venv_python_exe()
     if vpy.is_file():
         ok, ver = _version_ok(str(vpy))
         if ok:
+            _emit(
+                on_progress,
+                "Isolated Python environment already present — skipping.",
+                percent=100,
+                skipped=True,
+            )
             return {
                 "ok": True,
                 "skipped": True,
@@ -341,6 +456,7 @@ def ensure_venv(*, python_exe: str | None = None, dry_run: bool = False) -> dict
             "venv": str(VENV_DIR),
             "message": f"Would create venv at {VENV_DIR} using {base}",
         }
+    _emit(on_progress, STEP_CREATE_VENV, percent=10, path=str(VENV_DIR))
     VENV_DIR.parent.mkdir(parents=True, exist_ok=True)
     if VENV_DIR.exists():
         shutil.rmtree(VENV_DIR, ignore_errors=True)
@@ -356,6 +472,7 @@ def ensure_venv(*, python_exe: str | None = None, dry_run: bool = False) -> dict
             "fix": f'"{base}" -m venv "{VENV_DIR}"',
         }
     ok, ver = _version_ok(str(vpy))
+    _emit(on_progress, STEP_CREATE_VENV, percent=100, version=ver)
     return {
         "ok": ok,
         "skipped": False,
@@ -366,10 +483,32 @@ def ensure_venv(*, python_exe: str | None = None, dry_run: bool = False) -> dict
     }
 
 
+_PIP_PKG_RE = re.compile(
+    r"(?:Downloading|Collecting|Installing collected|Requirement already satisfied|Using cached)\s+(\S+)",
+    re.IGNORECASE,
+)
+
+
+def _count_requirement_packages(req: Path) -> list[str]:
+    names: list[str] = []
+    try:
+        for line in req.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or s.startswith("-"):
+                continue
+            name = re.split(r"[<>=!~\[]", s, maxsplit=1)[0].strip()
+            if name:
+                names.append(name)
+    except OSError:
+        pass
+    return names
+
+
 def install_requirements_into_venv(
     *,
     requirements: Path | None = None,
     dry_run: bool = False,
+    on_progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
     """pip install -r requirements into the isolated venv (no --user / global)."""
     vpy = venv_python_exe()
@@ -393,6 +532,8 @@ def install_requirements_into_venv(
                 break
     if req is None or not req.is_file():
         return {"ok": False, "message": "requirements file not found", "fix": "Restore requirements-joiner.txt"}
+    packages = _count_requirement_packages(req)
+    total_pkgs = max(len(packages), 1)
     if dry_run:
         return {
             "ok": True,
@@ -400,22 +541,86 @@ def install_requirements_into_venv(
             "executable": str(vpy),
             "requirements": str(req),
             "message": f"Would: {vpy} -m pip install -r {req}",
+            "packages": packages,
         }
+    _emit(
+        on_progress,
+        f"{STEP_INSTALL_DEPS} (0/{total_pkgs})",
+        percent=0,
+        package="",
+        total=total_pkgs,
+    )
+    cmd = [str(vpy), "-m", "pip", "install", "-r", str(req), "--progress-bar", "on"]
+    lines: list[str] = []
+    seen: set[str] = set()
+    installed_n = 0
     try:
-        proc = _run(
-            [str(vpy), "-m", "pip", "install", "-r", str(req)],
-            timeout=900,
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=str(req.parent),
         )
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            line = raw.rstrip()
+            if not line:
+                continue
+            lines.append(line)
+            m = _PIP_PKG_RE.search(line)
+            if m:
+                pkg = m.group(1).rstrip("\\").split("/")[-1]
+                if pkg not in seen:
+                    seen.add(pkg)
+                    installed_n = len(seen)
+                    pct = min(99, int(installed_n * 100 / total_pkgs))
+                    _emit(
+                        on_progress,
+                        f"{STEP_INSTALL_DEPS} ({min(installed_n, total_pkgs)}/{total_pkgs})",
+                        percent=pct,
+                        package=pkg,
+                        current=pkg,
+                        line=line,
+                    )
+                else:
+                    _emit(
+                        on_progress,
+                        f"{STEP_INSTALL_DEPS} ({min(installed_n, total_pkgs)}/{total_pkgs})",
+                        percent=min(99, int(installed_n * 100 / total_pkgs)),
+                        package=pkg,
+                        line=line,
+                    )
+            else:
+                # Keep failures / notable pip lines visible.
+                low = line.lower()
+                if any(k in low for k in ("error", "failed", "successfully installed", "warning")):
+                    _emit(
+                        on_progress,
+                        STEP_INSTALL_DEPS,
+                        percent=min(99, int(installed_n * 100 / total_pkgs)),
+                        line=line,
+                        package=line[:80],
+                    )
+        code = proc.wait(timeout=900)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"ok": False, "message": str(exc), "fix": f'"{vpy}" -m pip install -r "{req}"'}
-    tail = ((proc.stdout or "") + "\n" + (proc.stderr or ""))[-1200:]
+    tail = "\n".join(lines)[-1200:]
+    ok = code == 0
+    if ok:
+        _emit(
+            on_progress,
+            f"{STEP_INSTALL_DEPS} ({total_pkgs}/{total_pkgs}) — done",
+            percent=100,
+        )
     return {
-        "ok": proc.returncode == 0,
-        "code": proc.returncode,
+        "ok": ok,
+        "code": code,
         "executable": str(vpy),
         "requirements": str(req),
-        "message": tail or ("Installed into venv" if proc.returncode == 0 else "pip failed"),
-        "fix": "" if proc.returncode == 0 else f'"{vpy}" -m pip install -r "{req}"',
+        "message": tail or ("Installed into venv" if ok else "pip failed"),
+        "fix": "" if ok else f'"{vpy}" -m pip install -r "{req}"',
+        "packages": packages,
     }
 
 
@@ -425,17 +630,23 @@ def ensure_portable_python(
     with_venv: bool = True,
     with_requirements: bool = False,
     dry_run: bool = False,
+    on_progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
     """
     Full bootstrap: detect → optional download → venv → optional requirements.
 
     Prefer existing good system/venv Python unless force_download=True.
+    Pass on_progress for verbose, human-readable install steps.
     """
     actions: list[str] = []
+    _emit(on_progress, STEP_CREATE_FOLDER, path=str(gpu_pool_home()))
+    gpu_pool_home().mkdir(parents=True, exist_ok=True)
+    _emit(on_progress, STEP_CHECK_PYTHON, percent=5)
     found = find_usable_python()
     need_download = force_download or not found.get("ok") or not found.get("pip_ok")
 
     if found.get("ok") and found.get("source") == "venv" and found.get("pip_ok") and not force_download:
+        _emit(on_progress, STEP_DONE, percent=100, message=found["message"])
         result = {
             "ok": True,
             "dry_run": dry_run,
@@ -454,7 +665,7 @@ def ensure_portable_python(
     download_info: dict[str, Any] | None = None
     if need_download or not portable_python_exe().is_file():
         if need_download:
-            download_info = download_portable_python(dry_run=dry_run)
+            download_info = download_portable_python(dry_run=dry_run, on_progress=on_progress)
             actions.append("download_portable" if not download_info.get("skipped") else "portable_present")
             if not download_info.get("ok"):
                 return {
@@ -465,15 +676,21 @@ def ensure_portable_python(
                 }
         elif found.get("ok"):
             actions.append("reuse_system")
+            _emit(on_progress, f"Using existing Python: {found.get('message')}", percent=30)
     else:
         actions.append("portable_present")
+        _emit(on_progress, "Portable Python already on disk.", percent=30)
 
     base_exe = str(portable_python_exe()) if portable_python_exe().is_file() else (
         str(found.get("executable") or "")
     )
     venv_info: dict[str, Any] | None = None
     if with_venv:
-        venv_info = ensure_venv(python_exe=base_exe or None, dry_run=dry_run)
+        venv_info = ensure_venv(
+            python_exe=base_exe or None,
+            dry_run=dry_run,
+            on_progress=on_progress,
+        )
         actions.append("ensure_venv" if not venv_info.get("skipped") else "venv_present")
         if not venv_info.get("ok"):
             return {
@@ -488,7 +705,7 @@ def ensure_portable_python(
 
     req_info: dict[str, Any] | None = None
     if with_requirements and with_venv and not dry_run:
-        req_info = install_requirements_into_venv(dry_run=dry_run)
+        req_info = install_requirements_into_venv(dry_run=dry_run, on_progress=on_progress)
         actions.append("pip_requirements")
         if not req_info.get("ok"):
             return {
@@ -506,6 +723,7 @@ def ensure_portable_python(
     if exe and Path(exe).is_file() and not dry_run:
         _, ok_ver = _version_ok(exe)
 
+    _emit(on_progress, STEP_DONE, percent=100, executable=exe)
     return {
         "ok": True,
         "dry_run": dry_run,

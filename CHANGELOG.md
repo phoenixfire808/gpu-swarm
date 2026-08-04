@@ -9,6 +9,9 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 
 ### Added
 
+- **Verbose install / bootstrap progress** — step labels (“Downloading Python runtime…”, “Installing dependencies (1/5)…”), download percent, pip package streaming, PowerShell `Write-Progress`, wizard progress bar + visible logs, first-run log at `%LOCALAPPDATA%\GPUPool\logs\first-run-bootstrap.log`.
+- **Plain-language friend UX** — Welcome/Home copy for Contribute / Utilize / Connect / Workspace / Chat / Suggest; SmartScreen + invite + rotating public URL; honest no-NVIDIA / host_protect / no passthrough notes in `DOWNLOAD.md` / `LOGIN.md` / `FRIEND_LAPTOP.md` / `RELEASE.md`.
+- Draft **`RELEASE_NOTES_v0.1.1.md`** + publish commands (EXE rebuild still required to ship asset).
 - **All-in-One Network Hub portal** — brand-first peer-mesh `/portal` (`portal_hub.html`); live workers from `/status` (no mocks); Contribute / Utilize / Connect / Workspace / Diagnostics in one place.
 - **Pool chat** — authenticated shared room; SQLite in `portal.db`; 2.5s poll; empty state when quiet (`GET/POST /api/chat`, `/api/presence`).
 - **Suggestions & review inbox** — submit suggestion/bug/review; host marks open/read/done (`/api/suggestions`).
@@ -27,7 +30,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 ### Changed
 
 - Packaging spec keeps fastapi/uvicorn/starlette + `host_protect` / `local_endpoint` for frozen Connect Start/Stop.
-- Docs: `LOGIN.md`, `CONNECTING.md`, `LOCAL_MODEL.md`, `FRIEND_LAPTOP.md`, `DOWNLOAD.md` for friend onboarding.
+- Docs: `LOGIN.md`, `CONNECTING.md`, `LOCAL_MODEL.md`, `FRIEND_LAPTOP.md`, `DOWNLOAD.md`, `RELEASE.md` for friend onboarding + honest v0.1.0 EXE staleness vs tip.
+- `install_joiner_deps.ps1` / `build_exe.ps1` print numbered human steps instead of quiet pip.
 
 ### Fixed
 

@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:50 CDT · Workspace VM MVP (GPU Pool ↔ Hermes agent-vms).
+**Updated:** 2026-08-04 ~13:10 CDT · Verbose install UX + ship-readiness pass (no EXE rebuild this turn).
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -20,7 +20,24 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 
 ---
 
-## Live scorecard (2026-08-04 ~12:45 CDT)
+## Ship readiness (2026-08-04 ~13:10 CDT)
+
+**Verdict: NOT YET** — tip is demo-ready from source; friend EXE ship blocked.
+
+| Gap | Status | Must-do |
+|-----|--------|---------|
+| Hub / chat / host_protect / workspace on GitHub tip | **YES** (source) | — |
+| Published `GPUPool.exe` v0.1.0 | **STALE** vs tip | Rebuild + publish **v0.1.1+** (`RELEASE.md`) |
+| Ollama / `llm_chat` e2e | **BLOCKED** | `ollama serve` + pull + worker restart |
+| Public trycloudflare URL | **Ephemeral** | Ask Drew / `data/public_endpoints.share.txt` |
+| SmartScreen | **Unsigned** | More info → Run anyway (document only) |
+| Verbose install + plain-language docs | **SHIPPED in source** | Lands in EXE on next rebuild |
+
+**Friend path today:** browser portal (tip features) or `start-gpu-pool-app.cmd` from source. Do not claim Release EXE has Workspace/Hub/host_protect until v0.1.1.
+
+---
+
+## Live scorecard (2026-08-04 ~13:10 CDT)
 
 | # | Check | Result |
 |---|--------|--------|
@@ -34,12 +51,23 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 | 8 | Host protect on Drew-Home | **PASS** — worker restarted; `host_protect=ON` |
 | 9 | Living docs + Cursor rule | **PASS** — ROADMAP / CHANGELOG / DESIGN / `.cursor/rules` |
 | 10 | Workspace VM bridge | **CODE READY** — offer→CPU/RAM map + Connect/Home UI; light `agent-vm` status only (no vagrant up / no CUDA stress) |
+| 11 | Network Hub live smoke | **PASS** — portal restarted earlier; chat + suggestions OK on tip |
+| 12 | Verbose install + friend wording | **PASS (source)** — `portable_python` progress, `install_joiner_deps.ps1`, wizard bar/log, DOWNLOAD/LOGIN/FRIEND/RELEASE |
+| 13 | Published EXE freshness | **FAIL** — Release still **v0.1.0** (pre hub/workspace/host_protect/verbose UX) |
 
-**Demo verdict:** Friends can start a localhost OpenAI-compatible endpoint and list models. Chat completes once Drew runs Ollama on a contributor worker. Desktop stays protected by host_protect defaults. Drew can open **Workspace** from the desktop app for a capped Ubuntu VM (GPU stays on host worker).
+**Demo verdict:** From source / portal tip, friends can Contribute / Utilize / Connect / Workspace / Chat. Chat completions need Ollama on a worker. Published EXE is stale — rebuild required for friend one-click ship.
 
 ---
 
 ## Done (with dates)
+
+### Verbose install + plain-language UX (2026-08-04)
+- [x] `portable_python` download % + step labels + streamed pip package progress
+- [x] `install_joiner_deps.ps1` / `build_exe.ps1` numbered steps + Write-Progress
+- [x] Desktop wizard progress bar + Welcome/Home human copy (modes + SmartScreen + invite)
+- [x] Docs: DOWNLOAD / LOGIN / FRIEND_LAPTOP / RELEASE / RELEASE_NOTES_v0.1.1 / README snippets
+- [x] Living docs: this file + TODO / CHANGELOG / ROADMAP
+- [ ] EXE rebuild/publish still required (not done this turn — avoid heavy PyInstaller)
 
 ### Durable project memory (2026-08-04)
 - [x] `ROADMAP.md` · `CHANGELOG.md` · `DESIGN.md` · refreshed `TODO.md` / this file
@@ -98,7 +126,7 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 ## In progress
 
 - [ ] Drew: start Ollama + pull model + worker restart → full chat e2e
-- [ ] Packaging Worker: rebuild EXE (include host_protect + local_endpoint + llm_chat + workspace bridge + portal_hub.html)
+- [ ] Packaging Worker: rebuild EXE **v0.1.1** (host_protect + local_endpoint + llm_chat + workspace bridge + portal_hub + verbose install UX)
 - [ ] Keep scorecard/TODO/CHANGELOG in sync on every ship
 
 ---
@@ -107,16 +135,16 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 
 1. **Enable Ollama on Drew-Home worker** — `ollama serve`, `ollama pull llama3.2`, restart worker, smoke chat via local endpoint.
 2. Try Workspace: `start-gpu-pool-app.cmd` → Home → Workspace → Start / Open (RDP 3390).
-3. Packaging Worker rebuild EXE (must include workspace bridge).
+3. Packaging: `build_exe.ps1 -Clean` → `gh release create v0.1.1` (see `RELEASE.md`).
 4. Member onboarding: `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`.
 5. Optional: streaming chat on local endpoint.
 
 ### Next 5 Drew should care about right now
 
 1. Run Ollama on the host worker (`llm_ready=yes` in worker log).
-2. Open Workspace from the desktop app (capped VM; GPU stays on host worker).
-3. Tell aariff01: Connect → Start local model endpoint → paste `OPENAI_BASE_URL`.
-4. Packaging EXE rebuild (host_protect + workspace).
+2. Publish EXE **v0.1.1** so friends get Hub/Workspace/host_protect/verbose install.
+3. Open Workspace from the desktop app (capped VM; GPU stays on host worker).
+4. Tell aariff01: Connect → Start local model endpoint → paste `OPENAI_BASE_URL`.
 5. Keep `.env` / tokens / public endpoint files local — never commit.
 
 ---
@@ -172,6 +200,14 @@ start-gpu-pool-app.cmd
 - Wipe Hermes durable memory / reuse Jarvis bot token
 - Invent green checks — re-probe `/status` + portal when updating this file
 - Heavy CUDA / PyInstaller stress during agent sessions unless Drew asks
+
+## 2026-08-04 12:56 CDT — tried Network Hub live (light smoke)
+- Tip `504ad18` · Restarted **portal only** → PID **20160** on `:8767` (scheduler/worker/bot/cloudflared left up)
+- **PASS:** `GET /portal` contains Network Hub · invite login `glitch-factor` as Drew-Smoke · dashboard `workers_online=1` (Drew-Home) · chat message id 2 · suggestion inbox · `/api/workspace` ready
+- Desktop app launched (`gpu_swarm.app` PIDs 29592 + prior 47872) for click-around
+- host_protect=**ON** (Drew-Home log); jobs queued/running=0; no pytorch_cuda_probe / ollama pull / vagrant up / PyInstaller
+- GPU after smoke: 5060 Ti ~42% / ~2.4 GiB (pre-existing, not from hub smoke); 2070 SUPER idle
+- Open: `http://127.0.0.1:8767/portal` · Tailscale `http://100.85.165.84:8767/portal` · public tunnel (if up) from `/health` `portal_public_url`
 
 ## 2026-08-04 12:30 CDT — STOP heavy GPU-swarm test load
 - Killed Wizard-OneStop worker PID 31696 (extra test joiner pegging GPU)

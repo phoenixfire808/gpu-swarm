@@ -1,7 +1,12 @@
 @echo off
 setlocal
 REM GPU Pool idempotent joiner deps -> %LOCALAPPDATA%\GPUPool\venv
+REM Verbose by default: step labels + pip progress (see install_joiner_deps.ps1)
 REM Usage: scripts\install_joiner_deps.cmd [--with-torch-cuda] [--force] [--quiet] [--bootstrap-portable]
+echo.
+echo GPU Pool — preparing isolated Python (verbose progress below^)
+echo What for: Contribute (share spare GPU/CPU^) or Utilize (run jobs^). No Docker.
+echo.
 set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%.."
 set "ARGS="

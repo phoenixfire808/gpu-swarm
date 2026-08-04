@@ -2,6 +2,8 @@
 
 For friends on a **laptop without an NVIDIA GPU**. You can still use the pool.
 
+**What this is for:** run jobs on friends’ GPUs (**Utilize**), optionally lend CPU (**Contribute** with VRAM=0), chat / suggest on the web hub. You do **not** need NVIDIA drivers. Workspace VMs (if you try them later) use shared CPU/RAM only — no GPU passthrough.
+
 **Full login guide:** [`LOGIN.md`](LOGIN.md) (where to get invite / public URL, all three paths, troubleshooting).
 
 ## 1) Get on the network
@@ -39,12 +41,15 @@ Banner on the portal: *No NVIDIA? You can still Utilize the pool or contribute C
 
 ## 5) Or use the Windows EXE (installer)
 
-1. Download latest `GPUPool.exe` from [Releases](https://github.com/phoenixfire808/gpu-swarm/releases/latest)
-2. Run wizard — it **auto-detects** the scheduler when `data/public_endpoints.json` is present on that machine (host writes it):
+1. Download latest `GPUPool.exe` from [Releases](https://github.com/phoenixfire808/gpu-swarm/releases/latest)  
+   (If SmartScreen appears → **More info** → **Run anyway** only if you trust Drew’s GitHub release.)
+2. Run the wizard — you’ll see live progress (“Downloading Python…”, “Installing dependencies…”). It **auto-detects** the scheduler when `data/public_endpoints.json` is present on that machine (host writes it):
    - **First:** public `/pool-api` from `data/public_endpoints.json`
    - Then Tailscale `http://100.85.165.84:8766` if reachable
    - Then localhost
 3. Friends joining remotely: open the **public portal** Drew posts (or set `GPU_SWARM_SCHEDULER_URL` to the public `/pool-api`). No NVIDIA → wizard finishes on **Utilize-first**.
+
+> **Note:** Until Drew publishes EXE **v0.1.1+**, the GitHub Release EXE may be behind `master`. Browser portal + from-source `start-gpu-pool-app.cmd` have the newest Hub / Workspace features.
 
 ## 6) Coding agents (optional)
 

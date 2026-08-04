@@ -177,22 +177,46 @@ class WizardFrame(ctk.CTkFrame):
     def _step_welcome(self) -> None:
         self._title(
             "Welcome to GPU Pool",
-            "One-stop setup. After the wizard, the home screen shows three big modes.",
+            "Share spare GPU/CPU with friends, run jobs on the pool, chat, and suggest improvements. "
+            "This wizard sets up your PC once — then you pick a mode on Home.",
         )
-        modes = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
-        modes.pack(fill="x", pady=(0, 8))
+        what = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
+        what.pack(fill="x", pady=(0, 8))
         ctk.CTkLabel(
-            modes,
-            text="Three modes on the home screen",
+            what,
+            text="What GPU Pool is for",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=ACCENT,
         ).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(
-            modes,
+            what,
             text=(
-                "• Contribute — install deps, set caps, Join/Leave as a worker\n"
-                "• Utilize — live pool status + Run Probe / Run CUDA Job (use the pool now)\n"
-                "• Connect — scheduler/portal URLs, Python SDK, CLI, Discord slash tips"
+                "A private co-op for Glitch Factor friends — not a public marketplace.\n"
+                "• Contribute — lend spare GPU/CPU (your caps; host safety stays ON by default)\n"
+                "• Utilize — run allowlisted jobs on whoever is online (no NVIDIA needed on your laptop)\n"
+                "• Connect — copy URLs / start a local model endpoint for tools like Open WebUI\n"
+                "• Workspace — optional Linux VM (shared CPU/RAM only; GPU stays on the host worker)\n"
+                "• Chat / Suggest — talk on the web Network Hub and send improvement ideas to Drew"
+            ),
+            text_color=MUTED,
+            justify="left",
+            wraplength=820,
+        ).pack(anchor="w", padx=16, pady=(0, 14))
+
+        expect = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
+        expect.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(
+            expect,
+            text="What to expect during setup",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=ACCENT,
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+        ctk.CTkLabel(
+            expect,
+            text=(
+                "Next steps show live progress (Downloading Python…, Installing dependencies 1/5…).\n"
+                "Windows SmartScreen may warn on unsigned builds → More info → Run anyway (only if you trust Drew’s GitHub release).\n"
+                "Invite code: glitch-factor + your Discord display name. Public portal URL rotates — ask Drew for the current link."
             ),
             text_color=MUTED,
             justify="left",
@@ -213,13 +237,13 @@ class WizardFrame(ctk.CTkFrame):
             text=(
                 f"Live portal: {hints.get('url')}\n"
                 f"Local: {hints.get('local_url')}   ·   Tailscale: {hints.get('tailscale_url')}\n"
-                f"Invite code: {PORTAL_INVITE_CODE}  (pool password is in .env — not shown here)"
+                f"Invite code: {PORTAL_INVITE_CODE}  (pool password only if Drew DMs it — never posted publicly)"
             ),
             text_color=MUTED,
             justify="left",
             wraplength=820,
         ).pack(anchor="w", padx=16, pady=(0, 8))
-        reach = "reachable" if hints.get("reachable") else "not reachable yet — start-portal.cmd"
+        reach = "reachable" if hints.get("reachable") else "not reachable yet — ask Drew for the current public link, or start-portal.cmd on the host"
         ctk.CTkLabel(
             banner,
             text=f"Portal status: {reach}",
@@ -302,8 +326,9 @@ class WizardFrame(ctk.CTkFrame):
     def _step_deps(self) -> None:
         self._title(
             "Python & dependencies",
-            "Uses an isolated Python under %LOCALAPPDATA%\\GPUPool\\ (portable + venv) so broken "
-            "system Python won’t block installs. CUDA PyTorch is optional.",
+            "We install a private Python under %LOCALAPPDATA%\\GPUPool\\ (not your system Python). "
+            "Watch the log below for steps like “Downloading Python runtime…” and package names. "
+            "CUDA PyTorch is optional — only if you want GPU compute jobs on this PC.",
         )
         try:
             from gpu_swarm.diagnostics import set_wizard_step
@@ -362,10 +387,23 @@ class WizardFrame(ctk.CTkFrame):
         )
         self.torch_lbl.pack(anchor="w", pady=(0, 6))
 
+        self.deps_step_lbl = ctk.CTkLabel(
+            self.body,
+            text="Ready — progress appears here when you Bootstrap or Install.",
+            text_color=MUTED,
+            wraplength=860,
+            justify="left",
+        )
+        self.deps_step_lbl.pack(anchor="w", pady=(4, 2))
+        self.deps_progress = ctk.CTkProgressBar(self.body, height=14, progress_color=ACCENT)
+        self.deps_progress.pack(fill="x", pady=(0, 6))
+        self.deps_progress.set(0)
+
         self.deps_log = self._log_box(180)
         self._append_log(
             self.deps_log,
-            "Ready. If Python looks wrong, Bootstrap portable Python first — then Install.\n",
+            "Ready. Recommended: Bootstrap portable Python first (shows download %), then Install.\n"
+            "Logs stay visible — if something fails, scroll up and use Copy log / Submit diagnostics.\n",
         )
         if status.get("fix"):
             self._append_log(self.deps_log, f"Fix if install fails:\n{status['fix']}\n")
@@ -410,21 +448,61 @@ class WizardFrame(ctk.CTkFrame):
         self.deps_diag_lbl = ctk.CTkLabel(self.body, text="", text_color=MUTED)
         self.deps_diag_lbl.pack(anchor="w", pady=(2, 0))
 
+    def _on_install_progress(self, label: str, detail: dict[str, Any]) -> None:
+        """UI thread: update progress bar + keep log visible during download/install."""
+
+        def apply() -> None:
+            if not hasattr(self, "deps_log"):
+                return
+            pct = detail.get("percent")
+            pkg = detail.get("package") or detail.get("current") or ""
+            line = label
+            if pkg:
+                line = f"{label} — {pkg}"
+            if pct is not None:
+                try:
+                    p = max(0.0, min(1.0, float(pct) / 100.0))
+                    if hasattr(self, "deps_progress"):
+                        self.deps_progress.set(p)
+                    line = f"{line}  ({int(pct)}%)"
+                except (TypeError, ValueError):
+                    pass
+            if hasattr(self, "deps_step_lbl"):
+                self.deps_step_lbl.configure(text=line, text_color=ACCENT)
+            # Avoid flooding the log with every percent tick — log label changes + package lines.
+            raw_line = detail.get("line")
+            if raw_line:
+                self._append_log(self.deps_log, str(raw_line))
+            elif pct is None or int(pct or 0) in (0, 100) or pkg:
+                self._append_log(self.deps_log, line)
+
+        self.after(0, apply)
+
     def _bootstrap_python(self) -> None:
         self.deps_log.delete("1.0", "end")
+        if hasattr(self, "deps_progress"):
+            self.deps_progress.set(0)
         self._append_log(
             self.deps_log,
-            "Bootstrapping portable Python + venv under %LOCALAPPDATA%\\GPUPool\\…\n"
-            "(skips download if a healthy Python/venv already exists)\n",
+            "Starting setup…\n"
+            "You should see: Creating GPUPool folder → Downloading Python runtime → "
+            "Creating environment → Installing dependencies.\n"
+            "(Skips download if a healthy Python/venv already exists.)\n\n",
         )
 
         def work() -> None:
-            result = be.bootstrap_portable_python(dry_run=False, with_requirements=True)
+            result = be.bootstrap_portable_python(
+                dry_run=False,
+                with_requirements=True,
+                on_progress=self._on_install_progress,
+            )
             self.after(0, lambda: self._bootstrap_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
     def _bootstrap_done(self, result: dict[str, Any]) -> None:
+        if hasattr(self, "deps_progress") and result.get("ok"):
+            self.deps_progress.set(1.0)
         self._append_log(self.deps_log, result.get("message") or str(result))
         if result.get("actions"):
             self._append_log(self.deps_log, f"actions: {', '.join(result['actions'])}\n")
@@ -444,6 +522,11 @@ class WizardFrame(ctk.CTkFrame):
                 ),
                 text_color=OK_GREEN if status.get("ok") else DANGER,
             )
+        if hasattr(self, "deps_step_lbl"):
+            self.deps_step_lbl.configure(
+                text="Bootstrap OK." if result.get("ok") else "Bootstrap FAILED — see log.",
+                text_color=OK_GREEN if result.get("ok") else DANGER,
+            )
         self._append_log(
             self.deps_log,
             f"\nPython check: {py.get('message')}\n" + ("Bootstrap OK.\n" if result.get("ok") else "Bootstrap FAILED.\n"),
@@ -451,15 +534,19 @@ class WizardFrame(ctk.CTkFrame):
 
     def _install_deps(self) -> None:
         self.deps_log.delete("1.0", "end")
+        if hasattr(self, "deps_progress"):
+            self.deps_progress.set(0)
         self._append_log(self.deps_log, "Checking deps / installing missing packages…\n")
 
         def work() -> None:
-            result = be.install_requirements()
+            result = be.install_requirements(on_progress=self._on_install_progress)
             self.after(0, lambda: self._deps_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
     def _deps_done(self, result: dict[str, Any]) -> None:
+        if hasattr(self, "deps_progress") and result.get("ok"):
+            self.deps_progress.set(1.0)
         self._append_log(self.deps_log, result.get("message") or str(result))
         if result.get("fix"):
             self._append_log(self.deps_log, f"\nFIX:\n{result['fix']}\n")
@@ -472,6 +559,11 @@ class WizardFrame(ctk.CTkFrame):
             ),
             text_color=OK_GREEN if status.get("ok") else DANGER,
         )
+        if hasattr(self, "deps_step_lbl"):
+            self.deps_step_lbl.configure(
+                text="Dependencies OK." if result.get("ok") else "Install FAILED — see log.",
+                text_color=OK_GREEN if result.get("ok") else DANGER,
+            )
         if result.get("ok"):
             self._append_log(self.deps_log, "\nDeps OK.\n")
         else:
@@ -567,18 +659,23 @@ class WizardFrame(ctk.CTkFrame):
             pass
 
     def _install_torch(self) -> None:
+        if hasattr(self, "deps_progress"):
+            self.deps_progress.set(0)
         self._append_log(
             self.deps_log,
-            "\n--- CUDA PyTorch install (optional, large download) — starting… ---\n",
+            "\n--- CUDA PyTorch (optional, large download — several GB) — starting… ---\n"
+            "Keep this window open. Progress lines appear below.\n",
         )
 
         def work() -> None:
-            result = be.install_torch_cuda()
+            result = be.install_torch_cuda(on_progress=self._on_install_progress)
             self.after(0, lambda: self._torch_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
     def _torch_done(self, result: dict[str, Any]) -> None:
+        if hasattr(self, "deps_progress") and result.get("ok"):
+            self.deps_progress.set(1.0)
         self._append_log(self.deps_log, result.get("message") or str(result))
         if result.get("fix"):
             self._append_log(self.deps_log, f"\nFIX:\n{result['fix']}\n")
@@ -590,8 +687,10 @@ class WizardFrame(ctk.CTkFrame):
 
     def _step_hardware(self) -> None:
         self._title(
-            "Detect hardware",
-            "Live nvidia-smi + host CPU/RAM/disk (no mock data). No NVIDIA? Utilize-first is fine.",
+            "Checking GPU & PC resources",
+            "Live nvidia-smi + CPU/RAM/disk (real numbers, no mock data). "
+            "No NVIDIA? Totally fine — use Utilize (jobs run on friends who have GPUs), "
+            "or Contribute with VRAM=0 for CPU-only help.",
         )
         self.hw_box = self._log_box(280)
         ctk.CTkButton(self.body, text="Refresh detection", command=self._scan_hw, fg_color="#2A3544").pack(
@@ -1264,8 +1363,9 @@ class MainFrame(ctk.CTkFrame):
         ctk.CTkLabel(
             parent,
             text=(
-                "Peer mesh for spare GPUs among friends. Contribute · Utilize · Connect here; "
-                "Pool chat + suggestions live on the web hub. Workspace = agent-vms (Hermes; not passthrough)."
+                "Share spare compute with Glitch Factor friends, run jobs, chat, and suggest improvements. "
+                "Pick a mode below. Chat + Suggest live on the web hub. "
+                "Workspace = optional Linux VM (CPU/RAM only — no NVIDIA passthrough)."
             ),
             text_color=MUTED,
             wraplength=980,
@@ -1281,32 +1381,32 @@ class MainFrame(ctk.CTkFrame):
             (
                 "contribute",
                 "1 · Contribute",
-                "Install / join as a worker",
-                "Wizard + Join/Leave · VRAM/CPU/RAM/disk caps · host_protect ON.",
+                "Share spare GPU/CPU",
+                "Join as a worker with your caps. Host GPU safety ON by default so Windows stays usable.",
                 "Open Contribute →",
                 False,
             ),
             (
                 "utilize",
                 "2 · Utilize",
-                "Use the pool NOW",
-                "Live workers & GPUs · Run Probe · Run CUDA Job · status + results.",
+                "Run jobs on the pool",
+                "No NVIDIA needed here. Probe / CUDA jobs run on online contributors.",
                 "Open Utilize →",
                 False,
             ),
             (
                 "connect",
                 "3 · Connect",
-                "APIs + local model",
-                "Scheduler/portal URLs · OpenAI-style endpoint · Discord / CLI.",
+                "Plug tools into the pool",
+                "Copy portal/scheduler URLs · start local model endpoint · Discord / CLI tips.",
                 "Open Connect →",
                 False,
             ),
             (
                 "workspace",
                 "4 · Workspace",
-                "agent-vms slot",
-                "Optional Linux desktop via Hermes — GPU stays on host worker.",
+                "Optional Linux desktop",
+                "Hermes agent-vms with your CPU/RAM share. GPU stays on the host pool worker.",
                 "Open Workspace →",
                 True,
             ),

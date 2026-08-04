@@ -7,6 +7,22 @@ Step-by-step for friends in **Glitch Factor** Discord. No screenshots needed —
 
 ---
 
+## 0) What GPU Pool is for (30 seconds)
+
+**GPU Pool** lets Glitch Factor friends **share spare GPU/CPU**, **run jobs** on whoever is online, **chat** on the Network Hub, and **suggest** improvements to Drew. It is a private co-op — not a public marketplace, not Docker.
+
+| Mode | Plain English |
+|------|----------------|
+| **Contribute** | Lend this PC’s spare GPU/CPU with caps you control. Host GPU safety stays ON so Windows doesn’t freeze. |
+| **Utilize** | Run allowlisted jobs on the pool. **No NVIDIA required** on your laptop. |
+| **Connect** | Copy URLs / start a local model endpoint for Open WebUI, Cursor, etc. |
+| **Workspace** | Optional Linux desktop (shared CPU/RAM only — GPU stays on the host worker). |
+| **Chat / Suggest** | Talk with the pool and send ideas (web Network Hub). |
+
+During EXE / from-source install you’ll see steps like “Downloading Python runtime…” and “Installing dependencies (1/5)…” — leave the window open until it finishes.
+
+---
+
 ## 1) What “login” means
 
 GPU Pool uses **MVP invite auth** (Discord OAuth comes later). You are not creating a public account.
@@ -98,15 +114,17 @@ You should land on **Home** signed in as your display name.
 
 ---
 
-## 5) After login — Contribute vs Utilize vs Connect
+## 5) After login — what to click
 
 | Path | What it does | Who it’s for |
 |------|--------------|--------------|
-| **Contribute** | Register this PC, set **your** GPU/CPU/RAM/disk offer caps, run a worker that takes allowlisted jobs. Only you can change your offer. | Friends with spare compute (GPU optional — VRAM=0 = CPU-only) |
-| **Utilize** | Submit allowlisted jobs (`probe`, CUDA probe, etc.); they run on online workers | Anyone — especially laptops with **no NVIDIA** |
-| **Connect** | URLs, Discord slash commands, CLI / Python SDK how-to | Coders and agents |
+| **Contribute** | Register this PC, set **your** GPU/CPU/RAM/disk offer caps, run a worker that takes allowlisted jobs. Only you can change your offer. Host GPU safety ON by default. | Friends with spare compute (GPU optional — VRAM=0 = CPU-only) |
+| **Utilize** | Submit allowlisted jobs (`probe`, CUDA probe, `llm_chat` when a worker is ready); they run on online workers | Anyone — especially laptops with **no NVIDIA** |
+| **Connect** | URLs, local model endpoint, Discord slash commands, CLI / Python SDK | Coders and agents |
+| **Workspace** | Optional Ubuntu VM via Hermes — uses your CPU/RAM share only | When you want a Linux desktop; **not** GPU passthrough |
+| **Chat / Suggest** | Pool chat + suggestion inbox on the web Network Hub | Everyone |
 
-More detail: [`CONNECTING.md`](CONNECTING.md).
+More detail: [`CONNECTING.md`](CONNECTING.md) · Workspace: [`ADVANCED_VM.md`](ADVANCED_VM.md).
 
 **Laptop / no NVIDIA?** Use **Utilize** (jobs run on pool GPUs). Optional: Contribute with VRAM=0.
 
@@ -171,7 +189,8 @@ Stable private fallback for friends already on Tailscale:
 Copy everything inside the fence into Discord:
 
 ```text
-**GPU Pool — how to log in**
+**GPU Pool — what it is + how to log in**
+Private co-op: share spare GPU/CPU, run jobs, chat, suggest improvements.
 Full guide: https://github.com/phoenixfire808/gpu-swarm/blob/master/LOGIN.md
 
 1) Get invite from Drew in Glitch Factor (current: **glitch-factor**) + use your Discord display name
@@ -180,7 +199,9 @@ Full guide: https://github.com/phoenixfire808/gpu-swarm/blob/master/LOGIN.md
      (host: data/public_endpoints.share.txt · rotates when tunnel restarts)
    • Tailscale: http://100.85.165.84:8767/portal
    • Or EXE: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
-3) Sign in → Home → **Utilize** (run jobs) or **Contribute** (plug in PC; VRAM=0 OK if no NVIDIA)
+     (SmartScreen → More info → Run anyway if you trust the GitHub release)
+3) Sign in → Home → **Utilize** (run jobs; no NVIDIA needed) or **Contribute** (plug in PC; VRAM=0 OK)
+   Also: Connect (URLs / local model) · Workspace (Linux VM, CPU/RAM only) · Chat/Suggest on the web hub
 
 Pool password is optional (only if Drew DMs it). Never share .env / bot tokens.
 ```

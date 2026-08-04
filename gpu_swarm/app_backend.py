@@ -675,6 +675,7 @@ def ensure_portable_python(
     with_venv: bool = True,
     with_requirements: bool = False,
     dry_run: bool = False,
+    on_progress: Any | None = None,
 ) -> dict[str, Any]:
     """Bootstrap isolated CPython + venv under %LOCALAPPDATA%\\GPUPool\\."""
     from gpu_swarm.portable_python import ensure_portable_python as _ensure
@@ -684,16 +685,23 @@ def ensure_portable_python(
         with_venv=with_venv,
         with_requirements=with_requirements,
         dry_run=dry_run,
+        on_progress=on_progress,
     )
 
 
-def bootstrap_portable_python(*, dry_run: bool = False, with_requirements: bool = True) -> dict[str, Any]:
+def bootstrap_portable_python(
+    *,
+    dry_run: bool = False,
+    with_requirements: bool = True,
+    on_progress: Any | None = None,
+) -> dict[str, Any]:
     """Wizard/EXE entry: ensure portable Python + venv (+ optional requirements)."""
     return ensure_portable_python(
         force_download=False,
         with_venv=True,
         with_requirements=with_requirements and not dry_run,
         dry_run=dry_run,
+        on_progress=on_progress,
     )
 
 
@@ -825,13 +833,31 @@ def check_torch_cuda() -> dict[str, Any]:
     }
 
 
-def install_requirements(*, force: bool = False) -> dict[str, Any]:
+def install_requirements(
+    *,
+    force: bool = False,
+    on_progress: Any | None = None,
+) -> dict[str, Any]:
     """
     Install from requirements.txt only when deps are missing (avoid reinstall loops).
     Prefers isolated venv under %LOCALAPPDATA%\\GPUPool\\venv (never global site-packages
     when portable bootstrap is available). Pass force=True to repair/upgrade.
     """
+    from gpu_swarm.portable_python import (
+        STEP_INSTALL_DEPS,
+        _emit,
+        install_requirements_into_venv,
+        resolve_pip_python,
+        venv_python_exe,
+    )
+
     if is_frozen():
+        _emit(
+            on_progress,
+            "GPUPool.exe already includes the app runtime — skipping pip install.",
+            percent=100,
+            skipped=True,
+        )
         return {
             "ok": True,
             "message": (
@@ -845,6 +871,12 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
         }
     status = check_python_deps()
     if status.get("ok") and not force:
+        _emit(
+            on_progress,
+            "Dependencies already installed — skipping reinstall.",
+            percent=100,
+            skipped=True,
+        )
         return {
             "ok": True,
             "message": "Dependencies already satisfied — skipped full reinstall.",
@@ -865,24 +897,60 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
             "fix": "Restore requirements-joiner.txt in the repo root.",
         }
     missing = status.get("missing") or []
-    from gpu_swarm.portable_python import resolve_pip_python, venv_python_exe
-
     pip_py = resolve_pip_python() or sys.executable
     use_venv = venv_python_exe().is_file() and Path(pip_py).resolve() == venv_python_exe().resolve()
-    # Isolated venv: no --user. Otherwise --user to avoid admin/global fights.
-    cmd = [pip_py, "-m", "pip", "install"]
-    if not use_venv:
-        cmd.append("--user")
-    cmd.extend(["-r", str(req)])
+
+    # Prefer streaming installer into isolated venv (visible package progress).
+    if use_venv:
+        result = install_requirements_into_venv(
+            requirements=req,
+            dry_run=False,
+            on_progress=on_progress,
+        )
+        after = check_python_deps()
+        if result.get("ok") and after.get("ok"):
+            return {
+                "ok": True,
+                "message": result.get("message") or "Installed requirements successfully.",
+                "code": result.get("code"),
+                "missing_before": missing,
+                "pip_python": pip_py,
+                "isolated_venv": True,
+            }
+        still = after.get("missing") or missing
+        return {
+            "ok": False,
+            "message": result.get("message") or "pip failed",
+            "code": result.get("code"),
+            "missing": still,
+            "pip_python": pip_py,
+            "fix": result.get("fix")
+            or (
+                f"Still missing: {', '.join(still)}\n"
+                "If system Python is broken, Bootstrap portable Python first.\n"
+                f'Fix: "{pip_py}" -m pip install -r "{req}"'
+            ),
+        }
+
+    # System Python fallback: stream pip so the wizard log stays alive.
+    _emit(on_progress, f"{STEP_INSTALL_DEPS} (system Python)", percent=0)
+    cmd = [pip_py, "-m", "pip", "install", "--user", "-r", str(req), "--progress-bar", "on"]
+    lines: list[str] = []
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            timeout=600,
-            check=False,
             cwd=str(ROOT),
         )
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            line = raw.rstrip()
+            if line:
+                lines.append(line)
+                _emit(on_progress, STEP_INSTALL_DEPS, package=line[:90], line=line)
+        code = proc.wait(timeout=600)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {
             "ok": False,
@@ -892,33 +960,30 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
                 f'Manual: "{pip_py}" -m pip install -r requirements.txt'
             ),
         }
-    ok = proc.returncode == 0
-    tail = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else ""))[-1200:]
+    ok = code == 0
+    tail = "\n".join(lines)[-1200:]
     after = check_python_deps()
     if ok and after.get("ok"):
+        _emit(on_progress, "Dependencies installed.", percent=100)
         return {
             "ok": True,
             "message": tail or "Installed requirements successfully.",
-            "code": proc.returncode,
+            "code": code,
             "missing_before": missing,
             "pip_python": pip_py,
-            "isolated_venv": use_venv,
+            "isolated_venv": False,
         }
     still = after.get("missing") or missing
     return {
         "ok": False,
         "message": tail or "pip failed",
-        "code": proc.returncode,
+        "code": code,
         "missing": still,
         "pip_python": pip_py,
         "fix": (
             f"Still missing: {', '.join(still)}\n"
             "If system Python is broken, Bootstrap portable Python first.\n"
-            + (
-                f'Fix: "{pip_py}" -m pip install -r "{req}"'
-                if use_venv
-                else f'Fix: "{pip_py}" -m pip install --user -r "{req}"'
-            )
+            f'Fix: "{pip_py}" -m pip install --user -r "{req}"'
         ),
     }
 
@@ -930,18 +995,28 @@ def _resolve_system_python() -> str | None:
     return resolve_pip_python()
 
 
-def install_torch_cuda(*, index_url: str = "https://download.pytorch.org/whl/cu124") -> dict[str, Any]:
+def install_torch_cuda(
+    *,
+    index_url: str = "https://download.pytorch.org/whl/cu124",
+    on_progress: Any | None = None,
+) -> dict[str, Any]:
     """
     Optional large download — only call after explicit user consent in the UI.
     Installs torch/torchvision/torchaudio from the CUDA wheel index into the
     isolated venv when available (never into the frozen EXE).
     """
-    from gpu_swarm.portable_python import resolve_pip_python, venv_python_exe
+    from gpu_swarm.portable_python import _emit, resolve_pip_python, venv_python_exe
 
     py = resolve_pip_python()
     if is_frozen() and not py:
         # Auto-bootstrap portable Python so friends don't need a system install.
-        boot = ensure_portable_python(with_venv=True, with_requirements=False, dry_run=False)
+        _emit(on_progress, "Preparing portable Python for CUDA torch…", percent=5)
+        boot = ensure_portable_python(
+            with_venv=True,
+            with_requirements=False,
+            dry_run=False,
+            on_progress=on_progress,
+        )
         if boot.get("ok") and not boot.get("dry_run"):
             py = resolve_pip_python()
         if not py:
@@ -959,6 +1034,12 @@ def install_torch_cuda(*, index_url: str = "https://download.pytorch.org/whl/cu1
     if not py:
         py = sys.executable
     use_venv = venv_python_exe().is_file() and Path(py).resolve() == venv_python_exe().resolve()
+    _emit(
+        on_progress,
+        "Downloading CUDA PyTorch (large — several GB; keep this window open)…",
+        percent=10,
+        package="torch",
+    )
     cmd = [py, "-m", "pip", "install"]
     if not use_venv:
         cmd.append("--user")
@@ -969,37 +1050,59 @@ def install_torch_cuda(*, index_url: str = "https://download.pytorch.org/whl/cu1
             "torchaudio",
             "--index-url",
             index_url,
+            "--progress-bar",
+            "on",
         ]
     )
+    lines: list[str] = []
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            timeout=1800,
-            check=False,
             cwd=str(ROOT),
         )
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            line = raw.rstrip()
+            if not line:
+                continue
+            lines.append(line)
+            pkg = "torch"
+            low = line.lower()
+            for name in ("torchvision", "torchaudio", "torch"):
+                if name in low:
+                    pkg = name
+                    break
+            _emit(
+                on_progress,
+                "Installing CUDA PyTorch…",
+                package=pkg,
+                line=line[:120],
+            )
+        code = proc.wait(timeout=1800)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {
             "ok": False,
             "message": str(exc),
             "fix": " ".join(cmd),
         }
-    ok = proc.returncode == 0
-    tail = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else ""))[-1200:]
+    ok = code == 0
+    tail = "\n".join(lines)[-1200:]
     status = check_torch_cuda()
     if ok:
+        _emit(on_progress, "CUDA PyTorch install finished.", percent=100)
         return {
             "ok": True,
             "message": tail or "PyTorch install finished.",
             "torch": status,
-            "code": proc.returncode,
+            "code": code,
         }
     return {
         "ok": False,
         "message": tail or "PyTorch install failed",
-        "code": proc.returncode,
+        "code": code,
         "fix": (
             f'Retry: "{py}" -m pip install'
             f'{" --user" if not use_venv else ""} torch torchvision torchaudio '

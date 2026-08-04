@@ -36,22 +36,31 @@ function Resolve-Python {
 }
 
 $Python = Resolve-Python
-Write-Host "Using Python: $Python"
+Write-Host ""
+Write-Host "==== GPU Pool EXE build ====" -ForegroundColor Cyan
+Write-Host "[1/5] Using Python: $Python" -ForegroundColor Green
+Write-Progress -Activity "GPU Pool EXE build" -Status "Checking Python / PyInstaller" -PercentComplete 10
 
 if (-not $SkipInstallCheck) {
     & $Python -c "import PyInstaller" 2>$null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Installing PyInstaller (missing)..."
-        & $Python -m pip install --user "pyinstaller>=6.0"
+        Write-Host "[2/5] Installing PyInstaller (missing)…" -ForegroundColor Yellow
+        & $Python -m pip install --user "pyinstaller>=6.0" --progress-bar on
         if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller failed" }
+    } else {
+        Write-Host "[2/5] PyInstaller already installed — skipping." -ForegroundColor Green
     }
     # Ensure app deps used by Analysis are importable (avoid reinstall if present).
     & $Python -c "import customtkinter, httpx, psutil, pydantic, dotenv, fastapi, uvicorn, aiosqlite" 2>$null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Installing requirements-app.txt (missing joiner deps)..."
-        & $Python -m pip install --user -r (Join-Path $RepoRoot "requirements-app.txt")
+        Write-Host "[3/5] Installing requirements-app.txt (missing joiner deps)…" -ForegroundColor Yellow
+        & $Python -m pip install --user -r (Join-Path $RepoRoot "requirements-app.txt") --progress-bar on
         if ($LASTEXITCODE -ne 0) { throw "pip install requirements-app failed" }
+    } else {
+        Write-Host "[3/5] Joiner deps importable — skipping pip." -ForegroundColor Green
     }
+} else {
+    Write-Host "[2/5]+[3/5] SkipInstallCheck — not installing deps." -ForegroundColor DarkGray
 }
 
 if ($Clean) {
@@ -67,7 +76,9 @@ if ($Clean) {
 $spec = Join-Path $RepoRoot "gpu_pool.spec"
 if (-not (Test-Path $spec)) { throw "Missing gpu_pool.spec" }
 
-Write-Host "Running PyInstaller (onefile windowed GPUPool.exe)..."
+Write-Host "[4/5] Running PyInstaller (onefile windowed GPUPool.exe)…" -ForegroundColor Yellow
+Write-Host "     This can take several minutes — leave the window open." -ForegroundColor DarkGray
+Write-Progress -Activity "GPU Pool EXE build" -Status "PyInstaller packing GPUPool.exe" -PercentComplete 55
 & $Python -m PyInstaller --noconfirm --clean $spec
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed (exit $LASTEXITCODE)" }
 
@@ -75,14 +86,15 @@ $exe = Join-Path $RepoRoot "dist\GPUPool.exe"
 if (-not (Test-Path $exe)) { throw "Expected output missing: $exe" }
 
 $size = (Get-Item $exe).Length
+Write-Progress -Activity "GPU Pool EXE build" -Status "Done" -PercentComplete 100 -Completed
 Write-Host ""
-Write-Host "OK: $exe"
+Write-Host "[5/5] OK: $exe" -ForegroundColor Green
 Write-Host ("Size: {0:N1} MB" -f ($size / 1MB))
 Write-Host "Notes:"
 Write-Host "  - No .env / secrets are bundled"
 Write-Host "  - Torch/CUDA not shipped (optional; uses portable Python under %LOCALAPPDATA%\GPUPool\)"
-Write-Host "  - First-run bootstrap: gpu_pool_entry wires portable Python + venv (background if needed)"
+Write-Host "  - First-run bootstrap: verbose progress in wizard (Download Python / Install deps)"
 Write-Host "  - Diagnostics: error logs in %LOCALAPPDATA%\GPUPool\logs\ + portal POST /api/diagnostics"
-Write-Host "  - Contributors still need NVIDIA drivers + Tailscale"
-Write-Host "  - Publish: gh release create v0.1.0 dist/GPUPool.exe --title ... --notes-file ..."
+Write-Host "  - NVIDIA drivers only if contributing a GPU; Utilize works without NVIDIA"
+Write-Host "  - Publish next: gh release create v0.1.1 dist/GPUPool.exe --title ... --notes-file ..."
 exit 0

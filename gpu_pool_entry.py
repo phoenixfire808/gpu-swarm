@@ -60,6 +60,8 @@ def _first_run_portable_bootstrap() -> None:
     - If a healthy system/portable Python exists → reuse (no download).
     - Otherwise schedule background bootstrap so the UI opens immediately;
       wizard “Bootstrap portable Python” / torch install can also trigger it.
+    Progress lines are appended to %LOCALAPPDATA%\\GPUPool\\logs\\first-run-bootstrap.log
+    so friends can see what happened if setup looks stuck.
     """
     import os
     import threading
@@ -70,6 +72,7 @@ def _first_run_portable_bootstrap() -> None:
             find_usable_python,
             venv_python_exe,
         )
+        from gpu_swarm.paths import gpu_pool_home
 
         vpy = venv_python_exe()
         if vpy.is_file():
@@ -80,10 +83,42 @@ def _first_run_portable_bootstrap() -> None:
             os.environ.setdefault("GPU_SWARM_PYTHON", str(found["executable"]))
             return
 
+        log_path = gpu_pool_home() / "logs" / "first-run-bootstrap.log"
+
         def _bg() -> None:
             try:
-                ensure_portable_python(with_venv=True, with_requirements=False, dry_run=False)
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+
+                def _progress(label: str, detail: dict) -> None:
+                    pct = detail.get("percent")
+                    pkg = detail.get("package") or detail.get("current") or ""
+                    bit = label
+                    if pkg:
+                        bit = f"{label} — {pkg}"
+                    if pct is not None:
+                        bit = f"{bit} ({pct}%)"
+                    try:
+                        with open(log_path, "a", encoding="utf-8") as fh:
+                            fh.write(bit + "\n")
+                    except OSError:
+                        pass
+
+                with open(log_path, "a", encoding="utf-8") as fh:
+                    fh.write("=== First-run bootstrap starting ===\n")
+                ensure_portable_python(
+                    with_venv=True,
+                    with_requirements=False,
+                    dry_run=False,
+                    on_progress=_progress,
+                )
+                with open(log_path, "a", encoding="utf-8") as fh:
+                    fh.write("=== First-run bootstrap finished ===\n")
             except Exception:  # noqa: BLE001
+                try:
+                    with open(log_path, "a", encoding="utf-8") as fh:
+                        fh.write("=== First-run bootstrap FAILED ===\n")
+                except OSError:
+                    pass
                 return
 
         threading.Thread(target=_bg, daemon=True).start()

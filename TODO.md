@@ -21,8 +21,9 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 
 ## Now
 - [x] Workspace VM MVP — GPU Pool → Hermes agent-vm with Contribute/host_protect CPU+RAM caps
+- [x] Verbose install progress + plain-language friend UX (scripts, wizard, DOWNLOAD/LOGIN/FRIEND docs)
 - [ ] Drew: Ollama serve + model + worker restart → full chat e2e (and `llm_ready` on hub)
-- [ ] Packaging Worker: publish Windows EXE with host_protect + local_endpoint + llm_chat + workspace bridge
+- [ ] Packaging Worker: publish Windows EXE **v0.1.1+** with host_protect + local_endpoint + llm_chat + workspace bridge + verbose install UX
 - [ ] Post member tip: `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`
 
 ## Next
@@ -43,6 +44,6 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 ## Next 5
 1. Enable Ollama on Drew-Home + restart worker (`llm_ready=yes`)
 2. Smoke: local endpoint → chat completion via pool
-3. Packaging Worker Release + EXE (include host_protect + workspace bridge)
+3. Packaging: `build_exe.ps1 -Clean` → publish **v0.1.1** (`RELEASE.md` commands)
 4. Try Workspace: `start-gpu-pool-app.cmd` → Home → Workspace → Start / Open
 5. Keep secrets out of git (never `.env` / `data/public_endpoints*`)

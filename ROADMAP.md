@@ -7,11 +7,12 @@ Near-term → later. Detail and live status: [`CURRENT_PROGRESS.md`](CURRENT_PRO
 
 1. **Host GPU safety (`host_protect`)** — shipped in source (default ON). Confirm live on Drew-Home; include in next EXE.
 2. **Ollama + `llm_chat` e2e** — `ollama serve` + model pull + worker `llm_ready=yes` → chat via local endpoint.
-3. **Packaging Worker EXE** — rebuild `GPUPool.exe` with `host_protect` + local endpoint + `llm_chat` (fastapi bundled).
+3. **Packaging Worker EXE v0.1.1+** — rebuild `GPUPool.exe` with `host_protect` + local endpoint + `llm_chat` + workspace bridge + verbose install UX (v0.1.0 asset is stale).
 4. **Member tip** — friends use `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`.
 5. **Living docs habit** — keep TODO / ROADMAP / CHANGELOG / CURRENT_PROGRESS current on every ship.
 6. **Workspace VM MVP** — shipped in source (GPU Pool → Hermes agent-vm + offer caps). Daily path: Home → Workspace.
 7. **Network Hub + pool chat + suggestions** — shipped in source (`/portal` hub). Friends: Chat tab; Drew: Suggest → Review inbox.
+8. **Verbose friend install UX** — shipped in source (PowerShell + wizard progress); lands in EXE on next rebuild.
 
 ## Next
 
