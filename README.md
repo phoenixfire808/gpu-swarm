@@ -70,13 +70,14 @@ Default URLs on Drew’s host (Tailscale):
 
 1. Join the private Tailscale network (ask Drew — do **not** put the scheduler on the public internet).
 2. Open the portal URL → sign in with **invite code / pool password** + display name (OAuth comes later).
-3. **Register this machine** — set dedication caps:
+3. **Home** shows three big paths: **Contribute** · **Utilize** · **Connect** (URLs, Discord commands, CLI/SDK — [`CONNECTING.md`](CONNECTING.md)).
+4. **Contribute — register this machine** — set dedication caps:
    - GPU VRAM (MiB)
    - CPU (% or cores)
    - RAM (MiB advertised / capped)
    - Disk / SSD (MiB free for job scratch — scheduling hint)
-4. Start the worker from the portal instructions (or keep the downloadable agent running) so the machine heartbeats into the pool.
-5. Confirm in Discord: `/pool` and `/workers` show the new machine.
+5. Start the worker from the portal instructions (or keep the downloadable agent running) so the machine heartbeats into the pool.
+6. Confirm in Discord: `/pool` and `/workers` show the new machine.
 
 Leave anytime from the portal (or stop the worker). Caps persist for the next session.
 
@@ -86,7 +87,9 @@ Leave anytime from the portal (or stop the worker). Caps persist for the next se
 
 ## 2) GPU Pool desktop app (native)
 
-Windows one-stop app: **Contribute** (join) + **Utilize** (submit jobs) + **Connect from code**.
+### Using the app
+
+Windows one-stop app. After the setup wizard, **Home** shows three large modes — Contribute, Utilize, and Connect are first-class (not buried).
 
 ```bat
 cd C:\Users\Drew\Projects\gpu-swarm
@@ -95,31 +98,41 @@ REM python -m pip install --user -r requirements.txt
 
 start-gpu-pool-app.cmd
 REM equivalent: python -m gpu_swarm.app
+REM EXE rebuild (packaging Worker): rebuild from this source so Home / Utilize / Connect ship in GPUPool.exe
 ```
 
 | Mode | What it does |
 |------|----------------|
-| **Contribute** | Wizard installs deps / checks NVIDIA / optional CUDA torch → set caps → **Join / Leave** worker |
-| **Utilize** | Live pool status → submit `probe` / `pytorch_cuda_probe` → poll results (+ Discord slash equivalents) |
-| **Connect from code** | Points at [`CONNECTING.md`](CONNECTING.md) + [`examples/coding_agent_pool.py`](examples/coding_agent_pool.py); copies `GPU_SWARM_SCHEDULER_URL` + Tailscale portal |
+| **1 · Contribute** | Install/join as a worker — wizard, caps, **Join / Leave** |
+| **2 · Utilize** | Use the pool **now** — live workers/GPUs, **Run Probe**, **Run CUDA Job**, status + result panel |
+| **3 · Connect** | Plug in from code/tools — scheduler/portal copy, `GPUPool` snippet, `python -m gpu_swarm utilize …`, Discord tips |
 
-**Contribute flow**
+**Contribute**
 
 1. Setup wizard — Python/deps, NVIDIA, optional CUDA torch (consent), scheduler URL (default Tailscale `:8766`).
 2. Identity + **VRAM / CPU / RAM / disk** soft caps.
 3. Portal awareness (Tailscale `http://100.85.165.84:8767/portal`, invite `glitch-factor`).
 4. **Join Pool** / **Leave Pool**.
 
-**Utilize flow**
+**Utilize**
 
-1. Open **Utilize** tab → refresh pool (workers / GPUs / CPU·RAM·disk ads).
-2. Submit **probe** or **CUDA matmul** → wait for completed JSON.
-3. Optional: copy Discord `/submit_probe` · `/submit_compute` · `/job_status`.
+1. Home → **Utilize** (or tab **2 · Utilize**).
+2. Pick scheduler: Local `http://127.0.0.1:8766` or Tailscale `http://100.85.165.84:8766`.
+3. Refresh live pool (workers / GPUs / VRAM).
+4. **Run Probe** or **Run CUDA Job** → wait for completed JSON in the result panel.
+5. Allowlisted only: `probe`, `pytorch_cuda_probe` (see “What can I run?”). Discord: `/pool` · `/submit_probe` · `/submit_compute`.
 
-**Connect from code**
+**Connect**
+
+1. Home → **Connect**.
+2. Copy **Scheduler URL** (env `GPU_SWARM_SCHEDULER_URL`, default Tailscale `:8766`).
+3. Copy **Portal URL** `http://100.85.165.84:8767/portal` (invite `glitch-factor`).
+4. Open [`CONNECTING.md`](CONNECTING.md) / `examples/` · paste Python `GPUPool` or CLI:
 
 ```bat
 set GPU_SWARM_SCHEDULER_URL=http://100.85.165.84:8766
+python -m gpu_swarm utilize status
+python -m gpu_swarm utilize probe --wait
 python examples\coding_agent_pool.py --job probe
 ```
 

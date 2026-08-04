@@ -12,6 +12,13 @@ from pydantic import BaseModel, Field
 
 from gpu_swarm import ALLOWED_JOB_TYPES
 from gpu_swarm.config import PortalConfig, portal_config
+from gpu_swarm.joiner_settings import (
+    DEFAULT_LOCAL_PORTAL_URL,
+    DEFAULT_LOCAL_SCHEDULER_URL,
+    DEFAULT_PORTAL_URL,
+    DEFAULT_SCHEDULER_URL,
+    PORTAL_INVITE_CODE,
+)
 from gpu_swarm.portal_store import PortalStore
 
 store: PortalStore | None = None
@@ -174,9 +181,16 @@ async def portal_page() -> HTMLResponse:
 
 @app.get("/api/config")
 async def api_config(request: Request) -> dict[str, Any]:
+    portal_base = _public_base(request)
+    portal_path = f"{portal_base}/portal"
+    # Member-facing Tailscale URLs (safe to show; never include pool password / tokens)
+    sched_tailscale = DEFAULT_SCHEDULER_URL.rstrip("/")
+    portal_tailscale = DEFAULT_PORTAL_URL.rstrip("/")
+    if not portal_tailscale.endswith("/portal"):
+        portal_tailscale = f"{portal_tailscale}/portal"
     return {
         "scheduler_url": cfg.scheduler_url,
-        "portal_url": _public_base(request),
+        "portal_url": portal_base,
         "auth_modes": {
             "pool_password": bool(cfg.pool_password),
             "invite_codes": bool(cfg.invite_codes),
@@ -192,6 +206,49 @@ async def api_config(request: Request) -> dict[str, Any]:
             "v1 Utilize can only submit allowlisted jobs: probe and pytorch_cuda_probe. "
             "No arbitrary shell or custom code."
         ),
+        "invite_code_hint": PORTAL_INVITE_CODE,
+        "connect": {
+            "scheduler_local": DEFAULT_LOCAL_SCHEDULER_URL.rstrip("/"),
+            "scheduler_tailscale": sched_tailscale,
+            "portal_local": DEFAULT_LOCAL_PORTAL_URL,
+            "portal_tailscale": portal_tailscale,
+            "portal_this": portal_path,
+            "discord_primary": "Glitch Factor",
+            "discord_bot": "GPU Pool",
+            "discord_commands": [
+                "/pool",
+                "/workers",
+                "/contribute",
+                "/submit_probe",
+                "/submit_compute",
+                "/job_status",
+            ],
+            "docs": "CONNECTING.md",
+            "cli": [
+                "python -m gpu_swarm utilize status",
+                "python -m gpu_swarm utilize probe --wait",
+                "python -m gpu_swarm utilize cuda --wait",
+                "python -m gpu_swarm submit probe --wait",
+                "python examples/coding_agent_pool.py --job probe",
+            ],
+            "python_sdk": (
+                "from gpu_swarm.client import GPUPool\n"
+                "pool = GPUPool()  # or GPUPool(\"http://100.85.165.84:8766\")\n"
+                "print(pool.status()[\"workers_online\"])\n"
+                "print(pool.submit_probe(wait=True)[\"status\"])\n"
+            ),
+            "http": [
+                "GET  /status",
+                "POST /jobs   {\"job_type\":\"probe\"}",
+                "GET  /jobs/{id}",
+            ],
+            "env_example": f"set GPU_SWARM_SCHEDULER_URL={sched_tailscale}",
+            "rules": [
+                "Private Tailscale/LAN only — do not expose :8766 / :8767 publicly.",
+                "Allowlisted jobs only — no remote shell on contributors.",
+                "Never share .env or Discord bot tokens.",
+            ],
+        },
     }
 
 
@@ -446,7 +503,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>GPU Pool — Contribute &amp; Utilize</title>
+<title>GPU Pool — Contribute · Utilize · Connect</title>
 <style>
   @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
   :root {
@@ -458,7 +515,6 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     --line: #2d3d34;
     --accent: #d4a24c;
     --accent2: #3d9b7a;
-    --danger: #c45c4a;
     --ok: #6fbf8a;
     --font: "IBM Plex Sans", "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", Consolas, monospace;
@@ -474,8 +530,8 @@ PORTAL_HTML = r"""<!DOCTYPE html>
       radial-gradient(900px 500px at 100% 0%, #2a2418 0%, transparent 50%),
       var(--bg0);
   }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
-  header { margin-bottom: 1.75rem; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header { margin-bottom: 1.5rem; }
   .brand {
     font-size: clamp(1.8rem, 4vw, 2.6rem);
     font-weight: 600;
@@ -483,7 +539,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     margin: 0 0 0.35rem;
   }
   .brand span { color: var(--accent); }
-  .lede { color: var(--muted); max-width: 42rem; line-height: 1.5; margin: 0; }
+  .lede { color: var(--muted); max-width: 44rem; line-height: 1.5; margin: 0; }
   .note {
     margin: 1rem 0 0;
     padding: 0.75rem 0.9rem;
@@ -500,7 +556,8 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     padding: 1.25rem 1.35rem;
     margin-top: 1.1rem;
   }
-  h2 { margin: 0 0 0.85rem; font-size: 1.1rem; font-weight: 600; }
+  h2 { margin: 0 0 0.85rem; font-size: 1.15rem; font-weight: 600; }
+  h3 { margin: 1.1rem 0 0.45rem; font-size: 0.95rem; font-weight: 600; color: var(--accent); }
   label { display: block; font-size: 0.85rem; color: var(--muted); margin: 0.65rem 0 0.3rem; }
   input[type="text"], input[type="password"], input[type="number"], select {
     width: 100%;
@@ -531,17 +588,17 @@ PORTAL_HTML = r"""<!DOCTYPE html>
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   .stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 0.65rem;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.55rem;
   }
   .stat {
     background: rgba(0,0,0,0.22);
     border: 1px solid var(--line);
     border-radius: 10px;
-    padding: 0.7rem 0.8rem;
+    padding: 0.6rem 0.7rem;
   }
-  .stat b { display: block; font-family: var(--mono); font-size: 1.15rem; }
-  .stat span { color: var(--muted); font-size: 0.78rem; }
+  .stat b { display: block; font-family: var(--mono); font-size: 1.05rem; }
+  .stat span { color: var(--muted); font-size: 0.74rem; }
   table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
   th, td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--muted); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -589,7 +646,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     color: var(--muted);
     border: 1px solid transparent;
     flex: 1;
-    min-width: 7rem;
+    min-width: 6.5rem;
   }
   .nav button.active {
     background: rgba(61,155,122,0.18);
@@ -597,14 +654,84 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     border-color: var(--accent2);
   }
   .job-meta { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); margin-top: 0.65rem; }
+  .chooser {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.85rem;
+    margin-top: 1rem;
+  }
+  @media (max-width: 860px) { .chooser { grid-template-columns: 1fr; } }
+  .choice {
+    text-align: left;
+    background: linear-gradient(165deg, #1c2922 0%, #141c18 100%);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.25rem 1.2rem 1.15rem;
+    color: var(--ink);
+    min-height: 11.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .choice:hover { border-color: var(--accent2); transform: translateY(-2px); }
+  .choice .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .choice .title {
+    font-size: 1.45rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .choice .blurb {
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.45;
+    flex: 1;
+    margin: 0;
+  }
+  .choice .go {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--accent2);
+  }
+  .url-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem;
+  }
+  @media (max-width: 720px) { .url-grid { grid-template-columns: 1fr; } }
+  .url-card {
+    background: rgba(0,0,0,0.22);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.75rem 0.85rem;
+  }
+  .url-card span { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 0.25rem; }
+  .url-card code { font-family: var(--mono); font-size: 0.82rem; word-break: break-all; }
+  .cmd-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+  .cmd-list code {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 0.28rem 0.5rem;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid var(--line);
+  }
+  .workers-wrap { margin-top: 1rem; overflow: auto; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1 class="brand">GPU <span>Pool</span></h1>
-    <p class="lede">Private co-op portal — <strong>Contribute</strong> spare GPU/CPU capacity, or <strong>Utilize</strong> the pool with allowlisted jobs.</p>
-    <p class="note" id="capacityNote">v1 contributes compute to JOBS (GPU/CPU). RAM/SSD figures are capacity advertisements for future job constraints — not a literal distributed filesystem yet.</p>
+    <p class="lede">Private co-op — pick <strong>Contribute</strong>, <strong>Utilize</strong>, or <strong>Connect</strong> (how to reach the pool from Discord / code / CLI).</p>
+    <p class="note" id="capacityNote">v1 contributes compute to JOBS (GPU/CPU). RAM/SSD figures are capacity advertisements — not a distributed filesystem yet.</p>
   </header>
 
   <section id="loginPanel" class="panel">
@@ -635,21 +762,47 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     </div>
 
     <nav class="nav" aria-label="Portal sections">
-      <button type="button" class="active" data-view="dashboard" id="navDash">Dashboard</button>
-      <button type="button" data-view="utilize" id="navUtilize">Utilize</button>
+      <button type="button" class="active" data-view="home" id="navHome">Home</button>
       <button type="button" data-view="contribute" id="navContribute">Contribute</button>
+      <button type="button" data-view="utilize" id="navUtilize">Utilize</button>
+      <button type="button" data-view="connect" id="navConnect">Connect</button>
     </nav>
 
-    <div id="viewDashboard">
+    <div id="viewHome">
       <div class="panel">
-        <h2>Pool capacity</h2>
-        <p class="lede" style="margin-bottom:0.85rem">Live summary from scheduler <code>/status</code>.</p>
+        <h2>What do you want to do?</h2>
+        <p class="lede">Three clear paths — same private pool.</p>
+        <div class="chooser">
+          <button type="button" class="choice" data-go="contribute" id="cardContribute">
+            <span class="eyebrow">Path 1</span>
+            <p class="title">Contribute</p>
+            <p class="blurb">Plug in spare GPU/CPU. Set soft caps, get a start token, and join as a worker.</p>
+            <span class="go">Register machine →</span>
+          </button>
+          <button type="button" class="choice" data-go="utilize" id="cardUtilize">
+            <span class="eyebrow">Path 2</span>
+            <p class="title">Utilize</p>
+            <p class="blurb">Run an allowlisted job on the pool — probe or CUDA matmul — and watch status + result.</p>
+            <span class="go">Submit a job →</span>
+          </button>
+          <button type="button" class="choice" data-go="connect" id="cardConnect">
+            <span class="eyebrow">Path 3</span>
+            <p class="title">Connect</p>
+            <p class="blurb">How-to: scheduler &amp; portal URLs, Discord slash commands, Python / CLI snippets.</p>
+            <span class="go">See how to connect →</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Live pool capacity</h2>
+        <p class="lede" style="margin-bottom:0.85rem">From scheduler <code>/status</code>.</p>
         <div class="stats" id="stats"></div>
         <p class="err hidden" id="dashErr" style="margin-top:0.75rem"></p>
         <div class="actions">
-          <button class="secondary" id="refreshBtn" type="button">Refresh dashboard</button>
+          <button class="secondary" id="refreshBtn" type="button">Refresh</button>
         </div>
-        <div style="margin-top:1rem; overflow:auto">
+        <div class="workers-wrap">
           <table>
             <thead>
               <tr>
@@ -670,7 +823,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     <div id="viewUtilize" class="hidden">
       <div class="panel">
         <h2>Utilize the pool</h2>
-        <p class="note" id="utilizeNote" style="margin-top:0">v1 Utilize can only submit allowlisted jobs: <code>probe</code> and <code>pytorch_cuda_probe</code>. No arbitrary shell or custom code.</p>
+        <p class="note" id="utilizeNote" style="margin-top:0">v1: allowlisted jobs only — <code>probe</code> and <code>pytorch_cuda_probe</code>. No arbitrary shell.</p>
         <label for="jobType">Job type</label>
         <select id="jobType">
           <option value="probe">probe — live GPU inventory</option>
@@ -683,6 +836,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
         <div class="actions">
           <button id="submitJobBtn" type="button">Submit job</button>
           <button class="secondary" id="pollJobBtn" type="button" disabled>Refresh status</button>
+          <button class="secondary" type="button" data-go="home">Back to Home</button>
         </div>
         <div class="err hidden" id="jobErr"></div>
         <div id="jobBox" class="hidden">
@@ -696,7 +850,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     <div id="viewContribute" class="hidden">
       <div class="panel">
         <h2>Contribute — register this machine</h2>
-        <p class="lede">Set dedication caps, then copy a start-token command. The worker reports <em>real</em> nvidia-smi / host inventory to the scheduler — nothing is mocked.</p>
+        <p class="lede">Set dedication caps, then copy a start-token command. The worker reports real nvidia-smi / host inventory — nothing mocked.</p>
         <label for="workerName">Worker name</label>
         <input id="workerName" type="text" placeholder="My-PC-gpu" />
         <label for="schedulerUrl">Scheduler URL</label>
@@ -730,6 +884,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
 
         <div class="actions">
           <button id="registerBtn" type="button">Create start token</button>
+          <button class="secondary" type="button" data-go="home">Back to Home</button>
         </div>
         <div class="err hidden" id="regErr"></div>
         <div id="instrBox" class="hidden" style="margin-top:1rem">
@@ -740,6 +895,46 @@ PORTAL_HTML = r"""<!DOCTYPE html>
           <pre id="instrOne"></pre>
           <p class="lede" style="margin-top:0.75rem">Or set env caps directly (no token):</p>
           <pre id="instrEnv"></pre>
+        </div>
+      </div>
+    </div>
+
+    <div id="viewConnect" class="hidden">
+      <div class="panel">
+        <h2>Connect — how to reach the pool</h2>
+        <p class="lede">Same endpoints Discord, the portal, and coding agents use. Private Tailscale/LAN only.</p>
+
+        <h3>URLs</h3>
+        <div class="url-grid">
+          <div class="url-card"><span>Scheduler (Tailscale)</span><code id="urlSchedTs">—</code></div>
+          <div class="url-card"><span>Scheduler (localhost on host)</span><code id="urlSchedLocal">—</code></div>
+          <div class="url-card"><span>Portal (Tailscale)</span><code id="urlPortalTs">—</code></div>
+          <div class="url-card"><span>Portal (this session)</span><code id="urlPortalThis">—</code></div>
+        </div>
+
+        <h3>Discord · <span id="discordGuild">Glitch Factor</span> · bot <span id="discordBot">GPU Pool</span></h3>
+        <div class="cmd-list" id="discordCmds"></div>
+
+        <h3>Env (members on Tailscale)</h3>
+        <pre id="connectEnv">—</pre>
+
+        <h3>CLI</h3>
+        <pre id="connectCli">—</pre>
+
+        <h3>Python SDK</h3>
+        <pre id="connectPy">—</pre>
+
+        <h3>HTTP</h3>
+        <pre id="connectHttp">—</pre>
+
+        <h3>Rules</h3>
+        <ul id="connectRules" style="margin:0.4rem 0 0; padding-left:1.2rem; color:var(--muted); line-height:1.5"></ul>
+
+        <p class="lede" style="margin-top:1rem">Full guide: <code id="connectDocs">CONNECTING.md</code> in the repo. Invite code (safe to share): <code id="inviteHint">—</code></p>
+        <div class="actions">
+          <button class="secondary" type="button" data-go="home">Back to Home</button>
+          <button type="button" data-go="utilize">Go Utilize</button>
+          <button class="secondary" type="button" data-go="contribute">Go Contribute</button>
         </div>
       </div>
     </div>
@@ -760,6 +955,7 @@ bindSlider("disk", "diskVal", v => `${v} MB`);
 
 let currentJobId = null;
 let jobPollTimer = null;
+let portalConfig = null;
 
 async function api(path, opts={}) {
   const r = await fetch(path, {
@@ -783,13 +979,14 @@ function show(loggedIn) {
 }
 
 function setView(name) {
-  $("viewDashboard").classList.toggle("hidden", name !== "dashboard");
+  $("viewHome").classList.toggle("hidden", name !== "home");
   $("viewUtilize").classList.toggle("hidden", name !== "utilize");
   $("viewContribute").classList.toggle("hidden", name !== "contribute");
+  $("viewConnect").classList.toggle("hidden", name !== "connect");
   document.querySelectorAll(".nav button").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.view === name);
   });
-  if (name === "dashboard") refreshDash();
+  if (name === "home") refreshDash();
 }
 
 function fmtMb(n) {
@@ -806,11 +1003,36 @@ function syncCudaOpts() {
   $("cudaOpts").classList.toggle("hidden", $("jobType").value !== "pytorch_cuda_probe");
 }
 
+function paintConnect(c) {
+  const conn = (c && c.connect) || {};
+  $("urlSchedTs").textContent = conn.scheduler_tailscale || "—";
+  $("urlSchedLocal").textContent = conn.scheduler_local || "—";
+  $("urlPortalTs").textContent = conn.portal_tailscale || "—";
+  $("urlPortalThis").textContent = conn.portal_this || c.portal_url || "—";
+  $("discordGuild").textContent = conn.discord_primary || "Glitch Factor";
+  $("discordBot").textContent = conn.discord_bot || "GPU Pool";
+  $("discordCmds").innerHTML = (conn.discord_commands || []).map(x => `<code>${escapeHtml(x)}</code>`).join("") || "—";
+  $("connectEnv").textContent = conn.env_example || "—";
+  $("connectCli").textContent = (conn.cli || []).join("\n") || "—";
+  $("connectPy").textContent = conn.python_sdk || "—";
+  $("connectHttp").textContent = (conn.http || []).join("\n") || "—";
+  $("connectDocs").textContent = conn.docs || "CONNECTING.md";
+  $("inviteHint").textContent = c.invite_code_hint || "glitch-factor";
+  $("connectRules").innerHTML = (conn.rules || []).map(r => `<li>${escapeHtml(r)}</li>`).join("");
+}
+
 async function loadConfig() {
   const c = await api("/api/config");
-  $("schedulerUrl").value = c.scheduler_url || "";
+  portalConfig = c;
+  // Prefer Tailscale scheduler for member contribute form when config points at localhost
+  const conn = c.connect || {};
+  const sched = (c.scheduler_url || "").includes("127.0.0.1")
+    ? (conn.scheduler_tailscale || c.scheduler_url)
+    : (c.scheduler_url || conn.scheduler_tailscale || "");
+  $("schedulerUrl").value = sched || "";
   if (c.capacity_note) $("capacityNote").textContent = c.capacity_note;
   if (c.utilize_note) $("utilizeNote").textContent = c.utilize_note;
+  paintConnect(c);
 }
 
 async function refreshMe() {
@@ -818,7 +1040,7 @@ async function refreshMe() {
   if (me.ok) {
     $("who").textContent = me.user.display_name;
     show(true);
-    setView("dashboard");
+    setView("home");
   } else {
     show(false);
   }
@@ -904,6 +1126,9 @@ syncCudaOpts();
 document.querySelectorAll(".nav button").forEach(btn => {
   btn.onclick = () => setView(btn.dataset.view);
 });
+document.querySelectorAll("[data-go]").forEach(el => {
+  el.addEventListener("click", () => setView(el.dataset.go));
+});
 
 $("loginBtn").onclick = async () => {
   $("loginErr").classList.add("hidden");
@@ -918,7 +1143,7 @@ $("loginBtn").onclick = async () => {
     });
     $("who").textContent = data.user.display_name;
     show(true);
-    setView("dashboard");
+    setView("home");
   } catch (e) {
     $("loginErr").textContent = String(e.message||e);
     $("loginErr").classList.remove("hidden");
@@ -984,7 +1209,7 @@ loadConfig().then(refreshMe).catch(err => {
   $("loginErr").classList.remove("hidden");
 });
 setInterval(() => {
-  if (!$("appPanel").classList.contains("hidden") && !$("viewDashboard").classList.contains("hidden")) {
+  if (!$("appPanel").classList.contains("hidden") && !$("viewHome").classList.contains("hidden")) {
     refreshDash();
   }
 }, 8000);

@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~11:52 CDT · EXE download docs + ignore rules (packaging Worker builds the binary).
+**Updated:** 2026-08-04 ~11:57 CDT · Portal Home = Contribute / Utilize / Connect polish.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -14,6 +14,16 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 **Discord:** App **GPU Pool** · Primary guild **Glitch Factor** · Invite code `glitch-factor`  
 **v1 jobs only:** `probe`, `pytorch_cuda_probe` · Auth MVP: invite/password (OAuth later)  
 **Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files
+
+---
+
+## Portal Home polish (2026-08-04)
+
+- [x] After login: big **Contribute** · **Utilize** · **Connect** chooser cards on Home
+- [x] Connect panel: Tailscale + local scheduler/portal URLs, Discord cmds, CLI/SDK/HTTP snippets (no secrets)
+- [x] `/api/config` exposes `connect` block + invite hint `glitch-factor`
+- [x] `CONNECTING.md` notes portal Home mirrors the three paths
+- [x] Tailscale portal kept on `0.0.0.0:8767`; bot/scheduler not touched for this polish
 
 ---
 

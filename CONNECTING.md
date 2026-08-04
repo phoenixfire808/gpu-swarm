@@ -2,6 +2,8 @@
 
 One page: **Contribute** vs **Utilize** vs **Connect from code**.
 
+After portal login (`/portal`), the **Home** view shows the same three paths as big sections — Contribute · Utilize · Connect (how-to with URLs, Discord commands, CLI/SDK).
+
 Primary Discord: **Glitch Factor** · Bot: **GPU Pool**
 
 | Service | Local (host) | Tailscale (members) |
