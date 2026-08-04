@@ -19,7 +19,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from gpu_swarm.config import ROOT
+from gpu_swarm.paths import BUNDLE_ROOT, ROOT, is_frozen
 from gpu_swarm.joiner_settings import (
     DEFAULT_LOCAL_PORTAL_URL,
     DEFAULT_LOCAL_SCHEDULER_URL,
@@ -83,11 +83,15 @@ __all__ = [
     "pool_status",
     "get_utilize_helper_text",
     "get_connect_from_code_text",
+    "get_friends_connect_text",
+    "scheduler_reachability_hint",
     "open_repo_doc",
     "discord_slash_for_job",
     "CONNECTING_DOC",
     "CODING_AGENT_EXAMPLE",
     "LOCAL_OFFLOAD_DOC",
+    "PRIVATE_NETWORK_BLURB",
+    "FRIENDS_CONNECT_STEPS",
 ]
 
 PID_FILE = ROOT / "data" / "joiner_worker.pid"
@@ -95,15 +99,76 @@ LOG_FILE = ROOT / "data" / "joiner_worker.log"
 JOINER_WORKER_ID_FILE = ROOT / "data" / "joiner_worker_id.txt"
 ENV_FILE = ROOT / ".env"
 
+# Member-facing copy: private by design — never sound like the pool is "broken" / WAN-public.
+PRIVATE_NETWORK_BLURB = (
+    "Private Tailscale/LAN pool — not exposed to the open internet. "
+    "Friends join via Tailscale, then use the scheduler/portal URLs."
+)
+FRIENDS_CONNECT_STEPS = (
+    "1) Install Tailscale — https://tailscale.com/download",
+    "2) Ask Drew for an invite to the Glitch Factor tailnet (login + join)",
+    f"3) Open portal {DEFAULT_PORTAL_URL} or run the GPU Pool EXE / desktop app",
+    f"4) Sign in with invite code {PORTAL_INVITE_CODE} + your display name",
+    "5) Contribute (join as worker) or Utilize (run allowlisted jobs)",
+)
+
+
+def scheduler_reachability_hint(
+    *,
+    ok: bool,
+    url: str = "",
+    error: str = "",
+    tailscale_ipv4: str | None = None,
+) -> str:
+    """Actionable status text when testing the Tailscale/LAN scheduler."""
+    if ok:
+        return f"Reachable on private Tailscale/LAN · {url or DEFAULT_SCHEDULER_URL}"
+    ts = tailscale_ipv4 if tailscale_ipv4 is not None else detect_tailscale_ipv4()
+    lines = [
+        "Cannot reach the scheduler yet — usually a Tailscale step, not “pool is down”.",
+        "",
+        PRIVATE_NETWORK_BLURB,
+        "",
+        "Do this:",
+        "1) Install Tailscale and sign in — https://tailscale.com/download",
+        "2) Ask Drew to invite you to the Glitch Factor tailnet",
+        f"3) Members use: {DEFAULT_SCHEDULER_URL}",
+        f"4) Same PC as Drew: {DEFAULT_LOCAL_SCHEDULER_URL}",
+        f"5) Portal: {DEFAULT_PORTAL_URL} · invite: {PORTAL_INVITE_CODE}",
+    ]
+    if not ts:
+        lines.append("6) This machine has no Tailscale IPv4 yet — install/login Tailscale first.")
+    else:
+        lines.append(f"6) This machine Tailscale IPv4: {ts}")
+    if url:
+        lines.append(f"Tried: {url}")
+    if error:
+        lines.append(f"Last error: {error}")
+    return "\n".join(lines)
+
+
+def get_friends_connect_text() -> str:
+    """Short card text: how friends reach the private pool."""
+    return (
+        "How friends connect\n"
+        "\n"
+        + "\n".join(FRIENDS_CONNECT_STEPS)
+        + "\n\n"
+        + PRIVATE_NETWORK_BLURB
+        + "\n"
+        f"Scheduler: {DEFAULT_SCHEDULER_URL}\n"
+        f"Portal:    {DEFAULT_PORTAL_URL}\n"
+    )
+
 # One-stop wizard helper scripts (Windows). Prefer these paths from the UI/CLI.
-SCRIPTS_DIR = ROOT / "scripts"
+SCRIPTS_DIR = BUNDLE_ROOT / "scripts"
 SCRIPT_CHECK_PREREQS = SCRIPTS_DIR / "check_prereqs.ps1"
 SCRIPT_INSTALL_JOINER_DEPS = SCRIPTS_DIR / "install_joiner_deps.ps1"
 SCRIPT_CHECK_PREREQS_CMD = SCRIPTS_DIR / "check_prereqs.cmd"
 SCRIPT_INSTALL_JOINER_DEPS_CMD = SCRIPTS_DIR / "install_joiner_deps.cmd"
-CONNECTING_DOC = ROOT / "CONNECTING.md"
-CODING_AGENT_EXAMPLE = ROOT / "examples" / "coding_agent_pool.py"
-LOCAL_OFFLOAD_DOC = ROOT / "examples" / "ollama_or_local_offload.md"
+CONNECTING_DOC = BUNDLE_ROOT / "CONNECTING.md"
+CODING_AGENT_EXAMPLE = BUNDLE_ROOT / "examples" / "coding_agent_pool.py"
+LOCAL_OFFLOAD_DOC = BUNDLE_ROOT / "examples" / "ollama_or_local_offload.md"
 
 # Keys we may sync into .env — never touch Discord/bot secrets.
 _SAFE_ENV_KEYS = (
@@ -459,6 +524,17 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
     Install from requirements.txt only when deps are missing (avoid reinstall loops).
     Pass force=True to repair/upgrade from requirements.txt.
     """
+    if is_frozen():
+        return {
+            "ok": True,
+            "message": (
+                "GPUPool.exe already bundles the desktop + worker runtime. "
+                "Optional CUDA torch is a separate wizard step (large download)."
+            ),
+            "skipped": True,
+            "frozen": True,
+            "missing": [],
+        }
     status = check_python_deps()
     if status.get("ok") and not force:
         return {
@@ -467,7 +543,9 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
             "skipped": True,
             "missing": [],
         }
-    req = ROOT / "requirements.txt"
+    req = BUNDLE_ROOT / "requirements.txt"
+    if not req.is_file():
+        req = ROOT / "requirements.txt"
     if not req.is_file():
         return {
             "ok": False,
@@ -514,23 +592,102 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
     }
 
 
+def _resolve_system_python() -> str | None:
+    """Find a non-frozen Python 3.10+ for optional pip installs (e.g. torch)."""
+    candidates: list[str] = []
+    for name in ("py", "python", "python3"):
+        found = shutil.which(name)
+        if found:
+            candidates.append(found)
+    local = Path(os.environ.get("LOCALAPPDATA", ""))
+    for ver in ("Python313", "Python312", "Python311", "Python310"):
+        candidates.append(str(local / "Programs" / "Python" / ver / "python.exe"))
+        candidates.append(f"C:\\{ver}\\python.exe")
+    for exe in candidates:
+        if not exe or not Path(exe).exists():
+            continue
+        # Skip ourselves when frozen.
+        if is_frozen() and Path(exe).resolve() == Path(sys.executable).resolve():
+            continue
+        try:
+            if Path(exe).name.lower() == "py.exe" or exe.lower().endswith("\\py.exe"):
+                proc = subprocess.run(
+                    [exe, "-3", "-c", "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 10) else 1)"],
+                    capture_output=True,
+                    timeout=8,
+                    check=False,
+                )
+                if proc.returncode == 0:
+                    # Return the real interpreter behind the launcher.
+                    show = subprocess.run(
+                        [exe, "-3", "-c", "import sys; print(sys.executable)"],
+                        capture_output=True,
+                        text=True,
+                        timeout=8,
+                        check=False,
+                    )
+                    path = (show.stdout or "").strip()
+                    if path and Path(path).exists():
+                        return path
+                continue
+            proc = subprocess.run(
+                [exe, "-c", "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 10) else 1)"],
+                capture_output=True,
+                timeout=8,
+                check=False,
+            )
+            if proc.returncode == 0:
+                return exe
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+    return None
+
+
 def install_torch_cuda(*, index_url: str = "https://download.pytorch.org/whl/cu124") -> dict[str, Any]:
     """
     Optional large download — only call after explicit user consent in the UI.
     Installs torch/torchvision/torchaudio from the CUDA wheel index.
     """
-    cmd = [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--user",
-        "torch",
-        "torchvision",
-        "torchaudio",
-        "--index-url",
-        index_url,
-    ]
+    if is_frozen():
+        # Frozen EXE cannot pip-install into itself; use system Python when available.
+        py = _resolve_system_python()
+        if not py:
+            return {
+                "ok": False,
+                "message": "CUDA torch is not bundled in GPUPool.exe (too large).",
+                "fix": (
+                    "Install Python 3.10+ from python.org, then either:\n"
+                    "  pip install torch --index-url https://download.pytorch.org/whl/cu124\n"
+                    "or clone the repo and use start-gpu-pool-app.cmd for full torch install.\n"
+                    "Probe jobs and pool join work without torch; pytorch_cuda_probe needs it."
+                ),
+                "frozen": True,
+            }
+        cmd = [
+            py,
+            "-m",
+            "pip",
+            "install",
+            "--user",
+            "torch",
+            "torchvision",
+            "torchaudio",
+            "--index-url",
+            index_url,
+        ]
+    else:
+        cmd = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--user",
+            "torch",
+            "torchvision",
+            "torchaudio",
+            "--index-url",
+            index_url,
+        ]
     try:
         proc = subprocess.run(
             cmd,
@@ -818,22 +975,30 @@ def test_scheduler(url: str | None = None, timeout: float = 5.0) -> dict[str, An
             }
         )
         if result.get("ok"):
+            ts = get_tailscale_ipv4()
             return {
                 "ok": True,
                 "url": candidate,
                 "error": "",
                 "data": result.get("data"),
                 "attempts": attempts,
-                "tailscale_ipv4": get_tailscale_ipv4(),
+                "tailscale_ipv4": ts,
+                "hint": scheduler_reachability_hint(ok=True, url=candidate, tailscale_ipv4=ts),
             }
 
+    ts = get_tailscale_ipv4()
+    fail_url = candidates[0] if candidates else ""
+    fail_err = attempts[-1]["error"] if attempts else "No scheduler URL to try"
     return {
         "ok": False,
-        "url": candidates[0] if candidates else "",
-        "error": attempts[-1]["error"] if attempts else "No scheduler URL to try",
+        "url": fail_url,
+        "error": fail_err,
         "data": None,
         "attempts": attempts,
-        "tailscale_ipv4": get_tailscale_ipv4(),
+        "tailscale_ipv4": ts,
+        "hint": scheduler_reachability_hint(
+            ok=False, url=fail_url, error=fail_err, tailscale_ipv4=ts
+        ),
     }
 
 
@@ -874,16 +1039,17 @@ def start_worker(
     # Preflight: scheduler reachable
     sched = test_scheduler(settings.scheduler_url)
     if not sched.get("ok"):
+        hint = sched.get("hint") or scheduler_reachability_hint(
+            ok=False,
+            url=settings.scheduler_url,
+            error=str(sched.get("error") or ""),
+            tailscale_ipv4=sched.get("tailscale_ipv4"),
+        )
         return {
             "ok": False,
-            "message": f"Scheduler unreachable: {sched.get('error') or 'unknown'}",
+            "message": "Cannot reach Tailscale/LAN scheduler yet (install/login Tailscale + join Drew’s tailnet).",
             "pid": None,
-            "fix": (
-                f"1) Confirm scheduler is running on Drew's host\n"
-                f"2) Test URL: {settings.scheduler_url}\n"
-                f"3) Same-machine fallback: {DEFAULT_LOCAL_SCHEDULER_URL}\n"
-                f"4) Tailscale members: {DEFAULT_SCHEDULER_URL}"
-            ),
+            "fix": hint,
             "scheduler": sched,
         }
 
@@ -902,24 +1068,43 @@ def start_worker(
     # Separate id file so desktop joiner does not clash with start-worker.cmd
     env["GPU_SWARM_WORKER_ID_FILE"] = str(JOINER_WORKER_ID_FILE)
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "gpu_swarm",
-        "worker",
-        "--name",
-        settings.worker_name,
-        "--scheduler-url",
-        settings.scheduler_url.rstrip("/"),
-        "--max-vram-mb",
-        str(int(settings.max_vram_mb or 0)),
-        "--max-cpu-percent",
-        str(float(settings.max_cpu_percent)),
-        "--max-ram-mb",
-        str(int(getattr(settings, "max_ram_mb", 0) or 0)),
-        "--max-disk-mb",
-        str(disk_mb),
-    ]
+    if is_frozen():
+        # Re-launch this EXE in worker mode (same bundle; no system Python required).
+        cmd = [
+            sys.executable,
+            "--worker",
+            "--name",
+            settings.worker_name,
+            "--scheduler-url",
+            settings.scheduler_url.rstrip("/"),
+            "--max-vram-mb",
+            str(int(settings.max_vram_mb or 0)),
+            "--max-cpu-percent",
+            str(float(settings.max_cpu_percent)),
+            "--max-ram-mb",
+            str(int(getattr(settings, "max_ram_mb", 0) or 0)),
+            "--max-disk-mb",
+            str(disk_mb),
+        ]
+    else:
+        cmd = [
+            sys.executable,
+            "-m",
+            "gpu_swarm",
+            "worker",
+            "--name",
+            settings.worker_name,
+            "--scheduler-url",
+            settings.scheduler_url.rstrip("/"),
+            "--max-vram-mb",
+            str(int(settings.max_vram_mb or 0)),
+            "--max-cpu-percent",
+            str(float(settings.max_cpu_percent)),
+            "--max-ram-mb",
+            str(int(getattr(settings, "max_ram_mb", 0) or 0)),
+            "--max-disk-mb",
+            str(disk_mb),
+        ]
     if settings.discord_user:
         cmd.extend(["--discord-user", settings.discord_user])
 
@@ -1203,10 +1388,17 @@ def pool_status(scheduler_url: str | None = None, timeout: float = 5.0) -> dict[
     data = fetched.get("data") or {}
     workers = data.get("workers") or []
     online = [w for w in workers if w.get("online") or str(w.get("status", "")).lower() in ("online", "busy")]
+    ok = bool(fetched.get("ok"))
+    url = fetched.get("url") or ""
+    err = fetched.get("error") or ""
+    ts = get_tailscale_ipv4()
     return {
-        "ok": bool(fetched.get("ok")),
-        "url": fetched.get("url") or "",
-        "error": fetched.get("error") or "",
+        "ok": ok,
+        "url": url,
+        "error": err,
+        "tailscale_ipv4": ts,
+        "hint": scheduler_reachability_hint(ok=ok, url=url, error=err, tailscale_ipv4=ts),
+        "private_network": PRIVATE_NETWORK_BLURB,
         "workers_online": int(data.get("workers_online") or len(online)),
         "workers_total": int(data.get("workers_total") or len(workers)),
         "free_vram_mb": int(data.get("free_vram_mb") or 0),
@@ -1389,18 +1581,19 @@ def get_utilize_helper_text() -> str:
 
 
 def open_repo_doc(path: str | Path) -> dict[str, Any]:
-    """Open a repo doc/example in the OS default app (editor / notepad / browser)."""
+    """Open a repo doc/example (or folder) in the OS default app / Explorer."""
     import webbrowser
 
     p = Path(path)
-    if not p.is_file():
-        return {"ok": False, "path": str(p), "message": f"Missing file: {p}"}
+    if not p.exists():
+        return {"ok": False, "path": str(p), "message": f"Missing path: {p}"}
     try:
         if sys.platform == "win32":
             os.startfile(str(p))  # type: ignore[attr-defined]
         else:
             webbrowser.open(p.as_uri())
-        return {"ok": True, "path": str(p), "message": f"Opened {p.name}"}
+        label = p.name if p.name else str(p)
+        return {"ok": True, "path": str(p), "message": f"Opened {label}"}
     except OSError as exc:
         return {"ok": False, "path": str(p), "message": str(exc)}
 
@@ -1450,7 +1643,8 @@ def get_connect_from_code_text(scheduler_url: str | None = None) -> str:
         "\n"
         "# Read the full Contribute / Utilize / Connect map:\n"
         "  CONNECTING.md\n"
-        "# Do not expose the scheduler to the public internet. No Docker. No arbitrary shell.\n"
+        f"# {PRIVATE_NETWORK_BLURB}\n"
+        "# No Docker. No arbitrary shell.\n"
     )
 
 
@@ -1478,7 +1672,7 @@ def get_discord_helper_text() -> str:
         "CLI: python -m gpu_swarm utilize status|probe|cuda --wait\n"
         "SDK: from gpu_swarm.client import GPUPool\n"
         "Docs: CONNECTING.md · examples/coding_agent_pool.py\n"
-        "Do not expose the scheduler to the public internet."
+        f"{PRIVATE_NETWORK_BLURB}"
     )
 
 

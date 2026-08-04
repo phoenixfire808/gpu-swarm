@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from gpu_swarm.config import ROOT
+from gpu_swarm.paths import ROOT, is_frozen
 
 SETTINGS_PATH = ROOT / "data" / "joiner_settings.json"
 DEFAULT_SCHEDULER_URL = "http://100.85.165.84:8766"
@@ -142,6 +142,16 @@ def agent_vms_present(path: str | Path | None = None) -> dict[str, Any]:
 
 def detect_python_runtime() -> dict[str, Any]:
     """Describe the interpreter running this process (the joiner itself)."""
+    if is_frozen():
+        return {
+            "ok": True,
+            "executable": sys.executable,
+            "version": "bundled",
+            "version_info": list(sys.version_info[:3]),
+            "frozen": True,
+            "message": f"GPU Pool Windows runtime @ {sys.executable}",
+            "fix": "",
+        }
     major, minor, micro = sys.version_info[:3]
     ok = (major, minor) >= (3, 10)
     fix = ""
@@ -155,12 +165,23 @@ def detect_python_runtime() -> dict[str, Any]:
         "executable": sys.executable,
         "version": f"{major}.{minor}.{micro}",
         "version_info": [major, minor, micro],
+        "frozen": False,
         "message": f"Python {major}.{minor}.{micro} @ {sys.executable}",
         "fix": fix,
     }
 
 
 def python_deps_status() -> dict[str, Any]:
+    if is_frozen():
+        # UI + worker path are bundled; torch stays optional/out-of-band.
+        return {
+            "ok": True,
+            "missing": [],
+            "present": [name for _, name in REQUIRED_MODULES],
+            "frozen": True,
+            "message": "Desktop runtime bundled in GPUPool.exe (torch optional, not shipped).",
+            "fix": "",
+        }
     missing: list[str] = []
     present: list[str] = []
     for mod, pip_name in REQUIRED_MODULES:
@@ -173,6 +194,7 @@ def python_deps_status() -> dict[str, Any]:
         "ok": not missing,
         "missing": missing,
         "present": present,
+        "frozen": False,
         "fix": (
             f"Click Install in the wizard, or run:\n"
             f'  "{sys.executable}" -m pip install -r requirements.txt'

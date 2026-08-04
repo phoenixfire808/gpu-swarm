@@ -9,8 +9,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")
+from gpu_swarm.paths import APP_ROOT, ROOT
+
+# User .env only (never load secrets from the frozen bundle).
+load_dotenv(APP_ROOT / ".env")
 
 
 def _env(key: str, default: str = "") -> str:

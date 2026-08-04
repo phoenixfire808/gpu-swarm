@@ -43,9 +43,9 @@ def run_app() -> int:
 class GpuPoolApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
-        self.title(f"{APP_TITLE} — Contribute & Utilize")
-        self.geometry("1080x780")
-        self.minsize(920, 700)
+        self.title(f"{APP_TITLE} — Contribute · Utilize · Connect")
+        self.geometry("1120x820")
+        self.minsize(960, 720)
         self.configure(fg_color=BG)
 
         self.settings = be.load_config()
@@ -176,13 +176,13 @@ class WizardFrame(ctk.CTkFrame):
     def _step_welcome(self) -> None:
         self._title(
             "Welcome to GPU Pool",
-            "One-stop setup for both modes: Contribute (join with your GPU) and Utilize (send jobs to the pool).",
+            "One-stop setup. After the wizard, the home screen shows three big modes.",
         )
         modes = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
         modes.pack(fill="x", pady=(0, 8))
         ctk.CTkLabel(
             modes,
-            text="Two modes after setup",
+            text="Three modes on the home screen",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=ACCENT,
         ).pack(anchor="w", padx=16, pady=(14, 4))
@@ -190,7 +190,8 @@ class WizardFrame(ctk.CTkFrame):
             modes,
             text=(
                 "• Contribute — install deps, set caps, Join/Leave as a worker\n"
-                "• Utilize — view pool status and submit allowlisted jobs (probe, CUDA matmul)"
+                "• Utilize — live pool status + Run Probe / Run CUDA Job (use the pool now)\n"
+                "• Connect — scheduler/portal URLs, Python SDK, CLI, Discord slash tips"
             ),
             text_color=MUTED,
             justify="left",
@@ -543,14 +544,13 @@ class WizardFrame(ctk.CTkFrame):
                     self.connect_log,
                     f"  tried {a.get('url')}: {'ok' if a.get('ok') else a.get('error')}\n",
                 )
-            self._append_log(
-                self.connect_log,
-                "\nFIX:\n"
-                "1) On Drew's host run start-scheduler-lan.cmd\n"
-                f"2) Same machine: {DEFAULT_LOCAL_SCHEDULER_URL}\n"
-                f"3) Tailscale members: {DEFAULT_SCHEDULER_URL}\n"
-                "4) Confirm Tailscale is connected if using 100.x address\n",
+            hint = result.get("hint") or be.scheduler_reachability_hint(
+                ok=False,
+                url=str(result.get("url") or url),
+                error=str(result.get("error") or ""),
+                tailscale_ipv4=result.get("tailscale_ipv4"),
             )
+            self._append_log(self.connect_log, f"\n{hint}\n")
 
     def _step_caps(self) -> None:
         self._title(
@@ -795,7 +795,7 @@ class MainFrame(ctk.CTkFrame):
         super().__init__(master, fg_color=BG)
         self.app = app
         self.settings = be.load_config()
-        self._mode = "contribute"
+        self._mode = "home"
         self._last_job_id = ""
         # Prefer a live portal URL (Tailscale :8767 when available)
         resolved = be.resolve_portal_url()
@@ -807,6 +807,7 @@ class MainFrame(ctk.CTkFrame):
         self._refresh_host()
         self._refresh_pool_utilize()
         self._refresh_connect_snippets()
+        self._refresh_home_pool()
         self._schedule_poll()
 
     def _build(self) -> None:
@@ -830,6 +831,13 @@ class MainFrame(ctk.CTkFrame):
 
         btns = ctk.CTkFrame(header, fg_color="transparent")
         btns.pack(side="right", padx=16)
+        ctk.CTkButton(
+            btns,
+            text="Home",
+            width=90,
+            fg_color="#2A3544",
+            command=lambda: self._set_mode("home"),
+        ).pack(side="left", padx=6)
         ctk.CTkButton(
             btns,
             text="Open web portal",
@@ -861,46 +869,203 @@ class MainFrame(ctk.CTkFrame):
         mode_bar.pack(fill="x")
         self._mode_btns: dict[str, ctk.CTkButton] = {}
         for key, label in (
-            ("contribute", "Contribute — join the pool"),
-            ("utilize", "Utilize — send jobs"),
-            ("connect", "Connect from code"),
+            ("home", "Home"),
+            ("contribute", "1 · Contribute"),
+            ("utilize", "2 · Utilize"),
+            ("connect", "3 · Connect"),
         ):
             btn = ctk.CTkButton(
                 mode_bar,
                 text=label,
-                height=34,
-                fg_color=ACCENT if key == "contribute" else "#2A3544",
-                text_color="#0A1210" if key == "contribute" else "#E8EEF4",
+                height=40,
+                font=ctk.CTkFont(size=14, weight="bold"),
+                fg_color=ACCENT if key == "home" else "#2A3544",
+                text_color="#0A1210" if key == "home" else "#E8EEF4",
                 command=lambda k=key: self._set_mode(k),
             )
-            btn.pack(side="left", padx=(12 if key == "contribute" else 6, 0), pady=8)
+            btn.pack(side="left", padx=(12 if key == "home" else 8, 0), pady=10, fill="x", expand=True)
             self._mode_btns[key] = btn
 
         self._mode_host = ctk.CTkFrame(self, fg_color=BG)
         self._mode_host.pack(fill="both", expand=True, padx=16, pady=12)
 
+        self._home = ctk.CTkFrame(self._mode_host, fg_color=BG)
         self._contribute = ctk.CTkFrame(self._mode_host, fg_color=BG)
         self._utilize = ctk.CTkFrame(self._mode_host, fg_color=BG)
         self._connect = ctk.CTkFrame(self._mode_host, fg_color=BG)
+        self._build_home(self._home)
         self._build_contribute(self._contribute)
         self._build_utilize(self._utilize)
         self._build_connect(self._connect)
-        self._set_mode("contribute")
+        self._set_mode("home")
 
     def _set_mode(self, mode: str) -> None:
         self._mode = mode
-        for frame in (self._contribute, self._utilize, self._connect):
+        for frame in (self._home, self._contribute, self._utilize, self._connect):
             frame.pack_forget()
-        {"contribute": self._contribute, "utilize": self._utilize, "connect": self._connect}[mode].pack(
-            fill="both", expand=True
-        )
+        {
+            "home": self._home,
+            "contribute": self._contribute,
+            "utilize": self._utilize,
+            "connect": self._connect,
+        }[mode].pack(fill="both", expand=True)
         for key, btn in self._mode_btns.items():
             on = key == mode
             btn.configure(fg_color=ACCENT if on else "#2A3544", text_color="#0A1210" if on else "#E8EEF4")
-        if mode == "utilize":
+        if mode == "home":
+            self._refresh_home_pool()
+        elif mode == "utilize":
+            if hasattr(self, "utilize_sched") and hasattr(self, "sched_entry"):
+                cur = self.utilize_sched.get().strip()
+                contrib = self.sched_entry.get().strip()
+                if not cur and contrib:
+                    self._set_entry(self.utilize_sched, contrib)
             self._refresh_pool_utilize()
+            self._test_utilize_scheduler()
         elif mode == "connect":
             self._refresh_connect_snippets()
+            self._test_connect_scheduler()
+
+    def _build_home(self, parent: Any) -> None:
+        ctk.CTkLabel(
+            parent,
+            text="What do you want to do?",
+            font=ctk.CTkFont(family="Segoe UI Semibold", size=26),
+        ).pack(anchor="w", pady=(4, 4))
+        ctk.CTkLabel(
+            parent,
+            text=(
+                "Three first-class modes. Contribute joins your GPU. Utilize runs jobs on the pool now. "
+                "Connect shows how to plug tools/code into the scheduler."
+            ),
+            text_color=MUTED,
+            wraplength=980,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 14))
+
+        cards = ctk.CTkFrame(parent, fg_color="transparent")
+        cards.pack(fill="both", expand=True)
+        cards.grid_columnconfigure((0, 1, 2), weight=1, uniform="modes")
+        cards.grid_rowconfigure(0, weight=1)
+
+        specs = (
+            (
+                "contribute",
+                "1 · Contribute",
+                "Install / join as a worker",
+                "Wizard + Join/Leave · VRAM/CPU/RAM/disk caps · your GPU helps the pool.",
+                "Open Contribute →",
+            ),
+            (
+                "utilize",
+                "2 · Utilize",
+                "Use the pool NOW",
+                "Live workers & GPUs · Run Probe · Run CUDA Job · see status + results end-to-end.",
+                "Open Utilize →",
+            ),
+            (
+                "connect",
+                "3 · Connect",
+                "Plug in from code / tools",
+                "Scheduler + portal URLs · Python GPUPool · CLI · Discord /pool · CONNECTING.md.",
+                "Open Connect →",
+            ),
+        )
+        for col, (key, title, subtitle, body, cta) in enumerate(specs):
+            card = ctk.CTkFrame(cards, fg_color=PANEL, corner_radius=14, border_width=1, border_color="#2A3544")
+            card.grid(row=0, column=col, sticky="nsew", padx=8, pady=4)
+            ctk.CTkLabel(
+                card,
+                text=title,
+                font=ctk.CTkFont(size=22, weight="bold"),
+                text_color=ACCENT,
+            ).pack(anchor="w", padx=18, pady=(20, 4))
+            ctk.CTkLabel(
+                card,
+                text=subtitle,
+                font=ctk.CTkFont(size=15, weight="bold"),
+            ).pack(anchor="w", padx=18)
+            ctk.CTkLabel(
+                card,
+                text=body,
+                text_color=MUTED,
+                wraplength=280,
+                justify="left",
+            ).pack(anchor="w", padx=18, pady=(10, 16))
+            ctk.CTkButton(
+                card,
+                text=cta,
+                height=44,
+                fg_color=ACCENT,
+                text_color="#0A1210",
+                font=ctk.CTkFont(size=14, weight="bold"),
+                command=lambda k=key: self._set_mode(k),
+            ).pack(fill="x", padx=18, pady=(0, 20))
+
+        live = self._card(parent, "Live pool snapshot (home)")
+        self.home_pool_lbl = ctk.CTkLabel(live, text="Checking scheduler…", text_color=MUTED, wraplength=960, justify="left")
+        self.home_pool_lbl.pack(anchor="w")
+        row = ctk.CTkFrame(live, fg_color="transparent")
+        row.pack(fill="x", pady=(10, 0))
+        ctk.CTkButton(row, text="Refresh", fg_color="#2A3544", command=self._refresh_home_pool).pack(side="left")
+        ctk.CTkButton(
+            row,
+            text="Run Probe now →",
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: (self._set_mode("utilize"), self._submit_utilize("probe")),
+        ).pack(side="left", padx=8)
+        ctk.CTkButton(
+            row,
+            text="How to Connect →",
+            fg_color="#2A3544",
+            command=lambda: self._set_mode("connect"),
+        ).pack(side="left")
+
+    def _refresh_home_pool(self) -> None:
+        def work() -> None:
+            url = self._scheduler_url_for_jobs()
+            st = be.pool_status(url)
+            self.after(0, lambda: self._render_home_pool(st))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _render_home_pool(self, st: dict[str, Any]) -> None:
+        if not hasattr(self, "home_pool_lbl"):
+            return
+        if st.get("ok"):
+            gpus = ", ".join(st.get("gpus") or []) or "(none listed)"
+            text = (
+                f"Scheduler OK · {st.get('url')}  ·  "
+                f"workers online {st.get('workers_online', 0)}/{st.get('workers_total', 0)}  ·  "
+                f"VRAM free {st.get('free_vram_mb', 0)} MiB  ·  GPUs: {gpus}"
+            )
+            self.home_pool_lbl.configure(text=text, text_color=OK_GREEN)
+        else:
+            hint = (st.get("hint") or "").splitlines()
+            short = hint[0] if hint else "Cannot reach Tailscale/LAN scheduler yet."
+            self.home_pool_lbl.configure(
+                text=(
+                    f"{short} Tried {st.get('url') or 'n/a'}. "
+                    "Install/login Tailscale, join Drew’s tailnet, then retry — "
+                    f"or on Drew’s PC use {DEFAULT_LOCAL_SCHEDULER_URL}."
+                ),
+                text_color=DANGER,
+            )
+
+    def _scheduler_url_for_jobs(self) -> str:
+        """Prefer Utilize field, then Contribute field, then saved/default."""
+        for name in ("utilize_sched", "sched_entry", "connect_sched"):
+            widget = getattr(self, name, None)
+            if widget is None:
+                continue
+            try:
+                url = widget.get().strip()
+                if url:
+                    return url
+            except Exception:  # noqa: BLE001
+                continue
+        return (self.settings.scheduler_url or DEFAULT_LOCAL_SCHEDULER_URL).rstrip("/")
 
     def _build_contribute(self, parent: Any) -> None:
         parent.grid_columnconfigure(0, weight=3)
@@ -926,8 +1091,48 @@ class MainFrame(ctk.CTkFrame):
         right = ctk.CTkFrame(parent, fg_color="transparent")
         right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
 
+        intro = self._card(left, "Utilize — use the pool NOW")
+        ctk.CTkLabel(
+            intro,
+            text=(
+                f"{be.PRIVATE_NETWORK_BLURB} "
+                "Submit allowlisted jobs to live workers. No arbitrary shell."
+            ),
+            text_color=MUTED,
+            wraplength=560,
+            justify="left",
+        ).pack(anchor="w")
+        srow = ctk.CTkFrame(intro, fg_color="transparent")
+        srow.pack(fill="x", pady=(10, 0))
+        ctk.CTkLabel(srow, text="Scheduler URL", text_color=MUTED).pack(side="left")
+        self.utilize_sched = ctk.CTkEntry(srow, height=34)
+        self.utilize_sched.pack(side="left", fill="x", expand=True, padx=8)
+        self.utilize_sched.insert(0, self.settings.scheduler_url or DEFAULT_LOCAL_SCHEDULER_URL)
+        ctk.CTkButton(
+            srow, text="Local", width=70, fg_color="#2A3544",
+            command=lambda: self._set_entry(self.utilize_sched, DEFAULT_LOCAL_SCHEDULER_URL),
+        ).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(
+            srow, text="Tailscale", width=90, fg_color="#2A3544",
+            command=lambda: self._set_entry(self.utilize_sched, DEFAULT_SCHEDULER_URL),
+        ).pack(side="left")
+        crow = ctk.CTkFrame(intro, fg_color="transparent")
+        crow.pack(fill="x", pady=(8, 0))
+        ctk.CTkButton(
+            crow,
+            text="Test Tailscale connection",
+            width=190,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=self._test_utilize_scheduler,
+        ).pack(side="left")
+        self.utilize_conn_lbl = ctk.CTkLabel(
+            crow, text="Connection: not tested yet", text_color=MUTED, wraplength=360, justify="left"
+        )
+        self.utilize_conn_lbl.pack(side="left", padx=10)
+
         pool = self._card(left, "Pool status (live)")
-        self.pool_box = ctk.CTkTextbox(pool, height=180, fg_color="#121A24")
+        self.pool_box = ctk.CTkTextbox(pool, height=160, fg_color="#121A24")
         self.pool_box.pack(fill="x")
         prow = ctk.CTkFrame(pool, fg_color="transparent")
         prow.pack(fill="x", pady=(8, 0))
@@ -937,39 +1142,46 @@ class MainFrame(ctk.CTkFrame):
         self.pool_lbl = ctk.CTkLabel(prow, text="", text_color=MUTED)
         self.pool_lbl.pack(side="left", padx=10)
 
-        jobs = self._card(left, "Submit job — utilize the pool")
+        jobs = self._card(left, "Run a job")
         ctk.CTkLabel(
             jobs,
-            text="Allowlisted only (no arbitrary shell). Needs at least one online worker.",
+            text="Big actions below hit the live scheduler and wait for completion.",
             text_color=MUTED,
             wraplength=520,
             justify="left",
         ).pack(anchor="w")
         brow = ctk.CTkFrame(jobs, fg_color="transparent")
-        brow.pack(fill="x", pady=(10, 0))
+        brow.pack(fill="x", pady=(12, 0))
         ctk.CTkButton(
             brow,
-            text="Submit probe",
-            height=38,
+            text="Run Probe",
+            height=48,
+            width=160,
             fg_color=ACCENT,
             text_color="#0A1210",
+            font=ctk.CTkFont(size=16, weight="bold"),
             command=lambda: self._submit_utilize("probe"),
-        ).pack(side="left", padx=(0, 8))
+        ).pack(side="left", padx=(0, 10))
         ctk.CTkButton(
             brow,
-            text="Submit CUDA matmul",
-            height=38,
+            text="Run CUDA Job",
+            height=48,
+            width=180,
             fg_color=ACCENT,
             text_color="#0A1210",
+            font=ctk.CTkFont(size=16, weight="bold"),
             command=lambda: self._submit_utilize("pytorch_cuda_probe"),
-        ).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(brow, text="Poll last job", fg_color="#2A3544", command=self._poll_last_job).pack(side="left")
-        self.utilize_lbl = ctk.CTkLabel(jobs, text="", text_color=MUTED)
-        self.utilize_lbl.pack(anchor="w", pady=(8, 0))
+        ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(brow, text="Poll last job", height=48, fg_color="#2A3544", command=self._poll_last_job).pack(
+            side="left"
+        )
+        self.utilize_lbl = ctk.CTkLabel(jobs, text="Job status: idle", text_color=MUTED)
+        self.utilize_lbl.pack(anchor="w", pady=(10, 0))
 
-        result = self._card(left, "Job result")
-        self.job_box = ctk.CTkTextbox(result, height=200, fg_color="#121A24")
+        result = self._card(left, "Job status + result")
+        self.job_box = ctk.CTkTextbox(result, height=210, fg_color="#121A24")
         self.job_box.pack(fill="both", expand=True)
+        self.job_box.insert("1.0", "Submit a job to see status and JSON result here.\n")
 
         help_card = self._card(right, "What can I run?")
         self.utilize_help = ctk.CTkTextbox(help_card, height=220, fg_color="#121A24")
@@ -983,22 +1195,43 @@ class MainFrame(ctk.CTkFrame):
             command=lambda: self._copy(be.get_discord_helper_text(), "Copied Discord slash helpers."),
         ).pack(anchor="e", pady=(8, 0))
 
-        disc = self._card(right, "Discord slash (utilize)")
-        box = ctk.CTkTextbox(disc, height=140, fg_color="#121A24")
+        disc = self._card(right, "Discord tips (utilize)")
+        box = ctk.CTkTextbox(disc, height=160, fg_color="#121A24")
         box.pack(fill="x")
         box.insert(
             "1.0",
-            "/pool\n/workers\n/submit_probe\n/submit_compute\n/job_status <id>\n",
+            "Glitch Factor — GPU Pool bot\n"
+            "\n"
+            "/pool           pool overview\n"
+            "/workers        list workers\n"
+            "/submit_probe   same as Run Probe\n"
+            "/submit_compute same as Run CUDA Job\n"
+            "/job_status id  poll a job\n",
         )
         box.configure(state="disabled")
 
+    def _set_entry(self, entry: ctk.CTkEntry, value: str) -> None:
+        entry.delete(0, "end")
+        entry.insert(0, value)
+        if entry is getattr(self, "utilize_sched", None):
+            self._refresh_pool_utilize()
+
     def _build_connect(self, parent: Any) -> None:
-        inner = self._card(parent, "Connect from code — CONNECTING.md + coding_agent_pool.py")
+        scroll = ctk.CTkScrollableFrame(parent, fg_color=BG)
+        scroll.pack(fill="both", expand=True)
+        friends = self._card(scroll, "How friends connect")
+        friends_box = ctk.CTkTextbox(friends, height=150, fg_color="#121A24")
+        friends_box.pack(fill="x")
+        friends_box.insert("1.0", be.get_friends_connect_text())
+        friends_box.configure(state="disabled")
+
+        inner = self._card(scroll, "Connect — plug into the pool from code / tools")
         ctk.CTkLabel(
             inner,
             text=(
-                "Verified plug-in for coding agents / local models. "
-                "Read CONNECTING.md · run examples/coding_agent_pool.py · Tailscale portal for friends."
+                f"{be.PRIVATE_NETWORK_BLURB} "
+                "Copy the scheduler URL into your tools, open the Tailscale portal, or paste snippets. "
+                "Env var: GPU_SWARM_SCHEDULER_URL"
             ),
             text_color=MUTED,
             wraplength=900,
@@ -1017,8 +1250,15 @@ class MainFrame(ctk.CTkFrame):
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             docs,
-            text="Open coding_agent_pool.py",
-            width=200,
+            text="Open examples/",
+            width=130,
+            fg_color="#2A3544",
+            command=lambda: self._open_doc(be.CODING_AGENT_EXAMPLE.parent),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            docs,
+            text="coding_agent_pool.py",
+            width=180,
             fg_color="#2A3544",
             command=lambda: self._open_doc(be.CODING_AGENT_EXAMPLE),
         ).pack(side="left", padx=(0, 8))
@@ -1031,29 +1271,65 @@ class MainFrame(ctk.CTkFrame):
         ).pack(side="left")
 
         row = ctk.CTkFrame(inner, fg_color="transparent")
-        row.pack(fill="x", pady=(10, 4))
-        ctk.CTkLabel(row, text="GPU_SWARM_SCHEDULER_URL", text_color=MUTED).pack(side="left")
-        self.connect_sched = ctk.CTkEntry(row, height=34)
+        row.pack(fill="x", pady=(12, 4))
+        ctk.CTkLabel(row, text="Scheduler URL  (GPU_SWARM_SCHEDULER_URL)", text_color=MUTED).pack(side="left")
+        self.connect_sched = ctk.CTkEntry(row, height=36)
         self.connect_sched.pack(side="left", fill="x", expand=True, padx=10)
-        self.connect_sched.insert(0, self.settings.scheduler_url or DEFAULT_SCHEDULER_URL)
-        ctk.CTkButton(row, text="Copy URL", width=90, fg_color="#2A3544", command=self._copy_sched_url).pack(
-            side="left"
+        self.connect_sched.insert(0, DEFAULT_SCHEDULER_URL)
+        ctk.CTkButton(row, text="Copy", width=80, fg_color=ACCENT, text_color="#0A1210", command=self._copy_sched_url).pack(
+            side="left", padx=(0, 4)
         )
+        ctk.CTkButton(
+            row, text="Local", width=70, fg_color="#2A3544",
+            command=lambda: self._set_entry(self.connect_sched, DEFAULT_LOCAL_SCHEDULER_URL),
+        ).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(
+            row, text="Tailscale", width=90, fg_color="#2A3544",
+            command=lambda: self._set_entry(self.connect_sched, DEFAULT_SCHEDULER_URL),
+        ).pack(side="left")
 
         prow = ctk.CTkFrame(inner, fg_color="transparent")
         prow.pack(fill="x", pady=(4, 8))
-        ctk.CTkLabel(prow, text="Portal (Tailscale)", text_color=MUTED).pack(side="left")
-        self.connect_portal = ctk.CTkEntry(prow, height=34)
+        ctk.CTkLabel(prow, text=f"Portal URL  (invite: {PORTAL_INVITE_CODE})", text_color=MUTED).pack(side="left")
+        self.connect_portal = ctk.CTkEntry(prow, height=36)
         self.connect_portal.pack(side="left", fill="x", expand=True, padx=10)
         self.connect_portal.insert(0, DEFAULT_PORTAL_URL)
         ctk.CTkButton(
-            prow, text="Open portal", width=110, fg_color=ACCENT, text_color="#0A1210", command=self._open_ts_portal
+            prow, text="Open", width=80, fg_color=ACCENT, text_color="#0A1210", command=self._open_ts_portal
         ).pack(side="left", padx=(0, 6))
         ctk.CTkButton(prow, text="Copy", width=70, fg_color="#2A3544", command=self._copy_portal_url).pack(side="left")
 
-        self.connect_box = ctk.CTkTextbox(inner, height=380, fg_color="#121A24")
-        self.connect_box.pack(fill="both", expand=True, pady=(8, 0))
-        crow = ctk.CTkFrame(inner, fg_color="transparent")
+        trow = ctk.CTkFrame(inner, fg_color="transparent")
+        trow.pack(fill="x", pady=(0, 8))
+        ctk.CTkButton(
+            trow,
+            text="Test Tailscale scheduler",
+            width=190,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=self._test_connect_scheduler,
+        ).pack(side="left")
+        self.connect_status_lbl = ctk.CTkLabel(
+            trow, text="Connection: not tested yet", text_color=MUTED, wraplength=680, justify="left"
+        )
+        self.connect_status_lbl.pack(side="left", padx=10)
+
+        tips = self._card(scroll, "Discord tips")
+        tip_box = ctk.CTkTextbox(tips, height=90, fg_color="#121A24")
+        tip_box.pack(fill="x")
+        tip_box.insert(
+            "1.0",
+            "/pool — live workers + VRAM\n"
+            "/submit_probe — GPU inventory job\n"
+            "/submit_compute — CUDA matmul\n"
+            "/job_status <id> — poll result\n",
+        )
+        tip_box.configure(state="disabled")
+
+        snip = self._card(scroll, "Python GPUPool · CLI utilize · HTTP")
+        self.connect_box = ctk.CTkTextbox(snip, height=320, fg_color="#121A24")
+        self.connect_box.pack(fill="both", expand=True, pady=(0, 0))
+        crow = ctk.CTkFrame(snip, fg_color="transparent")
         crow.pack(fill="x", pady=(8, 0))
         ctk.CTkButton(crow, text="Refresh snippets", fg_color="#2A3544", command=self._refresh_connect_snippets).pack(
             side="left"
@@ -1067,7 +1343,7 @@ class MainFrame(ctk.CTkFrame):
         ).pack(side="left", padx=8)
         ctk.CTkButton(
             crow,
-            text="Copy agent command",
+            text="Copy env + CLI",
             fg_color="#2A3544",
             command=self._copy_agent_cmd,
         ).pack(side="left")
@@ -1247,15 +1523,52 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.test_scheduler(url)
-            self.after(
-                0,
-                lambda: self.test_lbl.configure(
-                    text="Connected" if result.get("ok") else "Unreachable",
-                    text_color=OK_GREEN if result.get("ok") else DANGER,
-                ),
-            )
+            self.after(0, lambda: self._apply_scheduler_test_label(self.test_lbl, result, short=True))
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _test_utilize_scheduler(self) -> None:
+        if not hasattr(self, "utilize_conn_lbl"):
+            return
+        url = self.utilize_sched.get().strip() if hasattr(self, "utilize_sched") else ""
+        self.utilize_conn_lbl.configure(text="Testing Tailscale/LAN scheduler…", text_color=MUTED)
+
+        def work() -> None:
+            result = be.test_scheduler(url or None)
+            self.after(0, lambda: self._apply_scheduler_test_label(self.utilize_conn_lbl, result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _test_connect_scheduler(self) -> None:
+        if not hasattr(self, "connect_status_lbl"):
+            return
+        url = self.connect_sched.get().strip() if hasattr(self, "connect_sched") else ""
+        self.connect_status_lbl.configure(text="Testing Tailscale/LAN scheduler…", text_color=MUTED)
+
+        def work() -> None:
+            result = be.test_scheduler(url or None)
+            self.after(0, lambda: self._apply_scheduler_test_label(self.connect_status_lbl, result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _apply_scheduler_test_label(self, label: Any, result: dict[str, Any], *, short: bool = False) -> None:
+        ok = bool(result.get("ok"))
+        if ok:
+            text = f"Connected · {result.get('url') or ''}"
+            if short:
+                text = "Connected (Tailscale/LAN)"
+        else:
+            hint = (result.get("hint") or "").splitlines()
+            text = hint[0] if hint else "Cannot reach scheduler — install/login Tailscale + join Drew’s tailnet"
+            if short:
+                text = "No Tailscale path yet"
+        label.configure(text=text, text_color=OK_GREEN if ok else DANGER)
+        # Keep Utilize / Connect fields aligned with the URL that worked
+        if ok and result.get("url"):
+            if hasattr(self, "utilize_sched") and label is getattr(self, "utilize_conn_lbl", None):
+                self._set_entry(self.utilize_sched, str(result["url"]))
+            if hasattr(self, "connect_sched") and label is getattr(self, "connect_status_lbl", None):
+                self._set_entry(self.connect_sched, str(result["url"]))
 
     def _join(self) -> None:
         if self.app._busy:
@@ -1330,10 +1643,13 @@ class MainFrame(ctk.CTkFrame):
         url = url or DEFAULT_SCHEDULER_URL
         cmd = (
             f"set GPU_SWARM_SCHEDULER_URL={url}\n"
+            "python -m gpu_swarm utilize status\n"
+            "python -m gpu_swarm utilize probe --wait\n"
+            "python -m gpu_swarm utilize cuda --wait\n"
             "python examples\\coding_agent_pool.py --job probe\n"
             "python examples\\coding_agent_pool.py --job pytorch_cuda_probe --matrix-size 1024\n"
         )
-        self._copy(cmd, "Copied coding_agent_pool.py commands.")
+        self._copy(cmd, "Copied env + utilize CLI + example commands.")
 
     def _open_ts_portal(self) -> None:
         url = self.connect_portal.get().strip() or DEFAULT_PORTAL_URL
@@ -1369,7 +1685,7 @@ class MainFrame(ctk.CTkFrame):
 
     def _refresh_pool_utilize(self) -> None:
         def work() -> None:
-            url = self.sched_entry.get().strip() if hasattr(self, "sched_entry") else None
+            url = self._scheduler_url_for_jobs()
             st = be.pool_status(url)
             self.after(0, lambda: self._render_pool_utilize(st))
 
@@ -1378,11 +1694,18 @@ class MainFrame(ctk.CTkFrame):
     def _render_pool_utilize(self, st: dict[str, Any]) -> None:
         if not hasattr(self, "pool_box"):
             return
-        lines = [
-            f"Scheduler: {'OK' if st.get('ok') else 'DOWN'}  {st.get('url') or ''}",
-        ]
+        if st.get("ok"):
+            sched_line = f"Scheduler: reachable (Tailscale/LAN)  {st.get('url') or ''}"
+        else:
+            sched_line = f"Scheduler: not reachable yet  {st.get('url') or ''}"
+        lines = [sched_line]
+        if st.get("private_network"):
+            lines.append(st["private_network"])
         if st.get("error"):
             lines.append(f"Error: {st['error']}")
+        if not st.get("ok") and st.get("hint"):
+            lines.append("")
+            lines.append(st["hint"])
         lines += [
             f"Workers online: {st.get('workers_online', 0)} / {st.get('workers_total', 0)}",
             f"VRAM free/total: {st.get('free_vram_mb', 0)} / {st.get('total_vram_mb', 0)} MiB",
@@ -1414,13 +1737,24 @@ class MainFrame(ctk.CTkFrame):
             text=f"Updated {time.strftime('%H:%M:%S')}",
             text_color=OK_GREEN if st.get("ok") else DANGER,
         )
+        if hasattr(self, "utilize_conn_lbl"):
+            if st.get("ok"):
+                self.utilize_conn_lbl.configure(
+                    text=f"Connected · {st.get('url') or ''}",
+                    text_color=OK_GREEN,
+                )
+            else:
+                first = ((st.get("hint") or "").splitlines() or ["Cannot reach Tailscale/LAN scheduler yet."])[0]
+                self.utilize_conn_lbl.configure(text=first, text_color=DANGER)
 
     def _submit_utilize(self, job_type: str) -> None:
         if self.app._busy:
             return
         self.app._busy = True
-        self.utilize_lbl.configure(text=f"Submitting {job_type}…", text_color=MUTED)
-        url = self.sched_entry.get().strip() if hasattr(self, "sched_entry") else None
+        label = "Run Probe" if job_type == "probe" else "Run CUDA Job"
+        if hasattr(self, "utilize_lbl"):
+            self.utilize_lbl.configure(text=f"Job status: submitting {label}…", text_color=MUTED)
+        url = self._scheduler_url_for_jobs()
         by = self.discord_entry.get().strip() if hasattr(self, "discord_entry") else ""
         if not by and hasattr(self, "name_entry"):
             by = self.name_entry.get().strip()
@@ -1431,7 +1765,9 @@ class MainFrame(ctk.CTkFrame):
                 self.after(0, lambda: self._utilize_done(submitted, None))
                 return
             jid = submitted.get("job_id") or ""
-            waited = be.wait_for_job(jid, scheduler_url=url, timeout_sec=90.0)
+            # Persist URL that accepted the job for status polling
+            used = submitted.get("url") or url
+            waited = be.wait_for_job(jid, scheduler_url=used, timeout_sec=90.0)
             self.after(0, lambda: self._utilize_done(submitted, waited))
 
         threading.Thread(target=work, daemon=True).start()
@@ -1441,30 +1777,49 @@ class MainFrame(ctk.CTkFrame):
 
         self.app._busy = False
         if not submitted.get("ok"):
-            self.utilize_lbl.configure(text=submitted.get("error") or "Submit failed", text_color=DANGER)
-            self.job_box.delete("1.0", "end")
-            self.job_box.insert("1.0", json.dumps(submitted, indent=2, default=str))
+            err = submitted.get("error") or "Submit failed"
+            hint = be.scheduler_reachability_hint(
+                ok=False,
+                url=self._scheduler_url_for_jobs(),
+                error=str(err),
+            )
+            if hasattr(self, "utilize_lbl"):
+                self.utilize_lbl.configure(
+                    text="Job status: cannot reach Tailscale/LAN scheduler — install/login Tailscale + join Drew’s tailnet.",
+                    text_color=DANGER,
+                )
+            if hasattr(self, "job_box"):
+                self.job_box.delete("1.0", "end")
+                self.job_box.insert(
+                    "1.0",
+                    f"{err}\n\n{hint}\n\n{json.dumps(submitted, indent=2, default=str)}",
+                )
             return
         self._last_job_id = str(submitted.get("job_id") or "")
         job = (waited or {}).get("job") or submitted.get("job") or {}
         st = job.get("status") or "?"
-        ok = st == "completed"
-        msg = f"{job.get('job_type')} → {st}  id={self._last_job_id}"
+        ok = st == "completed" or bool((waited or {}).get("ok"))
+        msg = f"Job status: {st}  ·  {job.get('job_type') or '?'}  ·  id={self._last_job_id}"
+        if waited and waited.get("error") and not ok:
+            msg = f"Job status: failed — {waited.get('error')}"
         if submitted.get("discord"):
             msg += f"  ·  Discord: {submitted['discord'].splitlines()[0]}"
-        self.utilize_lbl.configure(text=msg, text_color=OK_GREEN if ok else (WARN if st == "running" else DANGER))
-        self.job_box.delete("1.0", "end")
-        self.job_box.insert("1.0", json.dumps(job, indent=2, default=str))
+        if hasattr(self, "utilize_lbl"):
+            self.utilize_lbl.configure(text=msg, text_color=OK_GREEN if ok else (WARN if st == "running" else DANGER))
+        if hasattr(self, "job_box"):
+            self.job_box.delete("1.0", "end")
+            self.job_box.insert("1.0", json.dumps(job, indent=2, default=str))
         self._refresh_pool_utilize()
+        self._refresh_home_pool()
 
     def _poll_last_job(self) -> None:
         import json
 
         jid = self._last_job_id
         if not jid:
-            self.utilize_lbl.configure(text="No job id yet — submit one first.", text_color=WARN)
+            self.utilize_lbl.configure(text="Job status: no job id yet — Run Probe first.", text_color=WARN)
             return
-        url = self.sched_entry.get().strip() if hasattr(self, "sched_entry") else None
+        url = self._scheduler_url_for_jobs()
 
         def work() -> None:
             result = be.get_job(jid, scheduler_url=url)
@@ -1474,7 +1829,7 @@ class MainFrame(ctk.CTkFrame):
                     self.job_box.delete("1.0", "end"),
                     self.job_box.insert("1.0", json.dumps(result.get("job") or result, indent=2, default=str)),
                     self.utilize_lbl.configure(
-                        text=f"Job {jid}: {result.get('status') or result.get('error')}",
+                        text=f"Job status: {result.get('status') or result.get('error')}  ·  id={jid}",
                         text_color=OK_GREEN if result.get("status") == "completed" else MUTED,
                     ),
                 ),
@@ -1538,10 +1893,17 @@ class MainFrame(ctk.CTkFrame):
             f"Host (local): RAM {host.get('avail_ram_mb', 0)}/{host.get('total_ram_mb', 0)} MiB  ·  "
             f"Disk {host.get('free_disk_gb', 0)}/{host.get('total_disk_gb', 0)} GiB",
             "",
-            f"Scheduler: {'OK' if sch.get('ok') else 'DOWN'}  {sch.get('url') or ''}",
+            (
+                f"Scheduler: reachable (Tailscale/LAN)  {sch.get('url') or ''}"
+                if sch.get("ok")
+                else f"Scheduler: not reachable yet  {sch.get('url') or ''}"
+            ),
         ]
         if sch.get("error"):
             lines.append(f"  error: {sch['error']}")
+        if not sch.get("ok"):
+            lines.append(f"  {be.PRIVATE_NETWORK_BLURB}")
+            lines.append("  Fix: install/login Tailscale → join Drew’s tailnet → retry Test.")
         data = sch.get("data") or {}
         if data:
             lines.append(
@@ -1575,6 +1937,8 @@ class MainFrame(ctk.CTkFrame):
             self._poll_status()
             if self._mode == "utilize":
                 self._refresh_pool_utilize()
+            elif self._mode == "home":
+                self._refresh_home_pool()
             self.app._poll_after = self.after(4000, tick)
 
         self.app._poll_after = self.after(4000, tick)

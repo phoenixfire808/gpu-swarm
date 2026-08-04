@@ -18,8 +18,9 @@ from gpu_swarm.config import WorkerConfig, worker_config
 from gpu_swarm.gpu import inventory_summary
 from gpu_swarm.host import query_host
 from gpu_swarm.jobs import execute_job
+from gpu_swarm.paths import ROOT
 
-DEFAULT_STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "worker_id.txt"
+DEFAULT_STATE_FILE = ROOT / "data" / "worker_id.txt"
 
 
 def _worker_id_path() -> Path:
