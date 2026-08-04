@@ -257,7 +257,11 @@ async def api_config(request: Request) -> dict[str, Any]:
     sched_public = (urls.get("scheduler_public") or urls.get("pool_api_public") or "").rstrip("/")
     portal_public = (urls.get("portal_public") or "").rstrip("/")
     env_sched = sched_public or sched_tailscale
+    from gpu_swarm.share_invite import build_share_pack
+
+    share = build_share_pack()
     return {
+        "share": share,
         "scheduler_url": cfg.scheduler_url,
         "portal_url": portal_base,
         "public_access": bool(urls.get("no_tailscale_needed")),
@@ -273,7 +277,7 @@ async def api_config(request: Request) -> dict[str, Any]:
         ),
         "laptop_note": (
             "No NVIDIA? You can still Utilize the pool or contribute CPU. "
-            "Jobs run on online GPU workers (e.g. Drew-Home)."
+            "Jobs run on online GPU workers on the host network."
         ),
         "allowed_job_types": sorted(UTILIZE_JOB_TYPES),
         "utilize_note": (
@@ -299,7 +303,7 @@ async def api_config(request: Request) -> dict[str, Any]:
                 "/pool", "/workers", "/contribute",
                 "/submit_probe", "/submit_compute", "/job_status",
             ],
-            "docs": "CONNECTING.md · LOCAL_MODEL.md · FRIEND_LAPTOP.md",
+            "docs": "CONNECTING.md · LOCAL_MODEL.md · NO_GPU_LAPTOP.md",
             "cli": [
                 "python -m gpu_swarm local-endpoint",
                 "python -m gpu_swarm utilize status",
@@ -330,7 +334,7 @@ async def api_config(request: Request) -> dict[str, Any]:
                 "env": "OPENAI_BASE_URL=http://127.0.0.1:8080/v1",
                 "apps": "Open WebUI · LM Studio · Continue · Cursor",
                 "host_worker": (
-                    "Drew (or any GPU contributor): install Ollama, pull a model, "
+                    "Any GPU contributor on the host network: install Ollama, pull a model, "
                     "keep ollama serve on :11434, restart the GPU Pool worker "
                     "so llm_ready=yes. See LOCAL_MODEL.md."
                 ),
@@ -358,11 +362,11 @@ async def api_config(request: Request) -> dict[str, Any]:
                 "or use the public …/pool-api URL."
             ),
             "private_network": (
-                "Private by default (Tailscale/LAN). When Drew publishes a public tunnel, "
+                "Private by default (Tailscale/LAN). When the host publishes a public tunnel, "
                 "use the Public URLs — no Tailscale needed."
             ),
             "friends_connect": [
-                "Run the GPU Pool EXE (auto-detects scheduler) OR open the portal URL Drew shares",
+                "Run the GPU Pool EXE (auto-detects scheduler) OR open the portal URL a pool member shares",
                 "Public HTTPS if tunnel is up; else Tailscale → :8767/portal",
                 f"Sign in with invite code {PORTAL_INVITE_CODE} + your display name",
                 "No NVIDIA? Utilize first — Connect → Start local model endpoint → paste OPENAI_BASE_URL into your AI app",
@@ -796,7 +800,7 @@ async def api_diagnostics_submit(body: DiagnosticsBody, request: Request) -> dic
     return {
         "ok": True,
         "id": diag_id,
-        "message": f"Diagnostics stored ({meta['bytes']} bytes). Drew can review in data/diagnostics/.",
+        "message": f"Diagnostics stored ({meta['bytes']} bytes). The host can review in data/diagnostics/.",
         "bytes": meta["bytes"],
     }
 

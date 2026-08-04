@@ -23,7 +23,7 @@ See `CONNECTING.md` and `examples/hermes_pool_skill.md`.
 ```bash
 cd C:\Users\Drew\Projects\gpu-swarm
 python -m gpu_swarm scheduler
-python -m gpu_swarm worker --name Drew-Home
+python -m gpu_swarm worker --name Host-PC
 python -m gpu_swarm utilize status
 python -m gpu_swarm utilize probe --wait
 python -m gpu_swarm utilize cuda --wait

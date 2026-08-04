@@ -18,14 +18,13 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [x] Living docs + Cursor rule (TODO / ROADMAP / CHANGELOG / DESIGN / CURRENT_PROGRESS)
 - [x] **Network Hub portal** — peer mesh UI + live `/status` workers (`portal_hub.html`)
 - [x] **Pool chat** + **suggestions/review inbox** (portal sqlite APIs)
+- [x] Workspace VM MVP — GPU Pool → Hermes agent-vm with Contribute/host_protect CPU+RAM caps
+- [x] Verbose install + plain-language UX + install-prereqs automation
+- [x] **Share / Invite others** grow flow (`share_invite.py`, portal + desktop copy buttons)
+- [x] Personal-name scrub; `FRIEND_LAPTOP.md` → `NO_GPU_LAPTOP.md`
 
 ## Now
-- [x] Workspace VM MVP — GPU Pool → Hermes agent-vm with Contribute/host_protect CPU+RAM caps
-- [x] Verbose install progress + plain-language friend UX (scripts, wizard, DOWNLOAD/LOGIN/FRIEND docs)
-- [x] **install-prereqs automation** — Tailscale / VirtualBox / Vagrant detect-or-install + wizard Network & Workspace
-- [x] **Ready-to-go source tip** — SHARED_AGENT_DEV.md; hub/worker/workspace/prereqs usable today
-- [x] Ollama serve + Drew-Home `llm_ready=yes` (endpoint `/v1/models` OK; skipped 27B chat load)
-- [ ] Packaging Worker: publish Windows EXE **v0.1.1+** (hub + workspace + install-prereqs + host_protect)
+- [ ] Packaging Worker: publish Windows EXE **v0.1.1+** (hub + workspace + invite share + host_protect)
 - [ ] Post member tip: `OPENAI_BASE_URL=http://127.0.0.1:18080/v1` (or `:8080` when free)
 
 ## Next
@@ -46,7 +45,7 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 
 ## Next 5
 1. Packaging: `build_exe.ps1 -Clean` → publish **v0.1.1** (`RELEASE.md`)
-2. Friend trial: `install-prereqs` → app → invite → Contribute/Utilize
+2. Friend trial: `install-prereqs` → app → invite → Share my PC / Use the pool / Invite others
 3. Workspace Start/Open from desktop when needed (RDP 3390)
 4. Optional: smaller Ollama model for safe chat smoke
-5. Keep secrets out of git (never `.env` / auth keys / `data/public_endpoints*`)
+5. Keep secrets out of git (never `.env` / auth keys / `data/public_endpoints*` / `portal.db`)

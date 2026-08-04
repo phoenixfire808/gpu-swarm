@@ -50,7 +50,7 @@ if not defined PYEXE (
     echo FIX:
     echo   1^) Download GPUPool.exe from GitHub Releases ^(no Python needed^)
     echo   2^) Or install Python 3.10+ from https://www.python.org/downloads/windows/
-    echo   3^) Or ask Drew — Submit diagnostics from a machine that can run the EXE
+    echo   3^) Or ask the host — Submit diagnostics from a machine that can run the EXE
     echo.
     pause
     exit /b 1

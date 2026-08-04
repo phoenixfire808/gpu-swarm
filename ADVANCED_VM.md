@@ -1,6 +1,6 @@
 # Workspace VM — GPU Pool ↔ agent-vms
 
-GPU Pool and **agent-vms** are one product surface on Drew’s Windows host:
+GPU Pool and **agent-vms** are one product surface on the host’s Windows host:
 
 1. **Contribute** — host worker offers real GPU/CPU/RAM/disk under your caps (+ `host_protect`).
 2. **Workspace** — Hermes starts a VirtualBox/Vagrant Ubuntu desktop **using only the CPU/RAM share you chose** (not the whole PC).
@@ -10,7 +10,7 @@ Control plane: **Hermes** skill `agent-vm-control` → `bin/agent-vm.cmd` or
 `%LOCALAPPDATA%\hermes\scripts\agent-vm.ps1`.  
 Not OpenClaw. No Docker.
 
-## How Drew opens the integrated flow
+## How the host opens the integrated flow
 
 ```bat
 cd C:\Users\Drew\Projects\gpu-swarm

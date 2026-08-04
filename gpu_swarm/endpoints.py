@@ -399,7 +399,7 @@ def auto_detect_scheduler_url(
         "error": "No scheduler URL reachable yet",
         "hint": (
             "Installer order: public_endpoints.json → Tailscale :8766 → localhost. "
-            "Ask Drew for the public portal link (no Tailscale) or join the Glitch Factor tailnet. "
+            "Ask the host for the public portal link (no Tailscale) or join the Glitch Factor tailnet. "
             f"Correct env example: GPU_SWARM_SCHEDULER_URL={DEFAULT_SCHEDULER_URL}"
         ),
         "message": "Could not reach any scheduler candidate",

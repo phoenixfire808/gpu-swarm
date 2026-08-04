@@ -411,11 +411,11 @@
     <h1 class="brand">GPU <em>Pool</em></h1>
     <p class="hero-line">Peer mesh for spare GPUs among friends.</p>
     <p class="hero-sub" id="heroSub">
-      Share what you can spare, borrow what you need — Contribute, Utilize, Connect,
-      and talk in one private network hub.
+      Join · Share my PC · Use the pool · Invite others — under 30 seconds to pick a path.
     </p>
     <div class="cta-row" id="heroCta">
-      <button type="button" id="heroEnterBtn">Enter the hub</button>
+      <button type="button" id="heroEnterBtn">Join the pool</button>
+      <button type="button" class="ghost" id="heroShareBtn">Invite others</button>
       <button type="button" class="ghost" data-go-public="mesh">See who's online</button>
     </div>
     <p class="mesh-live" id="meshLive">Listening for peers…</p>
@@ -438,7 +438,7 @@
         <button id="loginBtn" type="button">Join the mesh</button>
       </div>
       <div class="err hidden" id="loginErr"></div>
-      <p class="note" id="networkNote">Private Tailscale/LAN by default; public HTTPS when Drew opens the tunnel.</p>
+      <p class="note" id="networkNote">Private Tailscale/LAN by default; public HTTPS when the host opens the tunnel.</p>
     </div>
   </header>
 
@@ -450,8 +450,9 @@
 
     <nav class="nav" aria-label="Hub sections">
       <button type="button" class="active" data-view="home">Hub</button>
-      <button type="button" data-view="contribute">Contribute</button>
-      <button type="button" data-view="utilize">Utilize</button>
+      <button type="button" data-view="contribute">Share my PC</button>
+      <button type="button" data-view="utilize">Use the pool</button>
+      <button type="button" data-view="share">Invite others</button>
       <button type="button" data-view="connect">Connect</button>
       <button type="button" data-view="chat">Chat</button>
       <button type="button" data-view="suggest">Suggest</button>
@@ -462,12 +463,24 @@
     <!-- HOME / HUB -->
     <div id="viewHome">
       <div class="mode-rail">
-        <button type="button" data-go="contribute"><span class="k">Share</span><span class="t">Contribute</span></button>
-        <button type="button" data-go="utilize"><span class="k">Run</span><span class="t">Utilize</span></button>
-        <button type="button" data-go="connect"><span class="k">Endpoint</span><span class="t">Connect</span></button>
+        <button type="button" data-go="contribute"><span class="k">1</span><span class="t">Share my PC</span></button>
+        <button type="button" data-go="utilize"><span class="k">2</span><span class="t">Use the pool</span></button>
+        <button type="button" data-go="share"><span class="k">3</span><span class="t">Invite others</span></button>
+        <button type="button" data-go="connect"><span class="k">4</span><span class="t">Connect tools</span></button>
         <button type="button" data-go="chat"><span class="k">Talk</span><span class="t">Pool chat</span></button>
         <button type="button" data-go="suggest"><span class="k">Ideas</span><span class="t">Suggest</span></button>
         <button type="button" data-go="workspace"><span class="k">VM</span><span class="t">Workspace</span></button>
+      </div>
+
+      <div class="section">
+        <h2>Do this next (&lt;30 seconds)</h2>
+        <p class="lede" id="homePrimaryLede">Pick one primary action. Invite code stays the same until the host rotates it.</p>
+        <ol id="homePrimarySteps" style="margin:0; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
+        <div class="actions">
+          <button type="button" data-go="contribute">Share my PC</button>
+          <button type="button" data-go="utilize">Use the pool</button>
+          <button type="button" data-go="share">Invite others</button>
+        </div>
       </div>
 
       <div class="section">
@@ -485,11 +498,40 @@
         <p class="lede" id="friendsHomeLede">Public HTTPS when the tunnel is on — invite still required.</p>
         <ol id="friendsHomeSteps" style="margin:0; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
         <div class="actions">
-          <button type="button" data-go="connect">Full Connect guide</button>
+          <button type="button" data-go="share">Copy invite blurb</button>
+          <button class="ghost" type="button" data-go="connect">Full Connect guide</button>
           <button class="ghost" type="button" data-go="chat">Open chat</button>
         </div>
       </div>
       <p class="note" id="laptopNote"></p>
+    </div>
+
+    <!-- SHARE / INVITE -->
+    <div id="viewShare" class="hidden">
+      <div class="section">
+        <h2>Invite others — grow the pool</h2>
+        <p class="lede">Copy a short message, portal link, or full blurb. Send it to a friend on your network. No passwords or tokens included.</p>
+        <label>Best portal URL</label>
+        <div class="url-row"><code id="sharePortalBest">—</code></div>
+        <label>Invite code</label>
+        <div class="url-row"><code id="shareInviteCode">glitch-factor</code></div>
+        <label>Windows download</label>
+        <div class="url-row"><code id="shareDownload">—</code></div>
+        <label>Send-this-to-a-friend message</label>
+        <pre id="shareFriendMsg">—</pre>
+        <label>Full invite blurb (Discord / group chat)</label>
+        <pre id="shareBlurb">—</pre>
+        <p class="note" id="shareInviteNote"></p>
+        <p class="lede" id="shareCopyOk" style="color:var(--ok)"></p>
+        <div class="actions">
+          <button id="copyFriendMsgBtn" type="button">Copy friend message</button>
+          <button class="ghost" id="copyBlurbBtn" type="button">Copy full blurb</button>
+          <button class="ghost" id="copyPortalBtn" type="button">Copy portal URL</button>
+          <button class="ghost" id="copyInviteBtn" type="button">Copy invite code</button>
+          <button class="ghost" id="copyDownloadBtn" type="button">Copy download link</button>
+          <button class="ghost" type="button" data-go="home">Back to Hub</button>
+        </div>
+      </div>
     </div>
 
     <!-- UTILIZE -->
@@ -643,7 +685,7 @@
     <div id="viewSuggest" class="hidden">
       <div class="section">
         <h2>Suggestions &amp; reviews</h2>
-        <p class="lede">Ideas, bugs, and praise for Drew to work later. Stored on the portal host — not mock data.</p>
+        <p class="lede">Ideas, bugs, and praise for the host to work later. Stored on the portal host — not mock data.</p>
         <label for="suggestCategory">Category</label>
         <select id="suggestCategory">
           <option value="suggestion">Suggestion</option>
@@ -691,7 +733,7 @@
     <div id="viewDiagnostics" class="hidden">
       <div class="section">
         <h2>Diagnostics</h2>
-        <p class="lede">Paste install/join logs for Drew. Secrets are redacted server-side. Max ~250 KB.</p>
+        <p class="lede">Paste install/join logs for the host. Secrets are redacted server-side. Max ~250 KB.</p>
         <label for="diagHost">Hostname</label>
         <input id="diagHost" type="text" placeholder="optional" />
         <label for="diagStep">Wizard step</label>
@@ -778,7 +820,7 @@ function show(isIn) {
 }
 
 function setView(name) {
-  const views = ["home","utilize","contribute","connect","chat","suggest","workspace","diagnostics"];
+  const views = ["home","utilize","contribute","share","connect","chat","suggest","workspace","diagnostics"];
   views.forEach(v => {
     const el = $("view" + v.charAt(0).toUpperCase() + v.slice(1));
     if (el) el.classList.toggle("hidden", v !== name);
@@ -788,10 +830,44 @@ function setView(name) {
   });
   if (name === "home") refreshDash();
   if (name === "contribute") refreshMyMachines();
+  if (name === "share") paintShare(portalConfig);
   if (name === "chat") { refreshChat(true); refreshPresence(); startChatPoll(); }
   else stopChatPoll();
   if (name === "suggest") refreshSuggestions();
   if (name === "workspace") refreshWorkspace();
+}
+
+async function copyText(text, okMsg) {
+  const value = String(text || "").trim();
+  if (!value) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = value;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    if ($("shareCopyOk")) $("shareCopyOk").textContent = okMsg || "Copied.";
+  } catch (e) {
+    if ($("shareCopyOk")) $("shareCopyOk").textContent = "Copy failed — select the text manually.";
+  }
+}
+
+function paintShare(c) {
+  const share = (c && c.share) || {};
+  if ($("sharePortalBest")) $("sharePortalBest").textContent = share.portal_best || "—";
+  if ($("shareInviteCode")) $("shareInviteCode").textContent = share.invite_code || "glitch-factor";
+  if ($("shareDownload")) $("shareDownload").textContent = share.github_download || "—";
+  if ($("shareFriendMsg")) $("shareFriendMsg").textContent = share.send_to_friend || share.short_message || "—";
+  if ($("shareBlurb")) $("shareBlurb").textContent = share.invite_blurb || "—";
+  if ($("shareInviteNote")) $("shareInviteNote").textContent = share.invite_note || "";
+  if ($("homePrimarySteps") && share.primary_actions) {
+    $("homePrimarySteps").innerHTML = share.primary_actions.map(s => `<li>${escapeHtml(s)}</li>`).join("");
+  }
 }
 
 function paintMesh(workers) {
@@ -952,8 +1028,8 @@ function paintConnect(c) {
   const privateNet = conn.private_network
     || (publicOn
       ? "Public HTTPS access is ON — no Tailscale needed. Invite code still required."
-      : "When Drew runs start-public-access.cmd, a public HTTPS portal appears. Tailscale remains optional.");
-  if ($("urlPortalPublic")) $("urlPortalPublic").textContent = conn.portal_public || "(tunnel off — Drew: start-public-access.cmd)";
+      : "When the host runs start-public-access.cmd, a public HTTPS portal appears. Tailscale remains optional.");
+  if ($("urlPortalPublic")) $("urlPortalPublic").textContent = conn.portal_public || "(tunnel off — host: start-public-access.cmd)";
   if ($("urlPoolApiPublic")) $("urlPoolApiPublic").textContent = conn.pool_api_public || "—";
   if ($("publicBanner")) $("publicBanner").classList.toggle("hidden", !publicOn);
   $("urlSchedTs").textContent = conn.scheduler_tailscale || "—";
@@ -988,6 +1064,7 @@ function paintConnect(c) {
     ].join("\n");
   }
   if ($("localModelHost")) $("localModelHost").textContent = lm.host_worker || "";
+  paintShare(c);
 }
 
 async function loadConfig() {
@@ -1234,6 +1311,27 @@ $("heroEnterBtn").onclick = () => {
   $("displayName").focus();
   $("loginPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
 };
+if ($("heroShareBtn")) {
+  $("heroShareBtn").onclick = () => {
+    if (loggedIn) {
+      setView("share");
+      return;
+    }
+    $("displayName").focus();
+    $("loginPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+}
+const shareCopyBindings = [
+  ["copyFriendMsgBtn", () => ($("shareFriendMsg") || {}).textContent, "Friend message copied."],
+  ["copyBlurbBtn", () => ($("shareBlurb") || {}).textContent, "Full blurb copied."],
+  ["copyPortalBtn", () => ($("sharePortalBest") || {}).textContent, "Portal URL copied."],
+  ["copyInviteBtn", () => ($("shareInviteCode") || {}).textContent, "Invite code copied."],
+  ["copyDownloadBtn", () => ($("shareDownload") || {}).textContent, "Download link copied."],
+];
+shareCopyBindings.forEach(([id, getter, msg]) => {
+  const el = $(id);
+  if (el) el.onclick = () => copyText(getter(), msg);
+});
 
 $("loginBtn").onclick = async () => {
   $("loginErr").classList.add("hidden");

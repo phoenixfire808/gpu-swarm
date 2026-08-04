@@ -188,8 +188,8 @@ class WizardFrame(ctk.CTkFrame):
     def _step_welcome(self) -> None:
         self._title(
             "Welcome to GPU Pool",
-            "Share spare GPU/CPU with friends, run jobs on the pool, chat, and suggest improvements. "
-            "This wizard sets up your PC once — then you pick a mode on Home.",
+            "Join · Share my PC · Use the pool · Invite others. "
+            "This wizard sets up your PC once — then Home makes the next step obvious.",
         )
         what = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
         what.pack(fill="x", pady=(0, 8))
@@ -202,12 +202,12 @@ class WizardFrame(ctk.CTkFrame):
         ctk.CTkLabel(
             what,
             text=(
-                "A private co-op for Glitch Factor friends — not a public marketplace.\n"
-                "• Contribute — lend spare GPU/CPU (your caps; host safety stays ON by default)\n"
-                "• Utilize — run allowlisted jobs on whoever is online (no NVIDIA needed on your laptop)\n"
-                "• Connect — copy URLs / start a local model endpoint for tools like Open WebUI\n"
-                "• Workspace — optional Linux VM (shared CPU/RAM only; GPU stays on the host worker)\n"
-                "• Chat / Suggest — talk on the web Network Hub and send improvement ideas to Drew"
+                "A private co-op for friends on your network — not a public marketplace.\n"
+                "• Join — invite code + your Discord display name\n"
+                "• Share my PC — Contribute spare GPU/CPU (host safety ON by default)\n"
+                "• Use the pool — Utilize jobs (no NVIDIA needed on your laptop)\n"
+                "• Invite others — copy a portal link + invite blurb and grow the pool\n"
+                "• Connect / Workspace / Chat — tools, optional Linux VM, Network Hub"
             ),
             text_color=MUTED,
             justify="left",
@@ -228,8 +228,8 @@ class WizardFrame(ctk.CTkFrame):
                 "Next: install network tools (Tailscale) and optional Workspace tools (VirtualBox + Vagrant) — "
                 "already-installed apps are skipped.\n"
                 "Then: live Python progress (Downloading…, Installing dependencies…).\n"
-                "Windows SmartScreen may warn on unsigned builds → More info → Run anyway (only if you trust Drew’s GitHub release).\n"
-                "Invite code: glitch-factor + your Discord display name. Public portal URL rotates — ask Drew for the current link."
+                "Windows SmartScreen may warn on unsigned builds → More info → Run anyway (only if you trust this repo’s GitHub release).\n"
+                "Invite code: glitch-factor + your Discord display name. Public portal URL rotates — ask the host for the current link."
             ),
             text_color=MUTED,
             justify="left",
@@ -250,13 +250,13 @@ class WizardFrame(ctk.CTkFrame):
             text=(
                 f"Live portal: {hints.get('url')}\n"
                 f"Local: {hints.get('local_url')}   ·   Tailscale: {hints.get('tailscale_url')}\n"
-                f"Invite code: {PORTAL_INVITE_CODE}  (pool password only if Drew DMs it — never posted publicly)"
+                f"Invite code: {PORTAL_INVITE_CODE}  (pool password only if a pool admin shared it — never posted publicly)"
             ),
             text_color=MUTED,
             justify="left",
             wraplength=820,
         ).pack(anchor="w", padx=16, pady=(0, 8))
-        reach = "reachable" if hints.get("reachable") else "not reachable yet — ask Drew for the current public link, or start-portal.cmd on the host"
+        reach = "reachable" if hints.get("reachable") else "not reachable yet — ask the host for the current public link, or start-portal.cmd on the host"
         ctk.CTkLabel(
             banner,
             text=f"Portal status: {reach}",
@@ -335,7 +335,7 @@ class WizardFrame(ctk.CTkFrame):
         ctk.CTkLabel(
             why,
             text=(
-                "• Tailscale — join Drew’s private network (skip if you have the public trycloudflare portal link)\n"
+                "• Tailscale — join the private pool network (skip if you have the public trycloudflare portal link)\n"
                 "• VirtualBox — runs the shared Workspace VM (capped CPU/RAM; GPU stays on the host worker)\n"
                 "• Vagrant — starts/stops that Workspace via Hermes/agent-vms\n"
                 "UAC prompts are normal once per install — click Yes. Auth keys stay in env vars only (never committed)."
@@ -781,14 +781,14 @@ class WizardFrame(ctk.CTkFrame):
             msg = result.get("message") or "Submitted"
             color = OK_GREEN
         else:
-            # Fallback: copy to clipboard so friend can paste to Drew
+            # Fallback: copy to clipboard so friend can paste to a pool admin
             clip = result.get("clipboard") or written.get("text") or ""
             if clip:
                 self.clipboard_clear()
                 self.clipboard_append(clip)
             msg = (
                 (result.get("message") or "Submit failed")
-                + " — log copied to clipboard. Paste to Drew in Discord."
+                + " — log copied to clipboard. Paste to a pool admin in Discord."
             )
             if written.get("path"):
                 msg += f" File: {written['path']}"
@@ -816,7 +816,7 @@ class WizardFrame(ctk.CTkFrame):
                 self._append_log(
                     self.deps_log,
                     f"\nDiagnostic log saved: {written['path']}\n"
-                    "Use Copy log or Submit diagnostics so Drew can debug.\n",
+                    "Use Copy log or Submit diagnostics so the host can debug.\n",
                 )
         except Exception:  # noqa: BLE001
             pass
@@ -892,7 +892,7 @@ class WizardFrame(ctk.CTkFrame):
                 "",
                 "No NVIDIA? You can still Utilize the pool or contribute CPU.",
                 "Next: Connect → (optional Caps for CPU) → Finish → Utilize.",
-                "Jobs run on Drew’s (or other) online GPU workers. CUDA needs a GPU worker online.",
+                "Jobs run on online GPU workers on the host network. CUDA needs a GPU worker online.",
             ]
         lines += [
             "",
@@ -1115,7 +1115,7 @@ class WizardFrame(ctk.CTkFrame):
                 "Optional: also Contribute CPU (gpu_available=false)."
                 if no_gpu
                 else "Persists caps/identity, starts the worker, and shows success or the exact fix. "
-                "On failure: Copy log / Submit diagnostics so Drew can debug."
+                "On failure: Copy log / Submit diagnostics so the host can debug."
             ),
         )
         try:
@@ -1207,7 +1207,7 @@ class WizardFrame(ctk.CTkFrame):
         self.join_log = self._log_box(220)
         if no_gpu:
             self.join_status.configure(
-                text="Success path: Finish → Utilize → Run Probe (uses Drew’s GPUs).",
+                text="Success path: Finish → Utilize → Run Probe (uses online pool GPUs).",
                 text_color=OK_GREEN,
             )
 
@@ -1272,7 +1272,7 @@ class WizardFrame(ctk.CTkFrame):
             path = diag.get("path") or ""
             self._append_log(
                 self.join_log,
-                "\nJoin failed — use Copy log or Submit diagnostics so Drew can debug.\n"
+                "\nJoin failed — use Copy log or Submit diagnostics so the host can debug.\n"
                 + (f"Diagnostic file: {path}\n" if path else ""),
             )
         runtime = result.get("runtime") or {}
@@ -1414,7 +1414,7 @@ class MainFrame(ctk.CTkFrame):
         ).pack(anchor="w")
         ctk.CTkLabel(
             left,
-            text=f"Network Hub · Contribute · Utilize · Connect · invite: {PORTAL_INVITE_CODE}",
+            text=f"Join · Share · Use pool · Invite · invite: {PORTAL_INVITE_CODE}",
             text_color=MUTED,
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w")
@@ -1460,9 +1460,10 @@ class MainFrame(ctk.CTkFrame):
         self._mode_btns: dict[str, ctk.CTkButton] = {}
         for key, label in (
             ("home", "Home"),
-            ("contribute", "1 · Contribute"),
-            ("utilize", "2 · Utilize"),
+            ("contribute", "1 · Share my PC"),
+            ("utilize", "2 · Use the pool"),
             ("connect", "3 · Connect"),
+            ("share", "4 · Invite others"),
         ):
             btn = ctk.CTkButton(
                 mode_bar,
@@ -1483,21 +1484,25 @@ class MainFrame(ctk.CTkFrame):
         self._contribute = ctk.CTkFrame(self._mode_host, fg_color=BG)
         self._utilize = ctk.CTkFrame(self._mode_host, fg_color=BG)
         self._connect = ctk.CTkFrame(self._mode_host, fg_color=BG)
+        self._share = ctk.CTkFrame(self._mode_host, fg_color=BG)
         self._build_home(self._home)
         self._build_contribute(self._contribute)
         self._build_utilize(self._utilize)
         self._build_connect(self._connect)
+        self._build_share(self._share)
         self._set_mode(self._mode or "home")
 
     def _set_mode(self, mode: str) -> None:
         self._mode = mode
-        for frame in (self._home, self._contribute, self._utilize, self._connect):
+        for frame in (self._home, self._contribute, self._utilize, self._connect, self._share):
             frame.pack_forget()
         {
             "home": self._home,
             "contribute": self._contribute,
             "utilize": self._utilize,
             "connect": self._connect,
+            "share": self._share,
+            "workspace": self._connect,
         }[mode].pack(fill="both", expand=True)
         for key, btn in self._mode_btns.items():
             on = key == mode
@@ -1516,18 +1521,19 @@ class MainFrame(ctk.CTkFrame):
             self._refresh_connect_snippets()
             self._test_connect_scheduler()
             self._refresh_workspace()
+        elif mode == "share":
+            self._refresh_share_pack()
 
     def _build_home(self, parent: Any) -> None:
         ctk.CTkLabel(
             parent,
-            text="Network Hub",
+            text="What do you want to do?",
             font=ctk.CTkFont(family="Segoe UI Semibold", size=26),
         ).pack(anchor="w", pady=(4, 4))
         ctk.CTkLabel(
             parent,
             text=(
-                "Share spare compute with Glitch Factor friends, run jobs, chat, and suggest improvements. "
-                "Pick a mode below. Chat + Suggest live on the web hub. "
+                "Pick one in under 30 seconds. Chat + Suggest live on the web hub. "
                 "Workspace = optional Linux VM (CPU/RAM only — no NVIDIA passthrough)."
             ),
             text_color=MUTED,
@@ -1543,34 +1549,34 @@ class MainFrame(ctk.CTkFrame):
         specs = (
             (
                 "contribute",
-                "1 · Contribute",
-                "Share spare GPU/CPU",
+                "1 · Share my PC",
+                "Contribute spare GPU/CPU",
                 "Join as a worker with your caps. Host GPU safety ON by default so Windows stays usable.",
-                "Open Contribute →",
+                "Share my PC →",
                 False,
             ),
             (
                 "utilize",
-                "2 · Utilize",
-                "Run jobs on the pool",
+                "2 · Use the pool",
+                "Run jobs on whoever is online",
                 "No NVIDIA needed here. Probe / CUDA jobs run on online contributors.",
-                "Open Utilize →",
+                "Use the pool →",
+                False,
+            ),
+            (
+                "share",
+                "3 · Invite others",
+                "Grow the network",
+                "Copy a friend message, portal URL, invite code, and GitHub download link.",
+                "Invite others →",
                 False,
             ),
             (
                 "connect",
-                "3 · Connect",
-                "Plug tools into the pool",
-                "Copy portal/scheduler URLs · start local model endpoint · Discord / CLI tips.",
+                "4 · Connect / Workspace",
+                "Tools + optional Linux desktop",
+                "URLs, local model endpoint, Hermes Workspace (CPU/RAM only — no GPU passthrough).",
                 "Open Connect →",
-                False,
-            ),
-            (
-                "workspace",
-                "4 · Workspace",
-                "Optional Linux desktop",
-                "Hermes agent-vms with your CPU/RAM share. GPU stays on the host pool worker.",
-                "Open Workspace →",
                 True,
             ),
         )
@@ -1643,7 +1649,108 @@ class MainFrame(ctk.CTkFrame):
             text="How to Connect →",
             fg_color="#2A3544",
             command=lambda: self._set_mode("connect"),
+        ).pack(side="left", padx=8)
+        ctk.CTkButton(
+            row,
+            text="Invite others →",
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: self._set_mode("share"),
         ).pack(side="left")
+
+    def _build_share(self, parent: Any) -> None:
+        ctk.CTkLabel(
+            parent,
+            text="Invite others",
+            font=ctk.CTkFont(family="Segoe UI Semibold", size=26),
+        ).pack(anchor="w", pady=(4, 4))
+        ctk.CTkLabel(
+            parent,
+            text=(
+                "Grow the pool: copy a short friend message, portal URL, invite code, "
+                "or GitHub download link. No passwords or tokens."
+            ),
+            text_color=MUTED,
+            wraplength=980,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 10))
+
+        card = self._card(parent, "Send this to a friend")
+        self.share_msg_box = ctk.CTkTextbox(card, height=140, fg_color="#0C1218")
+        self.share_msg_box.pack(fill="x", pady=(0, 8))
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x")
+        ctk.CTkButton(
+            row,
+            text="Copy friend message",
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: self._copy_share_field("send_to_friend", "Friend message copied."),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Copy full blurb",
+            fg_color="#2A3544",
+            command=lambda: self._copy_share_field("invite_blurb", "Full blurb copied."),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Copy portal URL",
+            fg_color="#2A3544",
+            command=lambda: self._copy_share_field("portal_best", "Portal URL copied."),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Copy invite code",
+            fg_color="#2A3544",
+            command=lambda: self._copy_share_field("invite_code", "Invite code copied."),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Copy download link",
+            fg_color="#2A3544",
+            command=lambda: self._copy_share_field("github_download", "Download link copied."),
+        ).pack(side="left")
+
+        meta = self._card(parent, "Links (live when known)")
+        self.share_meta_lbl = ctk.CTkLabel(
+            meta, text="Loading…", text_color=MUTED, wraplength=960, justify="left"
+        )
+        self.share_meta_lbl.pack(anchor="w")
+        self._share_pack: dict[str, Any] = {}
+        self._refresh_share_pack()
+
+    def _refresh_share_pack(self) -> None:
+        try:
+            pack = be.get_share_pack()
+        except Exception as exc:  # noqa: BLE001
+            pack = {"send_to_friend": f"(share pack unavailable: {exc})", "invite_code": PORTAL_INVITE_CODE}
+        self._share_pack = pack
+        if hasattr(self, "share_msg_box"):
+            self.share_msg_box.delete("1.0", "end")
+            self.share_msg_box.insert("1.0", pack.get("send_to_friend") or pack.get("short_message") or "")
+        if hasattr(self, "share_meta_lbl"):
+            self.share_meta_lbl.configure(
+                text=(
+                    f"Portal: {pack.get('portal_best') or '—'}\n"
+                    f"Invite: {pack.get('invite_code') or PORTAL_INVITE_CODE}\n"
+                    f"Download: {pack.get('github_download') or '—'}\n"
+                    f"Repo: {pack.get('github_repo') or '—'}\n"
+                    f"{pack.get('invite_note') or ''}"
+                )
+            )
+
+    def _copy_share_field(self, key: str, msg: str) -> None:
+        pack = getattr(self, "_share_pack", None) or {}
+        if not pack:
+            try:
+                pack = be.get_share_pack()
+            except Exception:  # noqa: BLE001
+                pack = {}
+        value = str(pack.get(key) or "").strip()
+        if not value and key == "invite_code":
+            value = PORTAL_INVITE_CODE
+        self._copy(value, msg)
 
     def _home_workspace_slot(self) -> None:
         """Jump to Connect workspace controls; web hub also has a Workspace slot."""
@@ -1694,8 +1801,8 @@ class MainFrame(ctk.CTkFrame):
             self.home_pool_lbl.configure(
                 text=(
                     f"{short} Tried {st.get('url') or 'n/a'}. "
-                    "Install/login Tailscale, join Drew’s tailnet, then retry — "
-                    f"or on Drew’s PC use {DEFAULT_LOCAL_SCHEDULER_URL}."
+                    "Install/login Tailscale, join the private pool network, then retry — "
+                    f"or on the host PC use {DEFAULT_LOCAL_SCHEDULER_URL}."
                 ),
                 text_color=DANGER,
             )
@@ -2431,7 +2538,7 @@ class MainFrame(ctk.CTkFrame):
                 text = "Connected (Tailscale/LAN)"
         else:
             hint = (result.get("hint") or "").splitlines()
-            text = hint[0] if hint else "Cannot reach scheduler — install/login Tailscale + join Drew’s tailnet"
+            text = hint[0] if hint else "Cannot reach scheduler — install/login Tailscale + join the private pool network"
             if short:
                 text = "No Tailscale path yet"
         label.configure(text=text, text_color=OK_GREEN if ok else DANGER)
@@ -2904,7 +3011,7 @@ class MainFrame(ctk.CTkFrame):
             )
             if hasattr(self, "utilize_lbl"):
                 self.utilize_lbl.configure(
-                    text="Job status: cannot reach Tailscale/LAN scheduler — install/login Tailscale + join Drew’s tailnet.",
+                    text="Job status: cannot reach Tailscale/LAN scheduler — install/login Tailscale + join the private pool network.",
                     text_color=DANGER,
                 )
             if hasattr(self, "job_box"):
@@ -3022,7 +3129,7 @@ class MainFrame(ctk.CTkFrame):
             lines.append(f"  error: {sch['error']}")
         if not sch.get("ok"):
             lines.append(f"  {be.PRIVATE_NETWORK_BLURB}")
-            lines.append("  Fix: install/login Tailscale → join Drew’s tailnet → retry Test.")
+            lines.append("  Fix: install/login Tailscale → join the private pool network → retry Test.")
         data = sch.get("data") or {}
         if data:
             lines.append(

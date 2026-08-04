@@ -6,7 +6,7 @@
 
 ---
 
-## Can Drew use it today?
+## Can the host use it today?
 
 **YES — from repo tip (source).** Published `GPUPool.exe` v0.1.0 is stale; use source until v0.1.1.
 
@@ -47,9 +47,9 @@ Invite: **`glitch-factor`** + Discord display name.
 
 | Path | URL |
 |------|-----|
-| Public (when tunnel up) | Ask Drew / `data/public_endpoints.share.txt` → `https://….trycloudflare.com/portal` |
+| Public (when tunnel up) | Ask the host / `data/public_endpoints.share.txt` → `https://….trycloudflare.com/portal` |
 | Tailscale | `http://100.85.165.84:8767/portal` |
-| Local (Drew PC) | `http://127.0.0.1:8767/portal` |
+| Local (host PC) | `http://127.0.0.1:8767/portal` |
 
 Login → peers on hub → Chat → Utilize / Contribute → optional Workspace.
 
@@ -58,12 +58,12 @@ Login → peers on hub → Chat → Utilize / Contribute → optional Workspace.
 | Step | Why |
 |------|-----|
 | UAC Yes | Windows requires admin for VirtualBox / Vagrant / Tailscale MSI |
-| Tailscale browser login | Needs your account on Drew’s tailnet (or env auth key) |
+| Tailscale browser login | Needs your account on the host’s tailnet (or env auth key) |
 | SmartScreen → More info → Run anyway | Unsigned EXE only (source path avoids this) |
 
 ---
 
-## Drew host — launch checklist
+## Host — launch checklist
 
 ```bat
 cd C:\Users\Drew\Projects\gpu-swarm
@@ -130,7 +130,7 @@ See also: [`LOCAL_MODEL.md`](LOCAL_MODEL.md) · [`ADVANCED_VM.md`](ADVANCED_VM.m
 | Detect Tailscale / VirtualBox / Vagrant | UAC approve |
 | Download + silent/winget install when missing | Tailscale login (browser) unless `GPU_SWARM_TAILSCALE_AUTHKEY` / `TS_AUTHKEY` set |
 | Skip re-download if present | Invite code + display name |
-| Wizard progress + Python bootstrap | First Workspace cold `vagrant up` (Drew once) |
+| Wizard progress + Python bootstrap | First Workspace cold `vagrant up` (host once) |
 | Contribute caps → VM CPU/RAM map | EXE publish v0.1.1 (source ready now) |
 
 ---

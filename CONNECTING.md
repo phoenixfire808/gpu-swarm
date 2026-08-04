@@ -11,7 +11,7 @@ Primary Discord: **Glitch Factor** · Bot: **GPU Pool**
 | Portal | `http://127.0.0.1:8767/portal` | `https://….trycloudflare.com/portal` | `http://100.85.165.84:8767/portal` |
 | Scheduler / pool API | `http://127.0.0.1:8766` | `https://….trycloudflare.com/pool-api` | `http://100.85.165.84:8766` |
 
-Drew enables public URLs with `start-public-access.cmd` (Cloudflare quick tunnel; no account). One public hostname serves the portal; `/pool-api` proxies the scheduler.
+The host enables public URLs with `start-public-access.cmd` (Cloudflare quick tunnel; no account). One public hostname serves the portal; `/pool-api` proxies the scheduler.
 
 ---
 
@@ -73,7 +73,7 @@ print(pool.submit_probe(wait=True)["status"])
 
 Env: `GPU_SWARM_SCHEDULER_URL` — public friends use `…/pool-api`; host scripts often use `http://127.0.0.1:8766`; Tailscale default `http://100.85.165.84:8766`.
 
-### Workspace VM (Drew host — one product)
+### Workspace VM (host — one product)
 
 Desktop app **Home → Workspace** (or Connect → Workspace card) opens the Hermes agent Ubuntu VM with **CPU/RAM clamped to your Contribute share** (+ `host_protect`). Real GPU/VRAM stays on the **host worker** — VirtualBox does not pass through NVIDIA. Details: [`ADVANCED_VM.md`](ADVANCED_VM.md).
 
@@ -90,7 +90,7 @@ Paste-ready member blurb: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKS
 
 ## How friends connect
 
-1. **Preferred:** open the public portal URL Drew DMs (`https://….trycloudflare.com/portal`) — **no Tailscale needed**
+1. **Preferred:** open the public portal URL a pool admin shares (`https://….trycloudflare.com/portal`) — **no Tailscale needed**
 2. Or install Tailscale and join the Glitch Factor tailnet
 3. Sign in with invite code `glitch-factor` + your display name
 4. Contribute (GPU or CPU-only) or Utilize (allowlisted jobs)
@@ -104,4 +104,4 @@ Paste-ready member blurb: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKS
 - Allowlisted jobs only — no remote shell on contributors.
 - Never share `.env` or Discord bot tokens.
 - No Docker for this stack (VirtualBox/Vagrant elsewhere; workers are bare metal / host Python).
-- Quick-tunnel URLs change when Drew restarts `start-public-access.cmd`.
+- Quick-tunnel URLs change when the host restarts `start-public-access.cmd`.

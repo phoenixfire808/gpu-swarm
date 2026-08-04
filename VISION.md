@@ -1,6 +1,6 @@
 # Vision — plug in any home machine
 
-**Goal:** Anyone Drew invites can open a **browser**, log in, and contribute spare home hardware — **GPU, CPU, RAM, and SSD** — the same way you’d plug a PC into a co-op pool.
+**Goal:** Anyone the host invites can open a **browser**, log in, and contribute spare home hardware — **GPU, CPU, RAM, and SSD** — the same way you’d plug a PC into a co-op pool.
 
 **How members join (target UX):** open the web portal → sign in → set soft caps → Join. Portal is expected at **`http://<host>:8767/portal`** (scheduler stays on **`:8766`**). Desktop app and CLI remain supported power-user paths.
 

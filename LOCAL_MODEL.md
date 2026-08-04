@@ -4,7 +4,7 @@
 
 ## Quick start (Utilize / client laptop)
 
-CPU-only friends (e.g. aariff01) run the **Local Pool Endpoint** on their machine:
+CPU-only friends (no NVIDIA) run the **Local Pool Endpoint** on their machine:
 
 ```bat
 cd C:\Users\Drew\Projects\gpu-swarm
@@ -47,13 +47,13 @@ Endpoints on the local service:
 - `GET /api/tags` (Ollama-compatible model list)
 - `GET /health`
 
-## Host worker (Contribute) — what Drew must run
+## Host worker (Contribute) — what the host must run
 
 `llm_chat` jobs only lease to workers with **`llm_ready=yes`**.
 
-On the GPU machine (Drew-Home or any GPU friend):
+On the GPU machine (Host-PC or any GPU friend):
 
-1. Install [Ollama](https://ollama.com) (already present on Drew’s PC if you see `ollama.exe` under Local\Programs\Ollama).
+1. Install [Ollama](https://ollama.com) (already present on the host PC if you see `ollama.exe` under Local\Programs\Ollama).
 2. Start it and pull a model:
 
 ```bat
@@ -116,7 +116,7 @@ print(job["result"]["message"])
 - Local endpoint binds **localhost** by default (not the public internet).
 - Results are size-capped (`MAX_RESULT_BYTES`).
 - Streaming chat is not implemented yet — turn streaming off in clients.
-- Private Tailscale/LAN pool (plus optional public tunnel when Drew runs it).
+- Private Tailscale/LAN pool (plus optional public tunnel when the host runs it).
 
 ## Related
 

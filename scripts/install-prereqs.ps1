@@ -421,7 +421,7 @@ function Install-VagrantTool {
 }
 
 function Install-TailscaleTool {
-    Write-Step "Tailscale (private friend network)" "Puts you on Drew's private network so portal/scheduler URLs work without the public tunnel."
+    Write-Step "Tailscale (private friend network)" "Puts you on the private pool network so portal/scheduler URLs work without the public tunnel."
     $info = Get-TailscaleInfo
     if ($info.installed) {
         Write-Info "Already installed  -  skipping download. $($info.message)"
@@ -464,7 +464,7 @@ function Install-TailscaleTool {
     $wantConnect = $ConnectTailscale -or ($key -and $key.Trim().Length -gt 0)
     if ($info.installed -and -not $info.logged_in -and ($wantConnect -or -not $DetectOnly)) {
         Write-Info "Next: sign in to Tailscale (browser or auth key)."
-        Write-Info "Ask Drew which tailnet / account to use (Glitch Factor). Never paste auth keys into chat logs."
+        Write-Info "Ask the host which tailnet / account to use (Glitch Factor). Never paste auth keys into chat logs."
         if ($DetectOnly -and -not $wantConnect) {
             return Get-TailscaleInfo
         }
@@ -542,7 +542,7 @@ $shareReady = $true
 $ts = $result.tailscale
 if ($ts -and -not $ts.skipped -and -not $ts.installed) {
     # Tailscale optional when public portal exists  -  warn only
-    Write-WarnMsg "Tailscale missing  -  use Drew's public portal URL, or install Tailscale and login."
+    Write-WarnMsg "Tailscale missing  -  use the host's public portal URL, or install Tailscale and login."
 }
 if ($ts -and $ts.installed -and -not $ts.logged_in -and -not $ts.skipped) {
     Write-WarnMsg "Tailscale installed but not logged in yet  -  finish login, then open the portal."
@@ -563,7 +563,7 @@ $result.next_steps = @(
     "Sign in with invite code glitch-factor + your Discord display name",
     "Home -> Contribute (share GPU/CPU) or Utilize (use the pool)",
     "Optional: Connect -> Start local model endpoint  OR  Home -> Workspace (needs VirtualBox+Vagrant)",
-    "Public path (no Tailscale): ask Drew for current trycloudflare.com/portal link"
+    "Public path (no Tailscale): ask the host for current trycloudflare.com/portal link"
 )
 
 Write-Info ""

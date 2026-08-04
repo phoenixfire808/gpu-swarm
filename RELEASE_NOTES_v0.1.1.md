@@ -21,24 +21,24 @@ One-click Windows joiner for the private Glitch Factor GPU pool.
 - Setup wizard → Join pool worker (`GPUPool.exe --worker`)
 - Portable Python bootstrap under `%LOCALAPPDATA%\GPUPool\` (isolated runtime)
 - Diagnostics: Copy log / Submit diagnostics (portal `/api/diagnostics`)
-- Default Tailscale scheduler/portal URLs; public tunnel URLs when Drew runs `start-public-access.cmd`
+- Default Tailscale scheduler/portal URLs; public tunnel URLs when the host runs `start-public-access.cmd`
 
 ## Not bundled
 
 - Torch / CUDA wheels (optional; install via wizard / portable Python when needed)
 - Discord bot token / `.env` secrets
-- Scheduler / portal server processes (run on Drew’s host)
+- Scheduler / portal server processes (run on the host)
 
 ## Friend prerequisites
 
 1. Invite code `glitch-factor` + Discord display name
-2. Prefer Drew’s **current** public portal URL (no Tailscale); else join Tailscale
+2. Prefer the host’s **current** public portal URL (no Tailscale); else join Tailscale
 3. NVIDIA drivers only if contributing a GPU; laptops can Utilize or contribute CPU-only
 4. Windows SmartScreen may warn on unsigned builds → More info → Run anyway
 
 ## Honest limits
 
-- Public trycloudflare URLs **rotate** when the tunnel restarts — ask Drew for a fresh link
+- Public trycloudflare URLs **rotate** when the tunnel restarts — ask the host for a fresh link
 - Workspace VM does **not** get NVIDIA passthrough; GPU stays on the host pool worker
 - Full chat e2e needs a contributor with Ollama running (`llm_ready`)
 

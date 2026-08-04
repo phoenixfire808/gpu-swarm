@@ -10,7 +10,7 @@ This is a co-op pool — **not** a public marketplace. **No Docker.**
 
 ## Product vision (v1)
 
-**Browser-first:** anyone Drew invites can log into a web portal, register a machine, set resource caps, and keep a worker online so the pool grows dynamically.
+**Browser-first:** anyone the host invites can log into a web portal, register a machine, set resource caps, keep a worker online, and **Invite others** with a copyable blurb so the pool grows dynamically.
 
 | Resource | What v1 actually does |
 |----------|------------------------|
@@ -67,7 +67,7 @@ No arbitrary shell from Discord. Results are size-capped.
 
 ## 1) Web portal contributor flow (primary for friends)
 
-Default URLs on Drew’s host (Tailscale):
+Default URLs on the host (Tailscale):
 
 | Service | URL |
 |---------|-----|
@@ -77,7 +77,7 @@ Default URLs on Drew’s host (Tailscale):
 
 **Friend flow**
 
-1. Install Tailscale and join Drew’s private network (ask Drew). Private Tailscale/LAN pool — not exposed to the open internet.
+1. Install Tailscale and join the private pool network (ask the host). Private Tailscale/LAN pool — not exposed to the open internet.
 2. Open the portal URL → sign in with **invite code / pool password** + display name (OAuth comes later).
 3. **Home** shows three big paths: **Contribute** · **Utilize** · **Connect** (URLs, Discord commands, CLI/SDK — [`CONNECTING.md`](CONNECTING.md)).
 4. **Contribute — register this machine** — set **your** dedication caps:
@@ -116,10 +116,10 @@ REM EXE rebuild (packaging Worker): rebuild from this source so Home / Utilize /
 
 | Mode | What it does |
 |------|----------------|
-| **1 · Contribute** | Share spare GPU/CPU — wizard, caps, **Join / Leave** (host GPU safety ON by default) |
-| **2 · Utilize** | Run jobs on the pool **now** — no NVIDIA required on your laptop |
-| **3 · Connect** | Plug in tools — URLs, local model endpoint, SDK / CLI / Discord tips |
-| **4 · Workspace** | Optional Linux desktop (CPU/RAM share only — no NVIDIA passthrough) |
+| **1 · Share my PC** | Contribute spare GPU/CPU — wizard, caps, **Join / Leave** (host GPU safety ON by default) |
+| **2 · Use the pool** | Utilize jobs **now** — no NVIDIA required on your laptop |
+| **3 · Invite others** | Copy friend message / portal URL / invite / GitHub download |
+| **4 · Connect / Workspace** | Tools + optional Linux desktop (CPU/RAM only — no NVIDIA passthrough) |
 | **Chat / Suggest** | Web Network Hub — pool chat + improvement inbox |
 
 **Contribute**
@@ -168,7 +168,7 @@ Primary guild: **Glitch Factor**. Bot app name: **GPU Pool** (`GPU pool#1686`).
 | `/submit_compute` | CUDA matmul probe |
 | `/job_status` | Check a job by id |
 
-Host setup (Drew): dedicated Discord Application **GPU Pool** — do **not** reuse Hermes **Jarvis** (same token fights the gateway).
+Host setup: dedicated Discord Application **GPU Pool** — do **not** reuse Hermes **Jarvis** (same token fights the gateway).
 
 1. https://discord.com/developers/applications → **GPU Pool** → **Bot**
 2. **Message Content Intent** ON
@@ -206,7 +206,7 @@ Stream-friendly talking points:
 
 ---
 
-## Quickstart (Windows — Drew home host)
+## Quickstart (Windows — home host)
 
 ```bat
 cd C:\Users\Drew\Projects\gpu-swarm
@@ -219,7 +219,7 @@ REM python -m pip install --user -r requirements.txt   # only if missing
 | `start-scheduler-lan.cmd` | Scheduler on `0.0.0.0:8766` (Tailscale/LAN) |
 | `start-portal.cmd` | Contributor web portal on `:8767/portal` |
 | `start-gpu-pool-app.cmd` | Desktop joiner UI *(when present)* |
-| `start-worker.cmd` | Worker `Drew-Home` → localhost scheduler |
+| `start-worker.cmd` | Worker `Host-PC` → localhost scheduler |
 | `start-bot.cmd` | Discord bot (`DISCORD_BOT_TOKEN` in `.env`) |
 | `start-all-local.cmd` | Scheduler + worker + bot windows |
 
@@ -229,7 +229,7 @@ REM python -m pip install --user -r requirements.txt   # only if missing
 
 ```bash
 python -m gpu_swarm scheduler --host 0.0.0.0 --port 8766
-python -m gpu_swarm worker --name Drew-Home
+python -m gpu_swarm worker --name Host-PC
 python -m gpu_swarm status
 python -m gpu_swarm submit probe --wait
 python -m gpu_swarm submit pytorch_cuda_probe --matrix-size 1024 --wait
@@ -284,7 +284,7 @@ Details: [`CONNECTING.md`](CONNECTING.md) · Hermes notes: [`examples/hermes_poo
 
 ```bash
 python -m gpu_swarm scheduler --host 0.0.0.0 --port 8766
-python -m gpu_swarm worker --name Drew-Home
+python -m gpu_swarm worker --name Host-PC
 python -m gpu_swarm utilize probe --wait
 python -m gpu_swarm status
 ```

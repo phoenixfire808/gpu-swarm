@@ -53,7 +53,7 @@ Contribute your spare GPU via portal / desktop app / CLI worker — see [`CONNEC
 
 ## Path to Whisper / LLM job types later
 
-There are **no Whisper runners in this repo yet**. Progress note: reuse DrewLocalVoice / faster-whisper later without breaking that stack.
+There are **no Whisper runners in this repo yet**. Progress note: reuse a local voice stack / faster-whisper later without breaking that stack.
 
 When adding a real useful type (e.g. `whisper_transcribe` or a bounded `llm_generate`):
 

@@ -9,11 +9,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 
 ### Added
 
+- **Share / Invite others** — `gpu_swarm/share_invite.py`; portal Hub **Invite others** view + desktop **4 · Invite others** with one-click copy (friend message, full blurb, portal URL, invite code, GitHub download). Primary actions: Join / Share my PC / Use the pool / Invite others.
 - **Automated friend prereqs** — `scripts/install-prereqs.ps1` (+ `.cmd`): detect-or-install **Tailscale**, **VirtualBox** (+ Extension Pack best-effort), **Vagrant**; verbose step labels; skips if present; optional `GPU_SWARM_TAILSCALE_AUTHKEY` / `TS_AUTHKEY` (never committed); UAC + Tailscale login remain one clear click.
 - **Wizard step Network & Workspace** — Detect / Install & connect / Tailscale-only; wired via `app_backend.install_prereqs`.
 - **`SHARED_AGENT_DEV.md`** — ready-to-go shared agent-development space (hub → Workspace → harness endpoint).
 - **Verbose install / bootstrap progress** — step labels (“Downloading Python runtime…”, “Installing dependencies (1/5)…”), download percent, pip package streaming, PowerShell `Write-Progress`, wizard progress bar + visible logs, first-run log at `%LOCALAPPDATA%\GPUPool\logs\first-run-bootstrap.log`.
-- **Plain-language friend UX** — Welcome/Home copy for Contribute / Utilize / Connect / Workspace / Chat / Suggest; SmartScreen + invite + rotating public URL; honest no-NVIDIA / host_protect / no passthrough notes in `DOWNLOAD.md` / `LOGIN.md` / `FRIEND_LAPTOP.md` / `RELEASE.md`.
+- **Plain-language friend UX** — Welcome/Home copy for Join / Share my PC / Use the pool / Invite others; SmartScreen + invite + rotating public URL; honest no-NVIDIA / host_protect / no passthrough notes in `DOWNLOAD.md` / `LOGIN.md` / `NO_GPU_LAPTOP.md` / `RELEASE.md`.
 - Draft **`RELEASE_NOTES_v0.1.1.md`** + publish commands (EXE rebuild still required to ship asset).
 - **All-in-One Network Hub portal** — brand-first peer-mesh `/portal` (`portal_hub.html`); live workers from `/status` (no mocks); Contribute / Utilize / Connect / Workspace / Diagnostics in one place.
 - **Pool chat** — authenticated shared room; SQLite in `portal.db`; 2.5s poll; empty state when quiet (`GET/POST /api/chat`, `/api/presence`).
@@ -34,7 +35,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 
 - Packaging spec bundles `scripts/install-prereqs.*`, joiner/check prereq scripts, and `SHARED_AGENT_DEV.md` for next EXE.
 - `check_prereqs.ps1` reports Tailscale / VirtualBox / Vagrant (optional for share path).
-- Docs: `LOGIN.md`, `DOWNLOAD.md`, `FRIEND_LAPTOP.md`, `ROADMAP.md` for automated join + shared agent-dev; honest v0.1.0 EXE staleness vs tip.
+- Docs: `LOGIN.md`, `DOWNLOAD.md`, `NO_GPU_LAPTOP.md` (was `FRIEND_LAPTOP.md`), `ROADMAP.md` for automated join + shared agent-dev; honest v0.1.0 EXE staleness vs tip.
+- **Personal-name scrub** — friend-facing copy uses host / friend / pool member / pool admin; removed sample friend display names and personal laptop anecdotes.
 - `install_joiner_deps.ps1` / `build_exe.ps1` print numbered human steps instead of quiet pip.
 
 ### Fixed

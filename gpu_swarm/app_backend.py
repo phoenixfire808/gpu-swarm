@@ -92,6 +92,7 @@ __all__ = [
     "get_utilize_helper_text",
     "get_connect_from_code_text",
     "get_friends_connect_text",
+    "get_share_pack",
     "get_public_access_info",
     "auto_detect_scheduler_url",
     "validate_scheduler_url",
@@ -138,12 +139,12 @@ DEFAULT_OPENAI_BASE_URL = f"{DEFAULT_LOCAL_ENDPOINT_URL}/v1"
 
 # Member-facing copy — public tunnel preferred when live; Tailscale optional.
 PRIVATE_NETWORK_BLURB = (
-    "When Drew runs start-public-access.cmd, friends use the public HTTPS portal — "
+    "When the host runs start-public-access.cmd, friends use the public HTTPS portal — "
     "no Tailscale needed (invite code still required). Tailscale remains an optional private path."
 )
 FRIENDS_CONNECT_STEPS = (
     "1) Run GPU Pool → wizard → Install network & workspace tools (or scripts\\install-prereqs.cmd)",
-    "2) Prefer public portal URL Drew DMs (no Tailscale) OR finish Tailscale login",
+    "2) Prefer the public portal URL from a pool member (no Tailscale) OR finish Tailscale login",
     f"3) Open portal (public link or {DEFAULT_PORTAL_URL}) or continue in the app",
     f"4) Sign in with invite code {PORTAL_INVITE_CODE} + your display name",
     "5) Home → Contribute or Utilize (Workspace optional — needs VirtualBox+Vagrant)",
@@ -203,7 +204,7 @@ def get_public_access_info() -> dict[str, Any]:
             "portal_path": "",
             "pool_api_public_url": "",
             "portal_public_url": "",
-            "message": "Public tunnel off — Drew: run start-public-access.cmd",
+            "message": "Public tunnel off — host: run start-public-access.cmd",
         }
     return {
         "active": True,
@@ -242,15 +243,15 @@ def scheduler_reachability_hint(
         lines.append(f"1) Public portal (no Tailscale): {pub.get('portal_path')}")
         lines.append(f"2) Public pool API: {pub.get('pool_api_public_url')}")
         lines.append(f"3) Invite: {PORTAL_INVITE_CODE}")
-        lines.append(f"4) Same PC as Drew: {DEFAULT_LOCAL_SCHEDULER_URL}")
+        lines.append(f"4) Same PC as the host: {DEFAULT_LOCAL_SCHEDULER_URL}")
     else:
-        lines.append("1) Ask Drew for the public portal link (start-public-access.cmd), or")
-        lines.append("2) Install Tailscale and join the Glitch Factor tailnet")
+        lines.append("1) Ask the host for the public portal link (start-public-access.cmd), or")
+        lines.append("2) Install Tailscale and join the private pool network")
         lines.append(f"3) Members Tailscale: {DEFAULT_SCHEDULER_URL}")
-        lines.append(f"4) Same PC as Drew: {DEFAULT_LOCAL_SCHEDULER_URL}")
+        lines.append(f"4) Same PC as the host: {DEFAULT_LOCAL_SCHEDULER_URL}")
         lines.append(f"5) Portal: {DEFAULT_PORTAL_URL} · invite: {PORTAL_INVITE_CODE}")
     if not ts and not pub.get("active"):
-        lines.append("Tip: no Tailscale on this machine — use Drew’s public portal URL instead.")
+        lines.append("Tip: no Tailscale on this machine — use the host’s public portal URL instead.")
     elif ts:
         lines.append(f"This machine Tailscale IPv4: {ts}")
     if url:
@@ -258,6 +259,13 @@ def scheduler_reachability_hint(
     if error:
         lines.append(f"Last error: {error}")
     return "\n".join(lines)
+
+
+def get_share_pack() -> dict[str, Any]:
+    """Copyable invite blurb + URLs for Share / Invite others (no secrets)."""
+    from gpu_swarm.share_invite import build_share_pack
+
+    return build_share_pack()
 
 
 def get_friends_connect_text() -> str:
@@ -456,7 +464,7 @@ def resolve_portal_url(timeout: float = 2.5) -> dict[str, Any]:
             f"then open {DEFAULT_LOCAL_PORTAL_URL}"
         ),
         "fix": (
-            f"1) Run start-portal.cmd on Drew's host\n"
+            f"1) Run start-portal.cmd on the host\n"
             f"2) Open {DEFAULT_LOCAL_PORTAL_URL} (same machine) or "
             f"{DEFAULT_PORTAL_URL} (Tailscale)\n"
             f"3) Sign in with invite code: {PORTAL_INVITE_CODE}"
@@ -1555,7 +1563,7 @@ def start_worker(
         )
         return {
             "ok": False,
-            "message": "Cannot reach Tailscale/LAN scheduler yet (install/login Tailscale + join Drew’s tailnet).",
+            "message": "Cannot reach Tailscale/LAN scheduler yet (install/login Tailscale + join the private pool network).",
             "pid": None,
             "fix": hint,
             "scheduler": sched,

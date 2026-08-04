@@ -392,7 +392,7 @@ def submit_diagnostics(
         "clipboard": body_text,
         "mailto": mailto,
         "log_path": str(log_path or ""),
-        "hint": "Portal unreachable — use Copy log and paste to Drew in Discord.",
+        "hint": "Portal unreachable — use Copy log and paste to the host in Discord.",
     }
 
     try:

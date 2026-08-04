@@ -167,7 +167,7 @@ Set-Content -Path $SharePath -Value $share -Encoding utf8
 
 Write-Host ""
 Write-Host "============================================================"
-Write-Host " PUBLIC ACCESS READY — DM this to friends (e.g. aariff01)"
+Write-Host " PUBLIC ACCESS READY — share with pool members (e.g. YourDiscordName)"
 Write-Host "============================================================"
 Write-Host " Portal:   $portalPath"
 Write-Host " Pool API: $poolApi"

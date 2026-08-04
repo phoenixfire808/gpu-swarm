@@ -74,7 +74,7 @@ gh release create v0.1.1 dist/GPUPool.exe --repo phoenixfire808/gpu-swarm --titl
 ## User prerequisites
 
 1. Invite code `glitch-factor` (+ display name)
-2. Prefer Drew’s **current** public portal URL when posted (no Tailscale); else join Tailscale
+2. Prefer the host’s **current** public portal URL when posted (no Tailscale); else join Tailscale
 3. NVIDIA drivers (`nvidia-smi`) **only** for GPU contribution — Utilize needs no NVIDIA
 4. Windows SmartScreen may warn on unsigned builds — More info → Run anyway  
 
