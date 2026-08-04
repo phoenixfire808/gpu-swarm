@@ -59,6 +59,13 @@ __all__ = [
     "fetch_scheduler_status",
     "get_discord_helper_text",
     "get_agent_vms_info",
+    "workspace_status",
+    "workspace_resource_plan",
+    "open_workspace",
+    "halt_workspace",
+    "apply_workspace_caps",
+    "open_workspace_rdp",
+    "ADVANCED_VM_DOC",
     "get_default_scheduler_url",
     "get_portal_hints",
     "get_portal_url",
@@ -287,6 +294,7 @@ SCRIPT_CHECK_PREREQS_CMD = SCRIPTS_DIR / "check_prereqs.cmd"
 SCRIPT_INSTALL_JOINER_DEPS_CMD = SCRIPTS_DIR / "install_joiner_deps.cmd"
 CONNECTING_DOC = BUNDLE_ROOT / "CONNECTING.md"
 LOCAL_MODEL_DOC = BUNDLE_ROOT / "LOCAL_MODEL.md"
+ADVANCED_VM_DOC = BUNDLE_ROOT / "ADVANCED_VM.md"
 CODING_AGENT_EXAMPLE = BUNDLE_ROOT / "examples" / "coding_agent_pool.py"
 LOCAL_OFFLOAD_DOC = BUNDLE_ROOT / "examples" / "ollama_or_local_offload.md"
 
@@ -299,6 +307,7 @@ _SAFE_ENV_KEYS = (
     "GPU_SWARM_MAX_CPU_PERCENT",
     "GPU_SWARM_MAX_RAM_MB",
     "GPU_SWARM_MAX_DISK_GB",
+    "GPU_SWARM_HOST_PROTECT",
 )
 
 _FORBIDDEN_ENV_KEYS = frozenset(
@@ -1396,6 +1405,8 @@ def start_worker(
     env["GPU_SWARM_MAX_CPU_PERCENT"] = str(float(settings.max_cpu_percent))
     env["GPU_SWARM_MAX_RAM_MB"] = str(int(getattr(settings, "max_ram_mb", 0) or 0))
     env["GPU_SWARM_MAX_DISK_GB"] = str(float(getattr(settings, "max_disk_gb", 0) or 0))
+    host_protect = bool(getattr(settings, "host_protect", True))
+    env["GPU_SWARM_HOST_PROTECT"] = "1" if host_protect else "0"
     disk_mb = int(float(getattr(settings, "max_disk_gb", 0) or 0) * 1024)
     if disk_mb > 0:
         env["GPU_SWARM_MAX_DISK_MB"] = str(disk_mb)
@@ -1439,6 +1450,7 @@ def start_worker(
             "--max-disk-mb",
             str(disk_mb),
         ]
+    cmd.append("--host-protect" if host_protect else "--no-host-protect")
     if settings.discord_user:
         cmd.extend(["--discord-user", settings.discord_user])
 
@@ -2071,14 +2083,81 @@ def get_discord_helper_text() -> str:
 
 
 def get_agent_vms_info(path: str | None = None) -> dict[str, Any]:
-    """Optional advanced: agent-vms desktop workspaces (not GPU passthrough)."""
-    info = agent_vms_present(path)
-    info["note"] = (
-        "agent-vms is for full Linux desktop workspaces (VirtualBox + Vagrant). "
-        "It is optional/advanced. VirtualBox on Windows does not reliably offer "
-        "NVIDIA GPU passthrough — contribute with the native host worker + VRAM caps instead."
+    """agent-vms workspace integration (Hermes control plane; not GPU passthrough)."""
+    from gpu_swarm.agent_vm_bridge import (
+        GPU_HONESTY,
+        compute_vm_resource_plan,
+        resolve_agent_vm_controller,
+        workspace_status,
     )
+
+    settings = load_joiner_settings()
+    if path:
+        settings.agent_vms_path = path
+    present = agent_vms_present(path or settings.agent_vms_path)
+    resolved = resolve_agent_vm_controller(settings)
+    plan = compute_vm_resource_plan(settings)
+    info: dict[str, Any] = {
+        **present,
+        "control_plane": "hermes",
+        "ready": bool(resolved.get("ok")),
+        "controller": resolved.get("controller") or "",
+        "plan": plan,
+        "note": GPU_HONESTY,
+        "doc": str(ADVANCED_VM_DOC),
+    }
+    if resolved.get("ok"):
+        try:
+            info["status"] = workspace_status(settings)
+        except Exception as exc:  # noqa: BLE001
+            info["status_error"] = str(exc)
     return info
+
+
+def workspace_resource_plan() -> dict[str, Any]:
+    from gpu_swarm.agent_vm_bridge import compute_vm_resource_plan
+
+    return compute_vm_resource_plan(load_joiner_settings())
+
+
+def workspace_status() -> dict[str, Any]:
+    from gpu_swarm.agent_vm_bridge import workspace_status as _status
+
+    return _status(load_joiner_settings())
+
+
+def apply_workspace_caps() -> dict[str, Any]:
+    from gpu_swarm.agent_vm_bridge import apply_workspace_caps as _apply
+
+    return _apply(load_joiner_settings())
+
+
+def open_workspace(*, open_rdp: bool = True, start_if_needed: bool = True) -> dict[str, Any]:
+    """Start/open agent Ubuntu workspace under Contribute offer caps (Hermes)."""
+    from gpu_swarm.agent_vm_bridge import open_workspace as _open
+
+    return _open(
+        load_joiner_settings(),
+        start_if_needed=start_if_needed,
+        open_rdp=open_rdp,
+        allow_vagrant_up=False,
+    )
+
+
+def halt_workspace() -> dict[str, Any]:
+    from gpu_swarm.agent_vm_bridge import halt_workspace as _halt
+
+    return _halt(load_joiner_settings())
+
+
+def open_workspace_rdp() -> dict[str, Any]:
+    from gpu_swarm.agent_vm_bridge import open_rdp_session, workspace_status as _status
+
+    st = _status(load_joiner_settings())
+    return open_rdp_session(
+        host=str(st.get("rdp_host") or "127.0.0.1"),
+        port=int(st.get("rdp_port") or 3390),
+    )
 
 
 # --- internals -----------------------------------------------------------------
@@ -2101,6 +2180,9 @@ def _sync_env_file(settings: JoinerSettings) -> None:
         "GPU_SWARM_MAX_CPU_PERCENT": str(float(settings.max_cpu_percent)),
         "GPU_SWARM_MAX_RAM_MB": str(int(getattr(settings, "max_ram_mb", 0) or 0)),
         "GPU_SWARM_MAX_DISK_GB": str(float(getattr(settings, "max_disk_gb", 0) or 0)),
+        "GPU_SWARM_HOST_PROTECT": (
+            "1" if bool(getattr(settings, "host_protect", True)) else "0"
+        ),
     }
     for key in _FORBIDDEN_ENV_KEYS:
         updates.pop(key, None)
@@ -2268,19 +2350,21 @@ def _local_endpoint_cli_registered() -> bool:
 
 
 def local_endpoint_available() -> dict[str, Any]:
-    """True when module, CLI subcommand, or start-local-endpoint.cmd can start the service."""
+    """True when module, CLI subcommand, frozen EXE mode, or start-local-endpoint.cmd can start."""
     import importlib.util
 
+    frozen = is_frozen()
     module_ok = importlib.util.find_spec("gpu_swarm.local_endpoint") is not None
     cli_ok = _local_endpoint_cli_registered()
     cmd_path = BUNDLE_ROOT / "start-local-endpoint.cmd"
     cmd_ok = cmd_path.is_file()
-    available = bool(module_ok or cli_ok or cmd_ok)
+    available = bool(frozen or module_ok or cli_ok or cmd_ok)
     return {
         "available": available,
         "module": module_ok,
         "cli": cli_ok,
         "cmd": cmd_ok,
+        "frozen": frozen,
         "cmd_path": str(cmd_path) if cmd_ok else "",
         "detail": (
             "Ready — Start local model endpoint on Connect."
@@ -2427,7 +2511,17 @@ def start_local_endpoint(
     env["GPU_SWARM_SCHEDULER_URL"] = sched
 
     cmd_path = BUNDLE_ROOT / "start-local-endpoint.cmd"
-    if avail.get("cli"):
+    if is_frozen():
+        # Re-launch this EXE in local-endpoint mode (fastapi bundled; no system Python).
+        cmd = [
+            sys.executable,
+            "--local-endpoint",
+            "--host",
+            "127.0.0.1",
+            "--scheduler-url",
+            sched,
+        ]
+    elif avail.get("cli"):
         cmd = [
             sys.executable,
             "-m",

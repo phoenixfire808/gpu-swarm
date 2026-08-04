@@ -31,6 +31,8 @@ Leave anytime (portal/app Leave, or stop the worker). Caps are soft ads for sche
 
 **Personal offer control:** Only **you** control how much of your PC is offered (VRAM/CPU/RAM/disk). Change anytime on your machine or in your Contribute settings. The worker process is the source of truth; the scheduler stores what your worker heartbeats. Pool admins cannot remotely raise another contributor’s offer via Discord or an admin API.
 
+**Host GPU safety (default ON):** The worker clamps advertised VRAM to ~55% of total, pauses new leases when live `nvidia-smi` util is ≥65% or free VRAM is below ~1.5 GiB, and caps heavy CUDA probe matrix sizes. You can raise your offer sliders; the safety ceiling still protects the desktop. Toggle in Contribute UI / `joiner_settings.json` (`host_protect`) or env `GPU_SWARM_HOST_PROTECT=0` (not recommended on a gaming PC).
+
 ---
 
 ## 2) Utilize (run a job on the pool)

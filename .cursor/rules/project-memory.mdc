@@ -1,0 +1,31 @@
+---
+description: Keep living docs current; Hermes/VMs; host_protect; no Docker; light verify
+alwaysApply: true
+---
+
+# GPU Pool — project memory & ship habits
+
+## Living docs (every ship)
+
+When you change product behavior or complete a milestone, update in the **same turn**:
+
+1. `CURRENT_PROGRESS.md` — checklist, what just happened, next picks, blockers
+2. `TODO.md` — keep accurate (Done / Now / Next / Blocked); no stale “now” items
+3. `CHANGELOG.md` — Keep a Changelog entry under `[Unreleased]`
+4. `ROADMAP.md` — move items near-term ↔ later when priority shifts
+
+Also touch `DESIGN.md` only if the trust model or multi-service flow changed.
+
+## Hard constraints
+
+- **No Docker** for this stack
+- **Hermes owns agent-vms** (VirtualBox + Vagrant) — use `agent-vm-control` / `bin/agent-vm.cmd`; do not orchestrate those VMs through OpenClaw or the Discord bot
+- **`host_protect` defaults ON** — leave desktop headroom; never “fix” freezes with stress tests
+- **Never lag Drew’s PC** — no heavy CUDA e2e, PyInstaller stress, or continuous probe loops unless he explicitly asks
+- **Never commit secrets** — `.env`, token paste files, `data/public_endpoints*`, credentials
+
+## Scaffold & verify
+
+- Scaffold off existing modules and docs (`TODO`, `VISION`, `CURRENT_PROGRESS`, `RELEASE.md`)
+- Prefer light unit/smoke checks; invent no green checks — re-probe when updating the scorecard
+- Mark agent-vms ↔ GPU Pool workspace integration as **in progress** until code clearly ships; never claim GPU passthrough into VirtualBox

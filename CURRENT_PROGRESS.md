@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:27 CDT · Contributor offer-cap ownership (worker source of truth).
+**Updated:** 2026-08-04 ~12:45 CDT · Durable project memory + host_protect ship to GitHub.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -14,12 +14,13 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 
 **Discord:** App **GPU Pool** · Primary guild **Glitch Factor** · Invite code `glitch-factor`  
 **v1 jobs:** `probe`, `pytorch_cuda_probe`, **`llm_chat`** · Auth MVP: invite/password (OAuth later)  
-**Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files  
-**Network model:** Private Tailscale/LAN (+ optional public tunnel when Drew runs `start-public-access.cmd`)
+**Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files / `data/public_endpoints*`  
+**Network model:** Private Tailscale/LAN (+ optional public tunnel when Drew runs `start-public-access.cmd`)  
+**Living docs:** [`TODO.md`](TODO.md) · [`ROADMAP.md`](ROADMAP.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`DESIGN.md`](DESIGN.md)
 
 ---
 
-## Live scorecard (2026-08-04 ~12:20 CDT)
+## Live scorecard (2026-08-04 ~12:45 CDT)
 
 | # | Check | Result |
 |---|--------|--------|
@@ -30,47 +31,55 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 | 5 | Desktop Connect button | **CODE READY** — Start local model endpoint |
 | 6 | Portal Connect local-model block | **CODE READY** |
 | 7 | Docs `LOCAL_MODEL.md` | **PASS** |
+| 8 | Host protect on Drew-Home | **PASS** — worker restarted; `host_protect=ON` |
+| 9 | Living docs + Cursor rule | **PASS** — ROADMAP / CHANGELOG / DESIGN / `.cursor/rules` |
 
-**Demo verdict:** Friends can start a localhost OpenAI-compatible endpoint and list models. Chat completes once Drew runs Ollama on a contributor worker.
+**Demo verdict:** Friends can start a localhost OpenAI-compatible endpoint and list models. Chat completes once Drew runs Ollama on a contributor worker. Desktop stays protected by host_protect defaults.
 
 ---
 
 ## Done (with dates)
 
+### Durable project memory (2026-08-04)
+- [x] `ROADMAP.md` · `CHANGELOG.md` · `DESIGN.md` · refreshed `TODO.md` / this file
+- [x] Cursor rule `.cursor/rules/project-memory.mdc` — always update progress/TODO/CHANGELOG on ship
+
 ### Friend login docs (2026-08-04)
-- [x] `LOGIN.md` — invite/display name, where to get info, Paths A/B/C, form fields, Contribute/Utilize/Connect, troubleshooting, Drew host section, Discord blurb
+- [x] `LOGIN.md` — invite/display name, Paths A/B/C, Contribute/Utilize/Connect, troubleshooting
 - [x] Cross-links from README, DISCORD_MEMBER_QUICKSTART, DOWNLOAD, FRIEND_LAPTOP, CONNECTING
 
 ### Local Pool Endpoint + llm_chat (2026-08-04)
-- [x] `gpu_swarm/local_endpoint.py` + CLI `python -m gpu_swarm local-endpoint` + `start-local-endpoint.cmd`
+- [x] `gpu_swarm/local_endpoint.py` + CLI + `start-local-endpoint.cmd`
 - [x] Allowlisted job `llm_chat` → worker-local Ollama / OpenAI-compatible runtime
 - [x] Lease filter: only `llm_ready` workers take `llm_chat`
 - [x] Desktop Connect: Start / Stop / Copy `OPENAI_BASE_URL`
-- [x] Portal Connect: local model instructions
-- [x] `LOCAL_MODEL.md` — honest “network GPU via API”
-- [x] Verified: endpoint boots, models list, job path accepts `llm_chat` (queued without Ollama)
+- [x] Portal Connect: local model instructions · `LOCAL_MODEL.md`
 
 ### Friend diagnostics + portable Python (2026-08-04)
-- [x] diagnostics / portable Python / wizard submit (prior)
+- [x] diagnostics / portable Python / wizard submit
 
 ### Tailscale/LAN UX + Desktop three-mode (2026-08-04)
 - [x] Private-network messaging, Utilize/Connect, portal friends cards
 
 ### Contributor offer-cap ownership (2026-08-04)
-- [x] Worker is source of truth for `max_vram` / CPU / RAM / disk (heartbeat + register only)
-- [x] Portal: caps editable only for session owner; PATCH other user’s machine → 403
-- [x] Desktop Contribute: local joiner_settings only + ownership copy
-- [x] Scheduler rejects job payloads that try to force/raise worker caps; lease respects advertised caps
-- [x] Docs note in LOGIN.md / CONNECTING.md / README
-- [x] Unit check: cross-user update denied (`tests/test_offer_ownership.py`)
+- [x] Worker source of truth for caps; portal owner-only PATCH; scheduler rejects force-caps
+- [x] Unit check: `tests/test_offer_ownership.py`
+
+### Host GPU safety ceiling (2026-08-04)
+- [x] `gpu_swarm/host_protect.py` — durable desktop safety (default ON)
+- [x] Defaults: offer ≤55% total VRAM · pause lease when util ≥65% or free VRAM <1536 MiB · CPU offer ≤70% · CUDA matrix ≤1024
+- [x] Worker applies ceiling + pauses `lease()`; Contribute checkbox / env tunables
+- [x] Packaging: `gpu_pool.spec` + frozen EXE local-endpoint path include host_protect
+- [x] Light unit tests only (`tests/test_host_protect.py`) — **no** CUDA e2e / stress / PyInstaller
 
 ---
 
 ## In progress
 
-- [ ] Drew: start Ollama + pull model + restart worker → full chat e2e
-- [ ] Packaging Worker: rebuild EXE (include local_endpoint + llm_chat)
-- [ ] Keep scorecard/TODO in sync
+- [ ] Drew: start Ollama + pull model + worker restart → full chat e2e
+- [ ] Packaging Worker: rebuild EXE (include host_protect + local_endpoint + llm_chat)
+- [ ] **agent-vms ↔ GPU Pool workspace/VM mode** — planned/in flight; `ADVANCED_VM.md` + detect helpers exist; deeper integration not done; Hermes remains VM control plane; no GPU passthrough claims
+- [ ] Keep scorecard/TODO/CHANGELOG in sync on every ship
 
 ---
 
@@ -78,17 +87,17 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 
 1. **Enable Ollama on Drew-Home worker** — `ollama serve`, `ollama pull llama3.2`, restart worker, smoke chat via local endpoint.
 2. Packaging Worker rebuild EXE.
-3. Member onboarding: point friends at `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`.
-4. Optional: streaming chat on local endpoint.
-5. Whisper allowlisted job (still separate).
+3. Member onboarding: `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`.
+4. Continue VM/workspace integration carefully (coordinate; don’t break half-baked edits).
+5. Optional: streaming chat on local endpoint.
 
 ### Next 5 Drew should care about right now
 
 1. Run Ollama on the host worker (`llm_ready=yes` in worker log).
-2. Restart workers after this pull (scheduler already restarted for allowlist).
-3. Tell aariff01: Connect → Start local model endpoint → paste `OPENAI_BASE_URL`.
-4. Packaging EXE rebuild later.
-5. Keep `.env` / tokens local — never commit.
+2. Tell aariff01: Connect → Start local model endpoint → paste `OPENAI_BASE_URL`.
+3. Packaging EXE rebuild (must include host_protect).
+4. Review GitHub CHANGELOG/ROADMAP when agents ship.
+5. Keep `.env` / tokens / public endpoint files local — never commit.
 
 ---
 
@@ -137,8 +146,17 @@ start-gpu-pool-app.cmd
 
 ## Do not
 
-- Commit `.env`, `DISCORD_BOT_TOKEN_PASTE.txt`, tokens, or `data/`
+- Commit `.env`, `DISCORD_BOT_TOKEN_PASTE.txt`, tokens, or `data/` (incl. `public_endpoints*`)
 - Use Docker for this stack
 - Steal port `8765` (Robinhood)
 - Wipe Hermes durable memory / reuse Jarvis bot token
 - Invent green checks — re-probe `/status` + portal when updating this file
+- Heavy CUDA / PyInstaller stress during agent sessions unless Drew asks
+
+## 2026-08-04 12:30 CDT — STOP heavy GPU-swarm test load
+- Killed Wizard-OneStop worker PID 31696 (extra test joiner pegging GPU)
+- Killed friend-laptop-verify bash PID 36712 (probe submit/wait); portal child died with it
+- Restored portal only on :8767 (PID 23368); no new jobs/tests/EXE
+- Left: scheduler :8766, portal :8767, bot, cloudflared, Drew-Home worker, local-endpoint :18080
+- GPU after: 5060 Ti ~26% / ~1.8 GiB; 2070 SUPER idle/empty
+- Not found running: pytest, pyinstaller, app_backend_smoke, coding_agent_pool, pytorch_cuda_probe loops, ollama pull

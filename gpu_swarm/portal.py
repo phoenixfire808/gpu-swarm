@@ -725,6 +725,7 @@ def _worker_instructions(machine: dict[str, Any], portal_base: str) -> dict[str,
         f"GPU_SWARM_MAX_DISK_MB={machine['dedicated_disk_mb']}\n"
         f"GPU_SWARM_DEDICATED_CPU_CORES={machine['dedicated_cpu_cores']}\n"
         f"GPU_SWARM_CONTRIBUTOR_NAME={machine.get('contributor_name') or ''}\n"
+        f"GPU_SWARM_HOST_PROTECT=1\n"
     )
     return {
         "start_token": token,
@@ -740,7 +741,9 @@ def _worker_instructions(machine: dict[str, Any], portal_base: str) -> dict[str,
             "The start token loads YOUR dedication caps from the portal, then the worker "
             "heartbeats real GPU/CPU inventory to the scheduler. Only you control how much "
             "of your PC is offered — pool admins cannot remotely raise another contributor's caps. "
-            "Desktop app users save the same caps locally in joiner settings."
+            "Desktop app users save the same caps locally in joiner settings. "
+            "Host GPU safety (GPU_SWARM_HOST_PROTECT=1) stays ON by default: offer ≤~55% VRAM, "
+            "pause jobs when util is high / free VRAM is low so your desktop cannot freeze."
         ),
     }
 
@@ -1124,7 +1127,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
       <div class="panel">
         <h2>Contribute — register this machine</h2>
         <p class="lede">Set dedication caps, then copy a start-token command. The worker reports real nvidia-smi / host inventory — nothing mocked.</p>
-        <p class="note" id="ownershipNote" style="margin:0.5rem 0 1rem">Only you control how much of your PC is offered. Change anytime on your machine or in your Contribute settings. Nobody else (including pool admin via Discord) can remotely raise your caps.</p>
+        <p class="note" id="ownershipNote" style="margin:0.5rem 0 1rem">Only you control how much of your PC is offered. Change anytime on your machine or in your Contribute settings. Nobody else (including pool admin via Discord) can remotely raise your caps. Host GPU safety stays ON by default on the worker (offer ≤~55% VRAM; pause when util ≥65% or free VRAM is low) so contributing cannot freeze your desktop — raise your offer caps freely; the safety ceiling still protects the host.</p>
         <label for="workerName">Worker name</label>
         <input id="workerName" type="text" placeholder="My-PC-gpu" />
         <label for="schedulerUrl">Scheduler URL</label>

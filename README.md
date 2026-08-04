@@ -31,6 +31,7 @@ Jobs execute on a worker’s own GPU/CPU. RAM/SSD numbers help the scheduler pic
 | **Connect from code** | Coders / local models / agents | `GPUPool` SDK · `utilize` CLI · [`CONNECTING.md`](CONNECTING.md) |
 
 Product one-pager: [`VISION.md`](VISION.md).  
+Living plan: [`ROADMAP.md`](ROADMAP.md) · [`TODO.md`](TODO.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`DESIGN.md`](DESIGN.md) · [`CURRENT_PROGRESS.md`](CURRENT_PROGRESS.md).  
 **Download GPU Pool for Windows:**  
 https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
 ([v0.1.0](https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe) · [release notes](https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.0) · [`DOWNLOAD.md`](DOWNLOAD.md))  
@@ -88,6 +89,8 @@ Default URLs on Drew’s host (Tailscale):
 Leave anytime from the portal (or stop the worker). Caps persist for the next session.
 
 **Personal offer control:** Only **you** control how much of your PC is offered. Change anytime on your machine or in Contribute settings. The worker is the source of truth; admins cannot remotely raise another contributor’s caps.
+
+**Host GPU safety (default ON):** Workers leave desktop headroom (~55% VRAM offer ceiling; pause leases when GPU util ≥65% or free VRAM is low). Raise your caps freely — the safety ceiling still protects the host. See [`CONNECTING.md`](CONNECTING.md).
 
 > Portal launcher: `start-portal.cmd` or `python -m gpu_swarm portal` → **8767**/portal. Scheduler stays on **8766**.
 

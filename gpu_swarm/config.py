@@ -63,6 +63,8 @@ class WorkerConfig:
     preferred_gpu: int | None = None
     start_token: str = ""
     portal_url: str = "http://127.0.0.1:8767"
+    # Host GPU safety (desktop headroom). Default ON — see host_protect.py.
+    host_protect: bool = True
 
 
 @dataclass
@@ -104,6 +106,11 @@ def worker_config() -> WorkerConfig:
         disk_gb = _env_float("GPU_SWARM_MAX_DISK_GB", 0.0)
         if disk_gb > 0:
             disk = int(disk_gb * 1024)
+    hp_raw = _env("GPU_SWARM_HOST_PROTECT")
+    if hp_raw == "":
+        host_protect = True
+    else:
+        host_protect = hp_raw.lower() not in ("0", "false", "no", "off", "disabled")
     return WorkerConfig(
         scheduler_url=_env("GPU_SWARM_SCHEDULER_URL", "http://127.0.0.1:8766")
         or "http://127.0.0.1:8766",
@@ -121,6 +128,7 @@ def worker_config() -> WorkerConfig:
         start_token=_env("GPU_SWARM_START_TOKEN"),
         portal_url=_env("GPU_SWARM_PORTAL_URL", "http://127.0.0.1:8767")
         or "http://127.0.0.1:8767",
+        host_protect=host_protect,
     )
 
 

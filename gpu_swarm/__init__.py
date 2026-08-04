@@ -1,6 +1,6 @@
 """gpu-swarm — private Discord GPU/CPU contribution pool."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # Allowlisted job types workers may execute (no arbitrary shell).
 ALLOWED_JOB_TYPES = frozenset({"probe", "pytorch_cuda_probe", "llm_chat"})

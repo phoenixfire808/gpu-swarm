@@ -10,6 +10,7 @@ import json
 
 from gpu_swarm import ALLOWED_JOB_TYPES, MAX_RESULT_BYTES
 from gpu_swarm.gpu import inventory_summary, query_gpus
+from gpu_swarm.host_protect import clamp_cuda_matrix_size, evaluate_admission, load_host_protect
 from gpu_swarm.llm_runtime import ENABLE_LLM_HELP, chat_completions, detect_llm_runtime
 
 
@@ -29,13 +30,26 @@ def run_probe(payload: dict[str, Any] | None = None) -> dict[str, Any]:
 def run_pytorch_cuda_probe(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     """Small real CUDA tensor op when torch+CUDA available; else clear CPU fallback note."""
     payload = payload or {}
+    protect = load_host_protect()
     # Accept matrix_size (CLI/SDK) or size (portal Utilize panel)
     raw_size = payload.get("matrix_size", payload.get("size", 1024))
-    size = int(raw_size or 1024)
-    size = max(64, min(size, 4096))  # keep bounded
+    try:
+        size = int(raw_size or 1024)
+    except (TypeError, ValueError):
+        size = 1024
+    size = clamp_cuda_matrix_size(size, protect)
     device_index = payload.get("device_index")
     started = time.time()
     gpus = query_gpus()
+
+    # Refuse to peg the host GPU when desktop headroom is already gone.
+    admission = evaluate_admission(gpus, protect)
+    if protect.enabled and gpus and not admission.admit:
+        raise RuntimeError(
+            "host_protect blocked pytorch_cuda_probe: "
+            f"{admission.reason}. Wait for GPU util/VRAM headroom or set "
+            "GPU_SWARM_HOST_PROTECT=0 (not recommended on a desktop host)."
+        )
 
     try:
         import torch
@@ -67,6 +81,7 @@ def run_pytorch_cuda_probe(payload: dict[str, Any] | None = None) -> dict[str, A
             "nvidia_smi_gpus": gpus,
             "note": "CUDA not available to torch; ran CPU matmul",
             "torch_version": getattr(torch, "__version__", "unknown"),
+            "host_protect": protect.summary(),
         }
 
     # Prefer a free-enough GPU; allow caller override.
@@ -95,6 +110,7 @@ def run_pytorch_cuda_probe(payload: dict[str, Any] | None = None) -> dict[str, A
         "memory_allocated_bytes": mem,
         "nvidia_smi_gpus": gpus,
         "torch_version": getattr(torch, "__version__", "unknown"),
+        "host_protect": protect.summary(),
     }
 
 

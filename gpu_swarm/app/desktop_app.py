@@ -772,7 +772,8 @@ class WizardFrame(ctk.CTkFrame):
             "Only you control how much of your PC is offered. Change anytime on your machine or in "
             "your Contribute settings. Sliders save locally (joiner_settings.json / LOCALAPPDATA) and "
             "apply to your worker only — nobody else can remotely raise your caps. "
-            "0 VRAM/RAM/Disk = no extra soft cap (advertise detected free).",
+            "0 VRAM/RAM/Disk = no extra soft cap (advertise detected free). "
+            "Host GPU safety stays ON by default so the pool cannot freeze your desktop.",
         )
         gpus = be.get_gpus()
         host = be.detect_host_resources()
@@ -803,6 +804,17 @@ class WizardFrame(ctk.CTkFrame):
         self._slider_row(self.body, "Max CPU (%)", self.cpu_var, 5, 100, "Soft advertise cap → dedicated_cpu_cores")
         self._slider_row(self.body, "Max RAM (MiB)", self.ram_var, 0, total_ram, f"Host total {total_ram} MiB")
         self._slider_row(self.body, "Max Disk (GiB)", self.disk_var, 0, total_disk, f"Host total {total_disk} GiB")
+
+        self.host_protect_var = ctk.BooleanVar(value=bool(getattr(self.settings, "host_protect", True)))
+        ctk.CTkCheckBox(
+            self.body,
+            text=(
+                "Host GPU safety (recommended) — leave ~45% VRAM headroom, pause jobs when "
+                "GPU util ≥65% or free VRAM is low so Windows stays responsive"
+            ),
+            variable=self.host_protect_var,
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", pady=(12, 0))
 
     def _slider_row(
         self,
@@ -860,6 +872,11 @@ class WizardFrame(ctk.CTkFrame):
             (
                 f"Caps: VRAM {self.settings.max_vram_mb} MiB · CPU {self.settings.max_cpu_percent}% · "
                 f"RAM {self.settings.max_ram_mb} MiB · Disk {self.settings.max_disk_gb} GiB"
+            ),
+            (
+                "Host GPU safety: ON (desktop headroom)"
+                if getattr(self.settings, "host_protect", True)
+                else "Host GPU safety: OFF (desktop freeze risk)"
             ),
             "Mode: Utilize-first (no NVIDIA on this machine)" if no_gpu else "Mode: Contribute GPU/CPU",
         ]
@@ -1055,6 +1072,11 @@ class WizardFrame(ctk.CTkFrame):
                 self.settings.max_disk_gb = float(self.disk_var.get())
             except Exception:  # noqa: BLE001
                 pass
+        if getattr(self, "host_protect_var", None) is not None:
+            try:
+                self.settings.host_protect = bool(self.host_protect_var.get())
+            except Exception:  # noqa: BLE001
+                pass
         be.save_config(self.settings)
 
     def _clear_step_widgets(self) -> None:
@@ -1241,8 +1263,8 @@ class MainFrame(ctk.CTkFrame):
         ctk.CTkLabel(
             parent,
             text=(
-                "Three first-class modes. Contribute joins your GPU. Utilize runs jobs on the pool now. "
-                "Connect shows how to plug tools/code into the scheduler."
+                "Contribute joins your GPU. Utilize runs jobs on the pool. "
+                "Connect covers APIs + the agent Workspace VM (capped to your share)."
             ),
             text_color=MUTED,
             wraplength=980,
@@ -1251,7 +1273,7 @@ class MainFrame(ctk.CTkFrame):
 
         cards = ctk.CTkFrame(parent, fg_color="transparent")
         cards.pack(fill="both", expand=True)
-        cards.grid_columnconfigure((0, 1, 2), weight=1, uniform="modes")
+        cards.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="modes")
         cards.grid_rowconfigure(0, weight=1)
 
         specs = (
@@ -1272,9 +1294,16 @@ class MainFrame(ctk.CTkFrame):
             (
                 "connect",
                 "3 · Connect",
-                "Plug in from code / tools",
-                "Scheduler + portal URLs · Python GPUPool · CLI · Discord /pool · CONNECTING.md.",
+                "APIs + Workspace VM",
+                "Scheduler/portal URLs · local model endpoint · agent Ubuntu VM under your share caps.",
                 "Open Connect →",
+            ),
+            (
+                "connect",
+                "4 · Workspace",
+                "Open agent Ubuntu VM",
+                "Hermes/VirtualBox desktop · CPU/RAM from Contribute · GPU stays on host worker.",
+                "Open Workspace →",
             ),
         )
         for col, (key, title, subtitle, body, cta) in enumerate(specs):
@@ -1831,7 +1860,8 @@ class MainFrame(ctk.CTkFrame):
             inner,
             text=(
                 "Only you control how much of your PC is offered. Change anytime on your machine "
-                "or in your Contribute settings. Saves to local joiner settings for this worker only."
+                "or in your Contribute settings. Saves to local joiner settings for this worker only. "
+                "Host GPU safety (default ON) still clamps offer + pauses jobs so the desktop cannot freeze."
             ),
             text_color=MUTED,
             wraplength=900,
@@ -1853,6 +1883,15 @@ class MainFrame(ctk.CTkFrame):
         self._cap_slider(inner, "Max CPU %", self.cpu_var, 5, 100)
         self._cap_slider(inner, "Max RAM MiB", self.ram_var, 0, total_ram)
         self._cap_slider(inner, "Max Disk GiB", self.disk_var, 0, total_disk)
+        self.host_protect_var = ctk.BooleanVar(value=bool(getattr(self.settings, "host_protect", True)))
+        ctk.CTkCheckBox(
+            inner,
+            text=(
+                "Host GPU safety (recommended) — ~55% VRAM offer ceiling, pause at ≥65% util / low free VRAM"
+            ),
+            variable=self.host_protect_var,
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", pady=(10, 0))
         ctk.CTkButton(inner, text="Save caps & identity", fg_color="#2A3544", command=self._save_settings).pack(
             anchor="e", pady=(8, 0)
         )
@@ -1929,15 +1968,18 @@ class MainFrame(ctk.CTkFrame):
         s.max_cpu_percent = float(self.cpu_var.get())
         s.max_ram_mb = int(self.ram_var.get())
         s.max_disk_gb = float(self.disk_var.get())
+        if getattr(self, "host_protect_var", None) is not None:
+            s.host_protect = bool(self.host_protect_var.get())
         return s
 
     def _save_settings(self) -> None:
         self.settings = self._collect()
         be.save_config(self.settings)
+        hp = "ON" if getattr(self.settings, "host_protect", True) else "OFF"
         self.action_lbl.configure(
             text=(
                 "Saved your offer caps locally (this worker only). "
-                "Only you control how much of your PC is offered."
+                f"Host GPU safety {hp}. Only you control how much of your PC is offered."
             ),
             text_color=OK_GREEN,
         )

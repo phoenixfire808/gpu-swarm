@@ -46,10 +46,15 @@ class JoinerSettings:
     portal_url: str = DEFAULT_LOCAL_PORTAL_URL
     wizard_completed: bool = False
     agent_vms_path: str = str(AGENT_VMS_DEFAULT)
+    # Host GPU safety ceiling — leave desktop headroom (default ON).
+    host_protect: bool = True
 
     def __post_init__(self) -> None:
         if not self.worker_name:
             self.worker_name = f"{socket.gethostname()}-gpu"
+        # Coerce older joiner_settings.json that omit the field.
+        if self.host_protect is None:  # type: ignore[comparison-overlap]
+            self.host_protect = True
 
 
 def load_settings() -> JoinerSettings:
@@ -66,6 +71,11 @@ def load_settings() -> JoinerSettings:
     for key in data:
         if key in raw:
             data[key] = raw[key]
+    # Durable default ON even if an old file explicitly stored null.
+    if "host_protect" not in raw or raw.get("host_protect") is None:
+        data["host_protect"] = True
+    else:
+        data["host_protect"] = bool(raw.get("host_protect"))
     return JoinerSettings(**data)
 
 

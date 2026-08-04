@@ -17,6 +17,11 @@ from gpu_swarm import MAX_RESULT_BYTES
 from gpu_swarm.config import WorkerConfig, worker_config
 from gpu_swarm.gpu import inventory_summary
 from gpu_swarm.host import query_host
+from gpu_swarm.host_protect import (
+    apply_offer_caps,
+    evaluate_admission,
+    load_host_protect,
+)
 from gpu_swarm.jobs import execute_job
 from gpu_swarm.llm_runtime import detect_llm_runtime
 from gpu_swarm.paths import ROOT
@@ -39,6 +44,8 @@ class Worker:
         self.worker_id = self._load_or_create_id()
         self._stop = False
         self._client = httpx.Client(base_url=cfg.scheduler_url.rstrip("/"), timeout=30.0)
+        self._host_protect = load_host_protect(enabled_override=bool(cfg.host_protect))
+        self._last_protect_log = 0.0
 
     def _load_or_create_id(self) -> str:
         state_file = _worker_id_path()
@@ -69,9 +76,17 @@ class Worker:
         inv = inventory_summary()
         host = query_host()
 
-        free_vram = inv["free_vram_mb"]
-        if self.cfg.max_vram_mb > 0:
-            free_vram = min(free_vram, self.cfg.max_vram_mb)
+        # Soft caps + durable host-protect ceiling (desktop headroom).
+        offered = apply_offer_caps(
+            total_vram_mb=int(inv["total_vram_mb"] or 0),
+            free_vram_mb=int(inv["free_vram_mb"] or 0),
+            max_vram_mb=int(self.cfg.max_vram_mb or 0),
+            max_cpu_percent=float(self.cfg.max_cpu_percent or 50.0),
+            cfg=self._host_protect,
+        )
+        free_vram = int(offered["free_vram_mb"])
+        max_vram = int(offered["max_vram_mb"])
+        max_cpu = float(offered["max_cpu_percent"])
 
         ram_available = host["ram_available_mb"]
         if self.cfg.max_ram_mb > 0:
@@ -85,10 +100,15 @@ class Worker:
         dedicated_ram = int(self.cfg.max_ram_mb or 0)
         dedicated_disk = int(self.cfg.max_disk_mb or 0)
         dedicated_cpu = float(self.cfg.dedicated_cpu_cores or 0.0)
-        if dedicated_cpu <= 0 and host["cpu_cores"] > 0 and self.cfg.max_cpu_percent > 0:
-            dedicated_cpu = round(host["cpu_cores"] * (self.cfg.max_cpu_percent / 100.0), 2)
+        if dedicated_cpu <= 0 and host["cpu_cores"] > 0 and max_cpu > 0:
+            dedicated_cpu = round(host["cpu_cores"] * (max_cpu / 100.0), 2)
 
         gpu_available = bool(inv.get("gpu_available", inv["gpu_count"] > 0))
+        admission = evaluate_admission(
+            inv["gpus"],
+            self._host_protect,
+            vram_ceiling_mb=int(offered.get("vram_ceiling_mb") or 0),
+        )
         llm = detect_llm_runtime(timeout=1.0)
         return {
             "gpus": inv["gpus"],
@@ -97,9 +117,9 @@ class Worker:
             "has_gpu": gpu_available,
             "gpu_available": gpu_available,
             "mode": inv.get("mode") or ("gpu" if gpu_available else "cpu-only"),
-            "max_vram_mb": self.cfg.max_vram_mb,
+            "max_vram_mb": max_vram,
             "cpu_cores": host["cpu_cores"],
-            "max_cpu_percent": self.cfg.max_cpu_percent,
+            "max_cpu_percent": max_cpu,
             "ram_total_mb": host["ram_total_mb"],
             "ram_available_mb": ram_available,
             "max_ram_mb": self.cfg.max_ram_mb,
@@ -114,6 +134,10 @@ class Worker:
             "llm_ready": bool(llm.get("ready")),
             "llm_kind": llm.get("kind"),
             "llm_models": list(llm.get("models") or [])[:32],
+            "host_protect": offered.get("host_protect") or self._host_protect.summary(),
+            "host_protect_admit": bool(admission.admit),
+            "host_protect_reason": admission.reason,
+            "vram_ceiling_mb": int(offered.get("vram_ceiling_mb") or 0),
         }
 
     def register(self) -> dict[str, Any]:
@@ -140,6 +164,7 @@ class Worker:
             "dedicated_disk_mb": caps["dedicated_disk_mb"],
             "dedicated_cpu_cores": caps["dedicated_cpu_cores"],
             "contributor_name": caps["contributor_name"],
+            "llm_ready": bool(caps.get("llm_ready")),
         }
         r = self._client.post("/workers/register", json=body)
         r.raise_for_status()
@@ -167,6 +192,7 @@ class Worker:
                 "dedicated_disk_mb": caps["dedicated_disk_mb"],
                 "dedicated_cpu_cores": caps["dedicated_cpu_cores"],
                 "contributor_name": caps["contributor_name"],
+                "llm_ready": bool(caps.get("llm_ready")),
                 "status": status,
             },
         )
@@ -174,6 +200,17 @@ class Worker:
 
     def lease(self) -> dict[str, Any] | None:
         caps = self._caps()
+        # Pause admission when live GPU util / free VRAM would freeze the desktop.
+        if not caps.get("host_protect_admit", True):
+            now = time.time()
+            if now - self._last_protect_log >= 30.0:
+                print(
+                    f"[worker] host_protect PAUSE lease — {caps.get('host_protect_reason')} "
+                    f"(util/free checked via nvidia-smi; desktop headroom)",
+                    flush=True,
+                )
+                self._last_protect_log = now
+            return None
         r = self._client.post(
             "/jobs/lease",
             json={
@@ -234,7 +271,9 @@ class Worker:
         )
         print(
             f"[worker] free_vram={caps['free_vram_mb']} MiB / "
-            f"total={caps['total_vram_mb']} MiB",
+            f"total={caps['total_vram_mb']} MiB "
+            f"(offer max_vram={caps['max_vram_mb']} "
+            f"ceiling={caps.get('vram_ceiling_mb', 0)})",
             flush=True,
         )
         print(
@@ -244,6 +283,22 @@ class Worker:
             f"disk_free={caps['disk_free_mb']} MiB  (Ctrl+C to stop)",
             flush=True,
         )
+        hp = caps.get("host_protect") or {}
+        if hp.get("enabled", True):
+            print(
+                "[worker] host_protect=ON — desktop safety ceiling "
+                f"(VRAM≤{float(hp.get('max_vram_fraction', 0.55)) * 100:.0f}% total, "
+                f"pause util≥{hp.get('pause_gpu_util_pct')}%, "
+                f"min free {hp.get('min_free_vram_mb')} MiB). "
+                "Raise caps ok; disable only if you accept desktop freeze risk "
+                "(GPU_SWARM_HOST_PROTECT=0).",
+                flush=True,
+            )
+        else:
+            print(
+                "[worker] host_protect=OFF — no desktop GPU safety ceiling",
+                flush=True,
+            )
         if caps.get("llm_ready"):
             models = caps.get("llm_models") or []
             preview = ", ".join(models[:5]) if models else "(models unknown)"
@@ -309,6 +364,8 @@ def run_worker(args: argparse.Namespace | None = None) -> int:
             cfg.max_disk_mb = args.max_disk_mb
         if getattr(args, "max_cpu_percent", None) is not None:
             cfg.max_cpu_percent = args.max_cpu_percent
+        if getattr(args, "host_protect", None) is not None:
+            cfg.host_protect = bool(args.host_protect)
         if args.discord_user:
             cfg.discord_user = args.discord_user
     Worker(cfg).run_forever()

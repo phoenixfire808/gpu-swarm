@@ -81,6 +81,8 @@ If login suddenly fails after it worked before, ask Drew whether the invite was 
 
 **Personal offer control:** Only you control how much of your PC is offered. Change anytime on your machine or in Contribute settings. Nobody else can remotely raise your caps.
 
+**Host GPU safety:** Default ON — the worker will not peg your GPU hard enough to freeze Windows. You can raise caps; the safety ceiling still leaves desktop headroom. Details: [`CONNECTING.md`](CONNECTING.md).
+
 ---
 
 ## 4) Exact login form fields

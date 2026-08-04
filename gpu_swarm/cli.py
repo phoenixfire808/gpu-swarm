@@ -193,6 +193,13 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--max-ram-mb", type=int, default=None)
     w.add_argument("--max-disk-mb", type=int, default=None)
     w.add_argument("--max-cpu-percent", type=float, default=None)
+    w.add_argument(
+        "--host-protect",
+        dest="host_protect",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Desktop GPU safety ceiling (default ON). --no-host-protect disables.",
+    )
     w.add_argument("--discord-user", default=None)
     w.add_argument("--start-token", default=None, help="Portal start token")
     w.add_argument("--portal-url", default=None, help="Portal base URL for token redeem")
