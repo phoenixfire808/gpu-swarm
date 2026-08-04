@@ -9,6 +9,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 
 ### Added
 
+- **`START_HERE.md`** — 5-minute friend path + paste-ready Discord growth blurb.
+- **Portal newcomer UX** — clearer hero/login; three huge post-login actions (Share / Use / Invite); How it works (3 steps); Chat/Suggest demoted to secondary nav; mobile-friendly action buttons.
 - **Share / Invite others** — `gpu_swarm/share_invite.py`; portal Hub **Invite others** view + desktop **4 · Invite others** with one-click copy (friend message, full blurb, portal URL, invite code, GitHub download). Primary actions: Join / Share my PC / Use the pool / Invite others.
 - **Automated friend prereqs** — `scripts/install-prereqs.ps1` (+ `.cmd`): detect-or-install **Tailscale**, **VirtualBox** (+ Extension Pack best-effort), **Vagrant**; verbose step labels; skips if present; optional `GPU_SWARM_TAILSCALE_AUTHKEY` / `TS_AUTHKEY` (never committed); UAC + Tailscale login remain one clear click.
 - **Wizard step Network & Workspace** — Detect / Install & connect / Tailscale-only; wired via `app_backend.install_prereqs`.
@@ -37,9 +39,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 
 ### Changed
 
+- Welcome / invite blurbs emphasize automatic install + **Invite friends** growth (“add your machine, grow the pool”).
 - Packaging spec bundles `scripts/install-prereqs.*`, joiner/check prereq scripts, and `SHARED_AGENT_DEV.md` for next EXE.
 - `check_prereqs.ps1` reports Tailscale / VirtualBox / Vagrant (optional for share path).
-- Docs: `LOGIN.md`, `DOWNLOAD.md`, `NO_GPU_LAPTOP.md` (was `FRIEND_LAPTOP.md`), `ROADMAP.md` for automated join + shared agent-dev; honest v0.1.0 EXE staleness vs tip.
+- Docs: `START_HERE.md`, `LOGIN.md`, `DOWNLOAD.md`, `NO_GPU_LAPTOP.md` (was `FRIEND_LAPTOP.md`), `ROADMAP.md` for automated join + shared agent-dev; v0.1.1 EXE links.
 - **Personal-name scrub** — friend-facing copy uses host / friend / pool member / pool admin; removed sample friend display names and personal laptop anecdotes.
 - `install_joiner_deps.ps1` / `build_exe.ps1` print numbered human steps instead of quiet pip.
 
@@ -57,5 +60,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 - Jobs: `probe`, `pytorch_cuda_probe`.
 - Tailscale/LAN private pool messaging and Contribute/Utilize portal cards.
 
-[Unreleased]: https://github.com/phoenixfire808/gpu-swarm/compare/v0.1.0...HEAD
+## [0.1.1] — 2026-08-04
+
+### Added
+- Windows EXE release with Network Hub, Invite friends, host_protect, Workspace bridge, verbose install, Tk UI fix.
+- `START_HERE.md` + punchy Discord growth blurbs; portal newcomer UX (three huge actions).
+
+[Unreleased]: https://github.com/phoenixfire808/gpu-swarm/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.0

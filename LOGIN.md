@@ -86,9 +86,11 @@ If login suddenly fails after it worked before, ask the host whether the invite 
 
 **Common mistake:** opening `http://100.85.165.84` without **`:8767`** and `/portal` — that will not load the portal.
 
-### Path C — Windows desktop app (source tip ready; EXE v0.1.1 pending)
+### Path C — Windows desktop app / EXE (recommended)
 
-**Ready today from source:**
+**Easiest:** download the EXE — https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
+
+**Or from source:**
 
 ```bat
 cd C:\Users\Drew\Projects\gpu-swarm
@@ -96,15 +98,14 @@ scripts\install-prereqs.cmd
 start-gpu-pool-app.cmd
 ```
 
-Published EXE: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
-(see [`DOWNLOAD.md`](DOWNLOAD.md) — **v0.1.0 is stale**; prefer source until **v0.1.1+**).
+**5-minute overview:** [`START_HERE.md`](START_HERE.md) · details: [`DOWNLOAD.md`](DOWNLOAD.md).
 
-1. Run app / EXE. SmartScreen on unsigned EXE → **More info** → **Run anyway** (only if you trust this repo’s release).
-2. Wizard: **Network & Workspace** → Detect / Install & connect (Tailscale; optional VirtualBox+Vagrant for Workspace).
+1. Run EXE / app. SmartScreen on unsigned EXE → **More info** → **Run anyway** (only if you trust this repo’s release).
+2. **We’ll install what you need** — wizard installs Python runtime/deps automatically; Tailscale and VirtualBox+Vagrant only if you use those steps (already-installed tools are skipped). Progress stays on screen.
 3. Prefer the **public pool-api / portal** URL a pool member shared when the tunnel is up; else Tailscale.
 4. Enter invite **`glitch-factor`** + your Discord display name.
 5. Set **your** resource caps (VRAM can be **0** if you have no NVIDIA GPU) → **Save + Join**.
-6. Home → **Contribute** or **Utilize**. Optional: Workspace / Connect local model.
+6. Home → **Share my PC** · **Use the pool** · **Invite friends** (copy Discord blurb to grow the pool). Optional: Workspace / Connect local model.
 
 Shared agent-dev steps: [`SHARED_AGENT_DEV.md`](SHARED_AGENT_DEV.md).
 
@@ -200,20 +201,22 @@ Stable private fallback for friends already on Tailscale:
 
 ## Paste-ready Discord blurb
 
-Copy everything inside the fence into Discord:
+Copy everything inside the fence into Discord — **ask friends to join so the pool grows**:
 
 ```text
-**GPU Pool — join in under 30 seconds**
-Private co-op: Share my PC · Use the pool · Invite others.
-Full guide: https://github.com/phoenixfire808/gpu-swarm/blob/master/LOGIN.md
-Download: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
+**GPU Pool** — add your machine, grow the pool, everyone gets more compute.
 
-1) Invite **glitch-factor** + your Discord display name (from a pool member — not public signup)
+Download: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
+Start in 5 min: https://github.com/phoenixfire808/gpu-swarm/blob/master/START_HERE.md
+Full guide: https://github.com/phoenixfire808/gpu-swarm/blob/master/LOGIN.md
+
+1) Invite **glitch-factor** + your Discord display name
 2) Open the portal (pick one):
    • Public HTTPS (no Tailscale) — ask the host for the **current** link
    • Tailscale: http://100.85.165.84:8767/portal
    • Or EXE (SmartScreen → More info → Run anyway if you trust the GitHub release)
-3) Home → **Use the pool** (no NVIDIA needed) or **Share my PC** (VRAM=0 OK) or **Invite others** (copy blurb)
+3) Home → **Share my PC** · **Use the pool** · **Invite friends** (paste this again!)
 
-Pool password is optional (only if a pool admin shares it). Never share .env / bot tokens.
+No NVIDIA? Still join — Use the pool or Share CPU (VRAM=0).
+Never share .env / bot tokens.
 ```

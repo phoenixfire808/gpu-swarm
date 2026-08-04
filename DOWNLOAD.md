@@ -1,22 +1,22 @@
 # Download GPU Pool (Windows EXE)
 
-Get the Windows desktop joiner from GitHub Releases — no Python install required for the common path.
+**Start in 5 minutes:** [`START_HERE.md`](START_HERE.md) · **Login walkthrough:** [`LOGIN.md`](LOGIN.md)
 
-**How to log in (invite, portal URLs, troubleshooting):** [`LOGIN.md`](LOGIN.md)
+Get the Windows desktop joiner from GitHub Releases — **no Python install required**. The wizard installs what you need automatically (progress stays on screen).
 
 **Repo:** https://github.com/phoenixfire808/gpu-swarm  
 **Releases:** https://github.com/phoenixfire808/gpu-swarm/releases  
 
-### What GPU Pool is for
+### What GPU Pool is for (why join)
 
-A **private co-op** for friends on your network — share spare GPU/CPU, run allowlisted jobs, chat on the Network Hub, suggest improvements, and invite others. Not a public marketplace. Not Docker.
+A **private co-op** for friends — share spare GPU/CPU, run jobs on whoever is online, chat, suggest improvements, and **invite friends so everyone gets more compute**. Not a public marketplace. Not Docker.
 
 | Mode | What it does | Who it’s for |
 |------|--------------|--------------|
 | **Join** | Sign in with invite + display name | Everyone |
 | **Share my PC** | Contribute spare GPU/CPU with **your** caps; host GPU safety ON by default | Anyone with spare compute (VRAM=0 = CPU-only) |
 | **Use the pool** | Utilize jobs on online workers | Everyone — **no NVIDIA required** on your laptop |
-| **Invite others** | Copy portal URL + invite blurb + GitHub download | Anyone who wants to grow the pool |
+| **Invite friends** | Copy portal URL + invite blurb + GitHub download → paste in Discord | **Everyone — grow the network** |
 | **Connect / Workspace** | URLs, local model endpoint, optional Linux VM | Coders / power users — **CPU/RAM only** in VMs |
 | **Chat / Suggest** | Pool chat + improvement inbox | Everyone (web Network Hub) |
 
@@ -24,13 +24,11 @@ A **private co-op** for friends on your network — share spare GPU/CPU, run all
 
 | | URL |
 |--|-----|
-| **Latest EXE** | https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe |
-| **v0.1.0 (pinned)** | https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe |
+| **Latest EXE (v0.1.1+)** | https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe |
+| **v0.1.1 (pinned)** | https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.1/GPUPool.exe |
 | **Release page** | https://github.com/phoenixfire808/gpu-swarm/releases |
 
-Asset name: **`GPUPool.exe`** (~29 MB onefile).
-
-> **Ship note (honest):** Published **v0.1.0** is older than current `master` (missing host_protect, Workspace bridge, Network Hub/chat in the frozen EXE). Prefer **from source** (`start-gpu-pool-app.cmd`) until the host publishes **v0.1.1+**. Source on GitHub tip already has hub / chat / workspace / host_protect.
+Asset name: **`GPUPool.exe`** (~29 MB onefile). Includes hub, Invite friends, host_protect, Workspace bridge, verbose install, Tk UI fix.
 
 ---
 
@@ -102,19 +100,24 @@ Paste-ready Discord blurb (includes no-GPU path): [`DISCORD_MEMBER_QUICKSTART.md
 
 ---
 
-## Install & join (EXE)
+## Getting started (EXE) — automatic install
 
-1. Open [Releases](https://github.com/phoenixfire808/gpu-swarm/releases) → download the Windows EXE from the latest release.
-2. Run the EXE. Windows SmartScreen may warn on **unsigned** builds → **More info** → **Run anyway** if you trust this repo’s release.
-3. Prefer the **public portal / pool-api** URLs a pool member shared. Tailscale is optional.
-4. In the wizard:
-   - **Welcome** — Join / Share my PC / Use the pool / Invite others (under 30 seconds).
-   - **Python & Deps** — progress bar + live log. Click **Bootstrap portable Python** if needed (isolated under `%LOCALAPPDATA%\GPUPool\`). GPUPool.exe also bootstraps in the background on first run when needed.
-   - Scheduler defaults: public `/pool-api` when available, else Tailscale host (`100.85.165.84`).
-   - Sign in with invite code **`glitch-factor`** + your Discord display name.
-   - Set caps for GPU VRAM, CPU, RAM, and disk (**VRAM=0** is fine for CPU-only). **Host GPU safety** stays ON by default so Windows doesn’t freeze.
-   - **Save + Join** so the worker heartbeats into the pool.
-5. In Discord (**Glitch Factor**): `/pool` and `/workers` — your machine should appear.
+1. Download **[GPUPool.exe](https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe)** (or open [Releases](https://github.com/phoenixfire808/gpu-swarm/releases)).
+2. Run it. Windows SmartScreen may warn on **unsigned** builds → **More info** → **Run anyway** if you trust this repo’s release.
+3. **Sit back** — we’ll install what you need:
+   - Portable Python + deps under `%LOCALAPPDATA%\GPUPool\` (isolated; never your global Python)
+   - Optional: Tailscale (private network) and VirtualBox + Vagrant (Workspace) — already-installed tools are skipped
+   - Live step labels + percent / package names stay on screen
+4. Prefer the **public portal / pool-api** URL a pool member shared. Tailscale is optional.
+5. Wizard path:
+   - **Welcome** — plain-language overview; three big destinations after join
+   - **Network & Workspace** — Detect / Install & connect (optional tools)
+   - **Python & Deps** — Bootstrap if needed (progress bar + live log)
+   - Invite **`glitch-factor`** + Discord display name
+   - Caps for GPU VRAM, CPU, RAM, disk (**VRAM=0** = CPU-only). **Host GPU safety** ON by default
+   - **Save + Join**
+6. Home → **Share my PC** · **Use the pool** · **Invite friends** (grow the network — paste Discord blurb)
+7. In Discord (**Glitch Factor**): `/pool` and `/workers` — your machine should appear when contributing
 
 Leave anytime from the app (**Leave**) or by quitting the EXE.
 

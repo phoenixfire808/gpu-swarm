@@ -4,13 +4,23 @@ Members of a **private Discord** (and friends on Tailscale) plug home PCs into a
 
 This is a co-op pool — **not** a public marketplace. **No Docker.**
 
-**Friends: how to log in → [`LOGIN.md`](LOGIN.md)** (what it’s for, invite code, public / Tailscale / EXE paths).  
-**Download / install progress → [`DOWNLOAD.md`](DOWNLOAD.md)** (verbose steps, SmartScreen, no-NVIDIA path).  
+**Start in 5 minutes → [`START_HERE.md`](START_HERE.md)**  
+**Friends: how to log in → [`LOGIN.md`](LOGIN.md)** (invite, public / Tailscale / EXE).  
+**Download / automatic install → [`DOWNLOAD.md`](DOWNLOAD.md)** (SmartScreen, verbose progress, no-NVIDIA path).  
 **Ready-to-go shared agent space → [`SHARED_AGENT_DEV.md`](SHARED_AGENT_DEV.md)** · prereqs: `scripts\install-prereqs.cmd`.
+
+## Start in 5 minutes
+
+1. Download https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
+   — or open the host’s current public portal (`…trycloudflare.com/portal`)  
+2. Invite **`glitch-factor`** + your Discord display name  
+3. Home → **Share my PC** · **Use the pool** · **Invite friends** (grow the network)
+
+Paste-ready Discord blurb: [`START_HERE.md`](START_HERE.md) · [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).
 
 ## Product vision (v1)
 
-**Browser-first:** anyone the host invites can log into a web portal, register a machine, set resource caps, keep a worker online, and **Invite others** with a copyable blurb so the pool grows dynamically.
+**Browser-first + one-click EXE:** anyone the host invites can log into a clear web portal (or run `GPUPool.exe`), register a machine, set resource caps, keep a worker online, and **Invite friends** with a copyable Discord blurb so the pool grows.
 
 | Resource | What v1 actually does |
 |----------|------------------------|
@@ -36,7 +46,7 @@ Product one-pager: [`VISION.md`](VISION.md).
 Living plan: [`ROADMAP.md`](ROADMAP.md) · [`TODO.md`](TODO.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`DESIGN.md`](DESIGN.md) · [`CURRENT_PROGRESS.md`](CURRENT_PROGRESS.md).  
 **Download GPU Pool for Windows:**  
 https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
-([v0.1.0](https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe) · publish **v0.1.1+** for hub/workspace/host_protect · [`DOWNLOAD.md`](DOWNLOAD.md) · [`RELEASE.md`](RELEASE.md))  
+([v0.1.1](https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.1/GPUPool.exe) · hub / Invite friends / workspace / host_protect · [`DOWNLOAD.md`](DOWNLOAD.md) · [`RELEASE.md`](RELEASE.md))  
 
 **Login (friends):** [`LOGIN.md`](LOGIN.md).  
 Connect paths (Contribute / Utilize / code): [`CONNECTING.md`](CONNECTING.md).  

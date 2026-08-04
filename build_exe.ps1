@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Build GPUPool.exe (Windows onefile) with PyInstaller.
@@ -44,23 +44,23 @@ Write-Progress -Activity "GPU Pool EXE build" -Status "Checking Python / PyInsta
 if (-not $SkipInstallCheck) {
     & $Python -c "import PyInstaller" 2>$null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "[2/5] Installing PyInstaller (missing)…" -ForegroundColor Yellow
+        Write-Host "[2/5] Installing PyInstaller (missing)..." -ForegroundColor Yellow
         & $Python -m pip install --user "pyinstaller>=6.0" --progress-bar on
         if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller failed" }
     } else {
-        Write-Host "[2/5] PyInstaller already installed — skipping." -ForegroundColor Green
+        Write-Host "[2/5] PyInstaller already installed - skipping." -ForegroundColor Green
     }
     # Ensure app deps used by Analysis are importable (avoid reinstall if present).
     & $Python -c "import customtkinter, httpx, psutil, pydantic, dotenv, fastapi, uvicorn, aiosqlite" 2>$null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "[3/5] Installing requirements-app.txt (missing joiner deps)…" -ForegroundColor Yellow
+        Write-Host "[3/5] Installing requirements-app.txt (missing joiner deps)..." -ForegroundColor Yellow
         & $Python -m pip install --user -r (Join-Path $RepoRoot "requirements-app.txt") --progress-bar on
         if ($LASTEXITCODE -ne 0) { throw "pip install requirements-app failed" }
     } else {
-        Write-Host "[3/5] Joiner deps importable — skipping pip." -ForegroundColor Green
+        Write-Host "[3/5] Joiner deps importable - skipping pip." -ForegroundColor Green
     }
 } else {
-    Write-Host "[2/5]+[3/5] SkipInstallCheck — not installing deps." -ForegroundColor DarkGray
+    Write-Host "[2/5]+[3/5] SkipInstallCheck - not installing deps." -ForegroundColor DarkGray
 }
 
 if ($Clean) {
@@ -76,8 +76,8 @@ if ($Clean) {
 $spec = Join-Path $RepoRoot "gpu_pool.spec"
 if (-not (Test-Path $spec)) { throw "Missing gpu_pool.spec" }
 
-Write-Host "[4/5] Running PyInstaller (onefile windowed GPUPool.exe)…" -ForegroundColor Yellow
-Write-Host "     This can take several minutes — leave the window open." -ForegroundColor DarkGray
+Write-Host "[4/5] Running PyInstaller (onefile windowed GPUPool.exe)..." -ForegroundColor Yellow
+Write-Host "     This can take several minutes - leave the window open." -ForegroundColor DarkGray
 Write-Progress -Activity "GPU Pool EXE build" -Status "PyInstaller packing GPUPool.exe" -PercentComplete 55
 & $Python -m PyInstaller --noconfirm --clean $spec
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed (exit $LASTEXITCODE)" }

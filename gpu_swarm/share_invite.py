@@ -56,24 +56,32 @@ def build_share_pack() -> dict[str, Any]:
     public_on = bool(portal_public)
 
     short = (
-        f"Join our GPU Pool — share spare GPU/CPU or run jobs on whoever is online.\n"
+        f"**GPU Pool** — add your machine, grow the pool, everyone gets more compute.\n"
         f"1) Open: {portal_best}\n"
-        f"2) Invite code: {PORTAL_INVITE_CODE} + your Discord display name\n"
-        f"3) Or download Windows app: {GITHUB_DOWNLOAD_URL}\n"
-        f"Guide: {LOGIN_DOC_URL}"
+        f"2) Invite `{PORTAL_INVITE_CODE}` + your Discord name\n"
+        f"3) Or Windows app: {GITHUB_DOWNLOAD_URL}\n"
+        f"Then: Share my PC · Use the pool · Invite friends\n"
+        f"Start here: {GITHUB_REPO_URL}/blob/master/START_HERE.md"
     )
 
     lines = [
-        "**GPU Pool** — share spare GPU/CPU, run jobs, chat, invite others",
+        "**GPU Pool** — private co-op compute for our Discord",
+        "Share spare GPU/CPU · run jobs on friends' PCs · chat · invite others",
         "",
         f"Portal: {portal_best}",
-        f"Invite code: {PORTAL_INVITE_CODE}  (+ your Discord display name)",
-        f"Windows download: {GITHUB_DOWNLOAD_URL}",
+        f"Invite code: `{PORTAL_INVITE_CODE}`  (+ your Discord display name)",
+        f"Windows download (one click): {GITHUB_DOWNLOAD_URL}",
+        f"Start in 5 minutes: {GITHUB_REPO_URL}/blob/master/START_HERE.md",
+        f"Full guide: {LOGIN_DOC_URL}",
         f"Repo: {GITHUB_REPO_URL}",
-        f"Login guide: {LOGIN_DOC_URL}",
         "",
-        "No NVIDIA? Still join — Utilize the pool or Contribute CPU (VRAM=0).",
-        "Private co-op — invite required. Not a public marketplace. No Docker.",
+        "After join, pick one:",
+        "• **Share my PC** — offer spare GPU/CPU (caps you control; safety ON)",
+        "• **Use the pool** — run jobs (no NVIDIA needed on your laptop)",
+        "• **Invite friends** — paste this blurb so the network grows",
+        "",
+        "No NVIDIA? Still join — Use the pool or Share CPU only (VRAM=0).",
+        "Private invite — not a public marketplace. No Docker.",
     ]
     if public_on:
         lines.insert(3, "(Public HTTPS — no Tailscale needed while this link works)")
@@ -109,17 +117,19 @@ def build_share_pack() -> dict[str, Any]:
         "short_message": short,
         "invite_blurb": "\n".join(lines),
         "send_to_friend": (
-            "Hey — join our GPU Pool. Open the portal, use invite "
-            f"**{PORTAL_INVITE_CODE}** with your Discord name, or grab the Windows app.\n\n"
-            f"Portal: {portal_best}\n"
-            f"Download: {GITHUB_DOWNLOAD_URL}\n"
+            "Hey — join our **GPU Pool**. Add your machine (or just use the pool) so "
+            "everyone gets more shared compute.\n\n"
+            f"1) Open: {portal_best}\n"
+            f"2) Invite **{PORTAL_INVITE_CODE}** + your Discord name\n"
+            f"3) Or download: {GITHUB_DOWNLOAD_URL}\n"
+            "4) Home → **Share my PC** / **Use the pool** / **Invite friends**\n\n"
+            f"5-min start: {GITHUB_REPO_URL}/blob/master/START_HERE.md\n"
             f"Guide: {LOGIN_DOC_URL}"
         ),
         "primary_actions": [
-            "Join — open portal or app, sign in with invite + display name",
-            "Share my PC — Contribute with your caps (host GPU safety ON by default)",
-            "Use the pool — Utilize jobs (no NVIDIA needed on your machine)",
-            "Invite others — copy the Share blurb and send it to a friend",
+            "Share my PC — offer spare GPU/CPU (you set the caps; safety ON)",
+            "Use the pool — run jobs on online friends (no NVIDIA needed)",
+            "Invite friends — copy the blurb and grow the network",
         ],
     }
 

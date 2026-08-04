@@ -257,33 +257,104 @@
     border-bottom-color: var(--copper);
   }
 
-  /* —— Mode destinations (interactive, not decorative cards) —— */
-  .mode-rail {
+  /* —— Big primary actions (post-login home) —— */
+  .action-hero {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 0.5rem;
-    margin: 0.5rem 0 1.5rem;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin: 0.75rem 0 1.5rem;
   }
-  .mode-rail button {
+  @media (max-width: 860px) {
+    .action-hero { grid-template-columns: 1fr; }
+  }
+  .action-hero button {
     text-align: left;
-    background: transparent;
+    background: rgba(18, 21, 26, 0.55);
     color: var(--ink);
     border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 0.85rem 0.9rem;
-    transition: border-color 0.18s ease, color 0.18s ease;
+    border-radius: 6px;
+    padding: 1.15rem 1.1rem 1.05rem;
+    min-height: 7.5rem;
+    transition: border-color 0.18s ease, transform 0.18s ease;
   }
-  .mode-rail button:hover { border-color: var(--copper); color: var(--copper); }
-  .mode-rail .k {
+  .action-hero button:hover {
+    border-color: var(--copper);
+    transform: translateY(-1px);
+  }
+  .action-hero button.primary-share {
+    border-color: rgba(212,146,74,0.55);
+    background: linear-gradient(165deg, rgba(212,146,74,0.14), rgba(18,21,26,0.4));
+  }
+  .action-hero .k {
     display: block;
     font-family: var(--mono);
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--steel);
+    margin-bottom: 0.35rem;
+  }
+  .action-hero .t {
+    display: block;
+    font-family: var(--display);
+    font-size: clamp(1.25rem, 3vw, 1.55rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.4rem;
+  }
+  .action-hero .h {
+    display: block;
+    color: var(--muted);
+    font-size: 0.92rem;
+    font-weight: 400;
+    line-height: 1.4;
+  }
+  .how-steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin: 0.5rem 0 1.25rem;
+    padding: 0;
+    list-style: none;
+  }
+  @media (max-width: 720px) { .how-steps { grid-template-columns: 1fr; } }
+  .how-steps li {
+    border-top: 1px solid var(--line);
+    padding: 0.75rem 0 0.25rem;
+  }
+  .how-steps .n {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--copper);
+    letter-spacing: 0.06em;
+    display: block;
     margin-bottom: 0.25rem;
   }
-  .mode-rail .t { font-family: var(--display); font-size: 1.05rem; font-weight: 600; }
+  .how-steps .t {
+    font-family: var(--display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.2rem;
+  }
+  .how-steps .d { color: var(--muted); font-size: 0.9rem; line-height: 1.4; }
+  .more-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: 0.25rem 0 1.5rem;
+  }
+  .more-links button {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    font-weight: 500;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.75rem;
+  }
+  .more-links button:hover { color: var(--ink); border-color: var(--steel); }
+  .nav-secondary { opacity: 0.85; }
+  .nav-secondary button { font-size: 0.85rem; padding: 0.5rem 0.7rem; }
 
   /* —— Peer mesh list —— */
   .section { margin: 1.75rem 0 2rem; animation: fadeRise 0.45s ease-out; }
@@ -409,36 +480,35 @@
       <svg id="meshSvg" viewBox="0 0 1000 280" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <h1 class="brand">GPU <em>Pool</em></h1>
-    <p class="hero-line">Peer mesh for spare GPUs among friends.</p>
+    <p class="hero-line">Share spare compute. Grow the network. Use friends' GPUs when you need them.</p>
     <p class="hero-sub" id="heroSub">
-      Join · Share my PC · Use the pool · Invite others — under 30 seconds to pick a path.
+      A private co-op for your Discord — plug in spare GPU or CPU, run jobs on whoever is online,
+      chat, and invite friends so everyone gets more compute. No Docker. Invite required.
     </p>
     <div class="cta-row" id="heroCta">
       <button type="button" id="heroEnterBtn">Join the pool</button>
-      <button type="button" class="ghost" id="heroShareBtn">Invite others</button>
-      <button type="button" class="ghost" data-go-public="mesh">See who's online</button>
+      <button type="button" class="ghost" id="heroShareBtn">Invite friends</button>
+      <button type="button" class="ghost" data-go-public="mesh">Who's online</button>
     </div>
     <p class="mesh-live" id="meshLive">Listening for peers…</p>
 
     <div class="gate" id="loginPanel">
-      <h2>Sign in with invite</h2>
-      <label for="displayName">Display name</label>
+      <h2>Join in under a minute</h2>
+      <p class="lede" style="margin-top:0.35rem">Enter the invite + your Discord name. We’ll take you to Share / Use / Invite.</p>
+      <label for="inviteCode">Invite code</label>
+      <input id="inviteCode" type="text" value="glitch-factor" placeholder="glitch-factor" autocomplete="off" />
+      <label for="displayName">Your Discord display name</label>
       <input id="displayName" type="text" placeholder="YourDiscordName" autocomplete="nickname" />
-      <div class="row">
-        <div>
-          <label for="poolPassword">Pool password</label>
-          <input id="poolPassword" type="password" placeholder="shared pool password" autocomplete="current-password" />
-        </div>
-        <div>
-          <label for="inviteCode">Invite code</label>
-          <input id="inviteCode" type="text" placeholder="glitch-factor" autocomplete="off" />
-        </div>
-      </div>
+      <details style="margin-top:0.75rem">
+        <summary style="cursor:pointer;color:var(--muted);font-size:0.88rem">Optional: pool password</summary>
+        <label for="poolPassword">Pool password</label>
+        <input id="poolPassword" type="password" placeholder="only if a pool admin shared one" autocomplete="current-password" />
+      </details>
       <div class="actions">
-        <button id="loginBtn" type="button">Join the mesh</button>
+        <button id="loginBtn" type="button">Join the pool</button>
       </div>
       <div class="err hidden" id="loginErr"></div>
-      <p class="note" id="networkNote">Private Tailscale/LAN by default; public HTTPS when the host opens the tunnel.</p>
+      <p class="note" id="networkNote">Prefer the host’s public portal link (no Tailscale). Tailscale is an optional private path. Public links rotate when the tunnel restarts — ask for a fresh one if a link fails.</p>
     </div>
   </header>
 
@@ -448,60 +518,97 @@
       <button class="ghost" id="logoutBtn" type="button">Log out</button>
     </div>
 
-    <nav class="nav" aria-label="Hub sections">
-      <button type="button" class="active" data-view="home">Hub</button>
+    <nav class="nav" aria-label="Main actions">
+      <button type="button" class="active" data-view="home">Home</button>
       <button type="button" data-view="contribute">Share my PC</button>
       <button type="button" data-view="utilize">Use the pool</button>
-      <button type="button" data-view="share">Invite others</button>
-      <button type="button" data-view="connect">Connect</button>
+      <button type="button" data-view="share">Invite friends</button>
+    </nav>
+    <nav class="nav nav-secondary" aria-label="More">
+      <button type="button" data-view="connect">Connect tools</button>
       <button type="button" data-view="chat">Chat</button>
       <button type="button" data-view="suggest">Suggest</button>
       <button type="button" data-view="workspace">Workspace</button>
-      <button type="button" data-view="diagnostics">Diagnostics</button>
+      <button type="button" data-view="diagnostics">Help / diagnostics</button>
     </nav>
 
     <!-- HOME / HUB -->
     <div id="viewHome">
-      <div class="mode-rail">
-        <button type="button" data-go="contribute"><span class="k">1</span><span class="t">Share my PC</span></button>
-        <button type="button" data-go="utilize"><span class="k">2</span><span class="t">Use the pool</span></button>
-        <button type="button" data-go="share"><span class="k">3</span><span class="t">Invite others</span></button>
-        <button type="button" data-go="connect"><span class="k">4</span><span class="t">Connect tools</span></button>
-        <button type="button" data-go="chat"><span class="k">Talk</span><span class="t">Pool chat</span></button>
-        <button type="button" data-go="suggest"><span class="k">Ideas</span><span class="t">Suggest</span></button>
-        <button type="button" data-go="workspace"><span class="k">VM</span><span class="t">Workspace</span></button>
+      <div class="section" style="margin-top:0.5rem">
+        <h2>What do you want to do?</h2>
+        <p class="lede" id="homePrimaryLede">Three big paths. Pick one — you can switch anytime. More machines in the pool = more compute for everyone.</p>
+        <div class="action-hero">
+          <button type="button" data-go="contribute">
+            <span class="k">1 · Contribute</span>
+            <span class="t">Share my PC</span>
+            <span class="h">Offer spare GPU or CPU with caps you control. Safety stays on so Windows stays usable.</span>
+          </button>
+          <button type="button" data-go="utilize">
+            <span class="k">2 · Utilize</span>
+            <span class="t">Use the pool</span>
+            <span class="h">Run jobs on friends’ machines. No NVIDIA needed on your laptop.</span>
+          </button>
+          <button type="button" class="primary-share" data-go="share">
+            <span class="k">3 · Grow</span>
+            <span class="t">Invite friends</span>
+            <span class="h">Copy a Discord-ready blurb. Every new machine makes the pool stronger.</span>
+          </button>
+        </div>
+        <ol id="homePrimarySteps" class="hidden" aria-hidden="true"></ol>
       </div>
 
       <div class="section">
-        <h2>Do this next (&lt;30 seconds)</h2>
-        <p class="lede" id="homePrimaryLede">Pick one primary action. Invite code stays the same until the host rotates it.</p>
-        <ol id="homePrimarySteps" style="margin:0; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
+        <h2>How it works</h2>
+        <ul class="how-steps">
+          <li>
+            <span class="n">Step 1</span>
+            <span class="t">Join with invite</span>
+            <span class="d">Use code <strong>glitch-factor</strong> + your Discord name (you’re already signed in).</span>
+          </li>
+          <li>
+            <span class="n">Step 2</span>
+            <span class="t">Share or use</span>
+            <span class="d">Share spare GPU/CPU, or run jobs on whoever is online — both grow value for the group.</span>
+          </li>
+          <li>
+            <span class="n">Step 3</span>
+            <span class="t">Invite friends</span>
+            <span class="d">Paste the invite blurb in Discord. Add machines → everyone gets more compute.</span>
+          </li>
+        </ul>
         <div class="actions">
-          <button type="button" data-go="contribute">Share my PC</button>
-          <button type="button" data-go="utilize">Use the pool</button>
-          <button type="button" data-go="share">Invite others</button>
+          <button type="button" data-go="share">Copy invite for Discord</button>
+          <button class="ghost" type="button" data-go="utilize">Run a job now</button>
         </div>
       </div>
 
       <div class="section">
         <div class="section-head">
-          <h2>Network availability</h2>
+          <h2>Who's online</h2>
           <button class="ghost" id="refreshBtn" type="button">Refresh</button>
         </div>
-        <p class="lede" id="capacityNote">Live workers from scheduler /status — offered caps, not mock inventory.</p>
+        <p class="lede" id="capacityNote">Live machines offering compute right now. Secondary to the three actions above.</p>
         <p class="err hidden" id="dashErr"></p>
         <div class="peer-list" id="peerList"></div>
       </div>
 
       <div class="section" id="friendsHomeCard">
-        <h2>How friends connect</h2>
-        <p class="lede" id="friendsHomeLede">Public HTTPS when the tunnel is on — invite still required.</p>
+        <h2>Grow the network</h2>
+        <p class="lede" id="friendsHomeLede">Send one message. Friends join in minutes. More peers = more GPU/CPU for everyone.</p>
         <ol id="friendsHomeSteps" style="margin:0; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
         <div class="actions">
-          <button type="button" data-go="share">Copy invite blurb</button>
-          <button class="ghost" type="button" data-go="connect">Full Connect guide</button>
-          <button class="ghost" type="button" data-go="chat">Open chat</button>
+          <button type="button" data-go="share">Invite friends →</button>
+          <button class="ghost" type="button" data-go="connect">Connect from code</button>
+          <button class="ghost" type="button" data-go="chat">Pool chat</button>
         </div>
+      </div>
+
+      <p class="lede" style="margin-top:1rem">More options</p>
+      <div class="more-links">
+        <button type="button" data-go="connect">Local model / agent URLs</button>
+        <button type="button" data-go="workspace">Optional Linux workspace</button>
+        <button type="button" data-go="suggest">Suggest an improvement</button>
+        <button type="button" data-go="diagnostics">Send diagnostics</button>
       </div>
       <p class="note" id="laptopNote"></p>
     </div>
@@ -509,8 +616,8 @@
     <!-- SHARE / INVITE -->
     <div id="viewShare" class="hidden">
       <div class="section">
-        <h2>Invite others — grow the pool</h2>
-        <p class="lede">Copy a short message, portal link, or full blurb. Send it to a friend on your network. No passwords or tokens included.</p>
+        <h2>Invite friends — grow the pool</h2>
+        <p class="lede">Paste this into Discord. Ask friends to add their machine or just use the pool — every join makes shared compute stronger. No passwords or tokens included.</p>
         <label>Best portal URL</label>
         <div class="url-row"><code id="sharePortalBest">—</code></div>
         <label>Invite code</label>

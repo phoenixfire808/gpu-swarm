@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for the private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~13:50 CDT · **Try-out live** — portal restarted @ tip; Drew-Home + host_protect; desktop app Tk threading fix shipped.
+**Updated:** 2026-08-04 ~14:10 CDT · **v0.1.1 EXE published** + portal newcomer UX + growth docs.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -16,24 +16,24 @@ Living scorecard for the private Discord GPU/CPU co-op.
 **Discord:** App **GPU Pool** · Primary guild **Glitch Factor** · Invite code `glitch-factor` (product setting via `GPU_SWARM_INVITE_CODES`)  
 **v1 jobs:** `probe`, `pytorch_cuda_probe`, **`llm_chat`** · Auth MVP: invite/password (OAuth later)  
 **Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files / `data/public_endpoints*` / `data/portal.db`  
-**Living docs:** [`TODO.md`](TODO.md) · [`ROADMAP.md`](ROADMAP.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`SHARED_AGENT_DEV.md`](SHARED_AGENT_DEV.md)
+**Living docs:** [`TODO.md`](TODO.md) · [`ROADMAP.md`](ROADMAP.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`START_HERE.md`](START_HERE.md) · [`SHARED_AGENT_DEV.md`](SHARED_AGENT_DEV.md)
 
 ---
 
-## Ready-to-go checklist (2026-08-04 ~13:35 CDT)
+## Ready-to-go checklist (2026-08-04 ~14:05 CDT)
 
-**Verdict: YES — usable today from repo tip (source).** Friend EXE still stale until v0.1.1.
+**Verdict: YES — usable from tip + publishing v0.1.1 EXE.**
 
 | # | Check | Result |
 |---|--------|--------|
-| 1 | Scheduler + portal + hub UI | **PASS** — Hub / Share my PC / Use the pool / Invite others |
+| 1 | Scheduler + portal + hub UI | **PASS** — three huge Share / Use / Invite actions |
 | 2 | Workers online | **PASS** — host worker + joiner; **`llm_ready=yes`** after Ollama serve |
-| 3 | Share / Invite grow flow | **SHIPPED** — `share_invite.py` + portal **Invite others** + desktop mode |
-| 4 | Personal-name scrub | **SHIPPED** — docs/UI use host / friend / pool member; `NO_GPU_LAPTOP.md` |
-| 5 | Wizard **Network & Workspace** | **SHIPPED (source)** |
+| 3 | Share / Invite grow flow | **SHIPPED** — punchy Discord blurbs + portal Invite friends |
+| 4 | Personal-name scrub | **SHIPPED** — docs/UI use host / friend / pool member |
+| 5 | Wizard **Network & Workspace** | **SHIPPED** — automatic install copy |
 | 6 | Workspace bridge | **PASS** — Hermes ready; no NVIDIA passthrough |
 | 7 | Public Cloudflare path | **PASS** when tunnel up (URL rotates; gitignored) |
-| 8 | Published EXE freshness | **FAIL** — Release v0.1.0 stale; use source |
+| 8 | Published EXE freshness | **PASS** — [v0.1.1](https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.1) |
 
 ### How the host launches (ready copy)
 
@@ -50,37 +50,36 @@ REM optional friends without Tailscale:
 start-public-access.cmd
 ```
 
-Friend: `scripts\install-prereqs.cmd` → `start-gpu-pool-app.cmd` → invite `glitch-factor` → Share my PC / Use the pool / Invite others.  
-Shared agent story: [`SHARED_AGENT_DEV.md`](SHARED_AGENT_DEV.md).  
-Workspace RDP: `mstsc /v:127.0.0.1:3390` · `vagrant`/`vagrant`.
+Friend: download EXE or open public portal → invite `glitch-factor` → Share my PC / Use the pool / Invite friends.  
+Start: [`START_HERE.md`](START_HERE.md).
 
 ### Primary UX (under 30 seconds)
 
-1. **Join** — portal or app + invite `glitch-factor` + display name  
+1. **Join** — portal or EXE + invite `glitch-factor` + display name  
 2. **Share my PC** — Contribute with caps  
 3. **Use the pool** — Utilize jobs (no NVIDIA needed)  
-4. **Invite others** — copy friend message / portal / download link  
+4. **Invite friends** — copy Discord blurb and grow the network  
 
 ---
 
 ## Done (this turn)
 
-- [x] **Desktop Tk threading fix** — `GpuPoolApp.post_ui()` queue drain; all worker `self.after(0,…)` → `self.app.post_ui(…)` (Workspace, Invite, Contribute, bootstrap, poll)
-- [x] Personal-name scrub (friend anecdotes, sample display names, “ask Drew” → host/pool admin)
-- [x] Renamed `FRIEND_LAPTOP.md` → `NO_GPU_LAPTOP.md`
-- [x] Share / Invite grow flow (`gpu_swarm/share_invite.py`, portal hub, desktop Home)
-- [x] DOWNLOAD / LOGIN / README / Discord blurb / wizard Welcome tightened
-- [x] Living docs updated; commit + push (no secrets)
+- [x] Portal newcomer UX — hero + login simplify; three huge actions; How it works; secondary Chat/Suggest
+- [x] `START_HERE.md` + punchy invite blurbs (`share_invite.py`, Discord quickstart, RELEASE_NOTES)
+- [x] Welcome copy — “we'll install what you need”
+- [x] DOWNLOAD / LOGIN / README point at v0.1.1 + growth path
+- [x] Publish **GPUPool.exe v0.1.1** + `gh release` (smoke: Welcome process started)
+- [x] Commit + push growth/docs/UX
 
 ## Next
 
-- Publish **GPUPool.exe v0.1.1+** (hub + workspace + invite share + host_protect)
+- Restart portal so live hub serves new UX (if still on old HTML)
+- Post Discord invite blurb so friends join
 - Multi-session `session create` from Pool UI
-- Lighter default chat model for smoke
 - Keep secrets out of git
 
 ## Do not
 
-- Heavy CUDA / load 27B GGUF / PyInstaller during agent sessions unless the host operator asks
-- Commit `.env`, Tailscale auth keys, `data/portal.db`, `data/public_endpoints*`
+- Heavy CUDA / load 27B GGUF during packaging
+- Commit `.env`, Tailscale auth keys, `data/portal.db`, `data/public_endpoints*`, `dist/*.exe`
 - Claim NVIDIA passthrough into VirtualBox guests

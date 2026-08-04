@@ -4,7 +4,7 @@ Reproducible Windows release for the GPU Pool desktop joiner.
 
 ## Build (maintainer)
 
-**Packaging Worker:** rebuild from current `master` after UI / hub / workspace / host_protect changes. Published **v0.1.0** is **stale** vs tip until you rebuild + publish **v0.1.1+**.
+**Packaging Worker:** rebuild from current `master` after UI / hub / workspace / host_protect changes. Publish **v0.1.1+** so friends get hub / Invite friends / host_protect / Workspace (see `START_HERE.md`).
 
 ```powershell
 cd C:\Users\Drew\Projects\gpu-swarm

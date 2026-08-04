@@ -247,8 +247,7 @@ class WizardFrame(ctk.CTkFrame):
     def _step_welcome(self) -> None:
         self._title(
             "Welcome to GPU Pool",
-            "Join · Share my PC · Use the pool · Invite others. "
-            "This wizard sets up your PC once — then Home makes the next step obvious.",
+            "We'll install what you need automatically. Then: Share my PC · Use the pool · Invite friends.",
         )
         what = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
         what.pack(fill="x", pady=(0, 8))
@@ -261,12 +260,13 @@ class WizardFrame(ctk.CTkFrame):
         ctk.CTkLabel(
             what,
             text=(
-                "A private co-op for friends on your network — not a public marketplace.\n"
-                "• Join — invite code + your Discord display name\n"
-                "• Share my PC — Contribute spare GPU/CPU (host safety ON by default)\n"
-                "• Use the pool — Utilize jobs (no NVIDIA needed on your laptop)\n"
-                "• Invite others — copy a portal link + invite blurb and grow the pool\n"
-                "• Connect / Workspace / Chat — tools, optional Linux VM, Network Hub"
+                "A private co-op for friends — share spare GPU/CPU, run jobs on whoever is online,\n"
+                "chat on the Network Hub, and invite friends so everyone gets more compute.\n"
+                "Not a public marketplace. No Docker.\n\n"
+                "After setup, Home shows three big buttons:\n"
+                "• Share my PC — offer spare GPU/CPU (you set caps; safety ON so Windows stays usable)\n"
+                "• Use the pool — run jobs (no NVIDIA needed on your laptop)\n"
+                "• Invite friends — copy a Discord blurb and grow the network"
             ),
             text_color=MUTED,
             justify="left",
@@ -277,18 +277,21 @@ class WizardFrame(ctk.CTkFrame):
         expect.pack(fill="x", pady=(0, 8))
         ctk.CTkLabel(
             expect,
-            text="What to expect during setup",
+            text="We'll install what you need (sit back)",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=ACCENT,
         ).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(
             expect,
             text=(
-                "Next: install network tools (Tailscale) and optional Workspace tools (VirtualBox + Vagrant) — "
-                "already-installed apps are skipped.\n"
-                "Then: live Python progress (Downloading…, Installing dependencies…).\n"
-                "Windows SmartScreen may warn on unsigned builds → More info → Run anyway (only if you trust this repo’s GitHub release).\n"
-                "Invite code: glitch-factor + your Discord display name. Public portal URL rotates — ask the host for the current link."
+                "This wizard installs tools automatically when missing — already-installed apps are skipped.\n"
+                "• Network: Tailscale (optional private path; public portal link is easier for most friends)\n"
+                "• Optional Workspace: VirtualBox + Vagrant (only if you want a Linux desktop)\n"
+                "• Python runtime + deps: live progress (“Downloading…”, “Installing dependencies…”)\n\n"
+                "Windows may show SmartScreen on unsigned builds → More info → Run anyway "
+                "(only if you trust this repo’s GitHub release).\n"
+                "Invite: glitch-factor + your Discord display name. "
+                "Public portal URLs rotate — ask the host for the current link if one fails."
             ),
             text_color=MUTED,
             justify="left",

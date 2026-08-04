@@ -24,7 +24,8 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [x] Personal-name scrub; `FRIEND_LAPTOP.md` → `NO_GPU_LAPTOP.md`
 
 ## Now
-- [ ] Packaging Worker: publish Windows EXE **v0.1.1+** (hub + workspace + invite share + host_protect)
+- [x] Packaging Worker: publish Windows EXE **v0.1.1** (hub + Invite friends + host_protect + START_HERE)
+- [x] Portal newcomer UX + growth docs (`START_HERE.md`, punchy invite blurbs)
 - [ ] Post member tip: `OPENAI_BASE_URL=http://127.0.0.1:18080/v1` (or `:8080` when free)
 
 ## Next
@@ -41,11 +42,11 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 ## Blocked
 - [ ] Light `llm_chat` completion smoke — only large ~27B GGUF local; host_protect pausing on high util
 - [ ] OAuth — blocked until auth priority
-- [ ] Exact EXE download URL freshness — blocked on packaging Worker Release rebuild
+- [x] Exact EXE download URL freshness — v0.1.1 Release asset live
 
 ## Next 5
-1. Packaging: `build_exe.ps1 -Clean` → publish **v0.1.1** (`RELEASE.md`)
-2. Friend trial: `install-prereqs` → app → invite → Share my PC / Use the pool / Invite others
+1. Discord blast: paste START_HERE blurb + current public portal URL
+2. Friend trial: EXE or portal → invite → Share my PC / Use the pool / Invite friends
 3. Workspace Start/Open from desktop when needed (RDP 3390)
 4. Optional: smaller Ollama model for safe chat smoke
 5. Keep secrets out of git (never `.env` / auth keys / `data/public_endpoints*` / `portal.db`)
