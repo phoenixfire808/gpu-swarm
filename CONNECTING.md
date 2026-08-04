@@ -75,9 +75,19 @@ Paste-ready member blurb: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKS
 
 ---
 
+## How friends connect
+
+1. Install Tailscale — https://tailscale.com/download  
+2. Ask Drew for an invite to the Glitch Factor tailnet (login + join)  
+3. Open portal `http://100.85.165.84:8767/portal` or run the GPU Pool EXE / desktop app  
+4. Sign in with invite code `glitch-factor` + your display name  
+5. Contribute (join as worker) or Utilize (run allowlisted jobs)
+
+---
+
 ## Rules of the road
 
-- Private Tailscale/LAN only — do **not** expose `:8766` / `:8767` to the public internet.
+- Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use the URLs above (do not put `:8766` / `:8767` on the open WAN without an auth gateway).
 - Allowlisted jobs only — no remote shell on contributors.
 - Never share `.env` or Discord bot tokens.
 - No Docker for this stack (VirtualBox/Vagrant elsewhere; workers are bare metal / host Python).

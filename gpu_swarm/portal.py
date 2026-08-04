@@ -243,8 +243,19 @@ async def api_config(request: Request) -> dict[str, Any]:
                 "GET  /jobs/{id}",
             ],
             "env_example": f"set GPU_SWARM_SCHEDULER_URL={sched_tailscale}",
+            "private_network": (
+                "Private Tailscale/LAN pool — not exposed to the open internet. "
+                "Friends join via Tailscale, then use the scheduler/portal URLs below."
+            ),
+            "friends_connect": [
+                "Install Tailscale — https://tailscale.com/download",
+                "Ask Drew for an invite to the Glitch Factor tailnet (login + join)",
+                f"Open portal {portal_tailscale} or run the GPU Pool EXE / desktop app",
+                f"Sign in with invite code {PORTAL_INVITE_CODE} + your display name",
+                "Contribute (join as worker) or Utilize (run allowlisted jobs)",
+            ],
             "rules": [
-                "Private Tailscale/LAN only — do not expose :8766 / :8767 publicly.",
+                "Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use these URLs.",
                 "Allowlisted jobs only — no remote shell on contributors.",
                 "Never share .env or Discord bot tokens.",
             ],
@@ -730,13 +741,14 @@ PORTAL_HTML = r"""<!DOCTYPE html>
 <div class="wrap">
   <header>
     <h1 class="brand">GPU <span>Pool</span></h1>
-    <p class="lede">Private co-op — pick <strong>Contribute</strong>, <strong>Utilize</strong>, or <strong>Connect</strong> (how to reach the pool from Discord / code / CLI).</p>
+    <p class="lede">Private Tailscale/LAN co-op — pick <strong>Contribute</strong>, <strong>Utilize</strong>, or <strong>Connect</strong> (how friends reach the pool from Discord / code / CLI).</p>
     <p class="note" id="capacityNote">v1 contributes compute to JOBS (GPU/CPU). RAM/SSD figures are capacity advertisements — not a distributed filesystem yet.</p>
+    <p class="note" id="networkNote" style="border-left-color:var(--accent2);background:rgba(61,155,122,0.08);color:#b8dcc9">Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then open this portal.</p>
   </header>
 
   <section id="loginPanel" class="panel">
     <h2>Sign in</h2>
-    <p class="lede" style="margin-bottom:0.5rem">MVP auth: shared pool password or invite code + display name. Real OAuth comes later.</p>
+    <p class="lede" style="margin-bottom:0.5rem">On Tailscale first, then MVP auth: invite code <code>glitch-factor</code> (or pool password) + display name. Real OAuth comes later.</p>
     <label for="displayName">Display name</label>
     <input id="displayName" type="text" placeholder="YourDiscordName" autocomplete="nickname" />
     <div class="row">
@@ -788,9 +800,20 @@ PORTAL_HTML = r"""<!DOCTYPE html>
           <button type="button" class="choice" data-go="connect" id="cardConnect">
             <span class="eyebrow">Path 3</span>
             <p class="title">Connect</p>
-            <p class="blurb">How-to: scheduler &amp; portal URLs, Discord slash commands, Python / CLI snippets.</p>
+            <p class="blurb">How-to: Tailscale URLs, Discord slash commands, Python / CLI snippets for friends.</p>
             <span class="go">See how to connect →</span>
           </button>
+        </div>
+      </div>
+
+      <div class="panel" id="friendsHomeCard">
+        <h2>How friends connect</h2>
+        <p class="lede" id="friendsHomeLede">Private Tailscale/LAN pool — not exposed to the open internet.</p>
+        <ol id="friendsHomeSteps" style="margin:0.5rem 0 0; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
+        <div class="actions">
+          <button type="button" data-go="connect">Full Connect guide →</button>
+          <button class="secondary" type="button" data-go="contribute">Contribute</button>
+          <button class="secondary" type="button" data-go="utilize">Utilize</button>
         </div>
       </div>
 
@@ -902,7 +925,10 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     <div id="viewConnect" class="hidden">
       <div class="panel">
         <h2>Connect — how to reach the pool</h2>
-        <p class="lede">Same endpoints Discord, the portal, and coding agents use. Private Tailscale/LAN only.</p>
+        <p class="lede" id="connectLede">Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use these URLs.</p>
+
+        <h3>How friends connect</h3>
+        <ol id="friendsConnectSteps" style="margin:0.4rem 0 0.85rem; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
 
         <h3>URLs</h3>
         <div class="url-grid">
@@ -1005,6 +1031,9 @@ function syncCudaOpts() {
 
 function paintConnect(c) {
   const conn = (c && c.connect) || {};
+  const friends = conn.friends_connect || [];
+  const privateNet = conn.private_network
+    || "Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use these URLs.";
   $("urlSchedTs").textContent = conn.scheduler_tailscale || "—";
   $("urlSchedLocal").textContent = conn.scheduler_local || "—";
   $("urlPortalTs").textContent = conn.portal_tailscale || "—";
@@ -1019,6 +1048,12 @@ function paintConnect(c) {
   $("connectDocs").textContent = conn.docs || "CONNECTING.md";
   $("inviteHint").textContent = c.invite_code_hint || "glitch-factor";
   $("connectRules").innerHTML = (conn.rules || []).map(r => `<li>${escapeHtml(r)}</li>`).join("");
+  if ($("connectLede")) $("connectLede").textContent = privateNet;
+  if ($("networkNote")) $("networkNote").textContent = privateNet;
+  if ($("friendsHomeLede")) $("friendsHomeLede").textContent = privateNet;
+  const stepsHtml = friends.map(s => `<li>${escapeHtml(s)}</li>`).join("");
+  if ($("friendsConnectSteps")) $("friendsConnectSteps").innerHTML = stepsHtml || "<li>Install Tailscale → join Drew’s network → open portal / EXE → Contribute or Utilize</li>";
+  if ($("friendsHomeSteps")) $("friendsHomeSteps").innerHTML = stepsHtml || "<li>Install Tailscale → join Drew’s network → open portal / EXE → Contribute or Utilize</li>";
 }
 
 async function loadConfig() {
@@ -1063,7 +1098,7 @@ async function refreshDash() {
       ["Jobs done", (s.jobs&&s.jobs.completed)||0],
     ].map(([k,v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("");
     if (!d.ok) {
-      $("dashErr").textContent = "Scheduler unreachable: " + (d.scheduler_error||"");
+      $("dashErr").textContent = "Cannot reach Tailscale/LAN scheduler yet (install/login Tailscale + join Drew’s tailnet): " + (d.scheduler_error||"");
       $("dashErr").classList.remove("hidden");
     }
     const rows = (d.workers||[]).map(w => {
