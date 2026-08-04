@@ -2,7 +2,7 @@
 
 Private Discord GPU/CPU co-op swarm for Drew's Discord members.
 
-Updated: 2026-08-04 — **Workers advertise real RAM/CPU/disk/GPU**; `/status` shows live host metrics
+Updated: 2026-08-04 — **Worker-Portal live on :8767** + host metrics on `/status`
 
 ## Checklist
 
@@ -29,8 +29,24 @@ Updated: 2026-08-04 — **Workers advertise real RAM/CPU/disk/GPU**; `/status` s
 - [x] Soft caps honored: `max_vram_mb`, `max_cpu_percent`, `max_ram_mb`, `max_disk_mb` (+ portal `dedicated_*` aliases)
 - [x] Smoke: restarted scheduler+worker; `/status` shows non-zero live RAM/CPU/disk/GPU (no mocks)
 - [x] Discord bot left running (PID preserved); `/pool` + `/workers` show new fields when next invoked
+- [x] Web portal on `:8767/portal` (browser login → register machine → start token)
+- [x] `start-portal.cmd` / `python -m gpu_swarm portal`
 - [ ] Optional: smoke `/pool` in Glitch Factor Discord channel (manual)
 - [ ] Optional Whisper job later (reuse DrewLocalVoice/faster-whisper without breaking it)
+
+
+## Worker-Portal — web contributor portal (2026-08-04)
+
+- [x] FastAPI portal on **`:8767`** — UI at `/portal` (`python -m gpu_swarm portal` / `start-portal.cmd`)
+- [x] MVP auth: `GPU_SWARM_POOL_PASSWORD` and/or `GPU_SWARM_INVITE_CODES` + display name → SQLite `data/portal.db`
+- [x] Honest copy: GPU/CPU power jobs; RAM/SSD = capacity ads (not a DFS yet); OAuth later
+- [x] Register machine → dedication sliders → **start token** + Windows/bash/env instructions
+- [x] Worker redeem: `GET /api/worker-bootstrap/{token}` · `python -m gpu_swarm worker --start-token …`
+- [x] Dashboard pulls **real** scheduler `/status` (Drew-Home GPUs; no mocks)
+- [x] Coordinated with desktop/`app_backend` host-resource fields — did not wipe parallel work
+- [x] Verified via curl: `/health`, `/portal` HTML 200, password + invite login, dashboard, machine register, bootstrap
+
+**Local:** `http://127.0.0.1:8767/portal` · Tailscale: `http://100.85.165.84:8767/portal`
 
 ## Host metrics — stable JSON field names (portal / desktop / Discord)
 
@@ -65,7 +81,7 @@ Env: `GPU_SWARM_MAX_VRAM_MB`, `GPU_SWARM_MAX_CPU_PERCENT`, `GPU_SWARM_MAX_RAM_MB
 | Robinhood Command Center | `127.0.0.1:8765` | **Do not steal** — already bound |
 | gpu-swarm scheduler | `:8766` (running) | Local: `http://127.0.0.1:8766` |
 | Tailscale (Drew host) | `100.85.165.84` | Members: `http://100.85.165.84:8766` |
-| Web portal (when used) | `:8767` | Browser join path |
+| gpu-swarm web portal | `:8767/portal` (**running**) | Local `http://127.0.0.1:8767/portal` · `start-portal.cmd` |
 
 ## Discord bot — GPU Pool (2026-08-04)
 
@@ -118,6 +134,7 @@ Note: `free_vram_mb=1024` reflects soft cap `max_vram_mb=1024` from current work
 ```bat
 cd C:\Users\Drew\Projects\gpu-swarm
 start-scheduler-lan.cmd
+start-portal.cmd
 start-worker.cmd
 start-bot.cmd
 ```
