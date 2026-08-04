@@ -78,7 +78,7 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 
 - [ ] Drew: start Ollama + pull model + worker restart → full chat e2e
 - [ ] Packaging Worker: rebuild EXE (include host_protect + local_endpoint + llm_chat)
-- [ ] **agent-vms ↔ GPU Pool workspace/VM mode** — planned/in flight; `ADVANCED_VM.md` + detect helpers exist; deeper integration not done; Hermes remains VM control plane; no GPU passthrough claims
+- [ ] **agent-vms ↔ GPU Pool workspace/VM mode** — **in flight (uncommitted local)** — `gpu_swarm/agent_vm_bridge.py` + Connect workspace UI + `llm_ready` DB column edits present on disk; not in `master` yet; Hermes remains VM control plane; no GPU passthrough claims
 - [ ] Keep scorecard/TODO/CHANGELOG in sync on every ship
 
 ---
