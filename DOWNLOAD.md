@@ -4,9 +4,16 @@ Get the Windows desktop joiner from GitHub Releases — no Python install requir
 
 **Repo:** https://github.com/phoenixfire808/gpu-swarm  
 **Releases:** https://github.com/phoenixfire808/gpu-swarm/releases  
-**Latest EXE (placeholder until Worker publishes):**  
-https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
-*(Asset name may be `GPUPool.exe` or `gpu_pool.exe` — use whatever the release lists. Packaging Worker will fill the exact URL.)*
+
+### Download GPU Pool for Windows
+
+| | URL |
+|--|-----|
+| **Latest EXE** | https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe |
+| **v0.1.0 (pinned)** | https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe |
+| **Release page** | https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.0 |
+
+Asset name: **`GPUPool.exe`** (~29 MB onefile). Includes Contribute / Utilize / Connect, portable Python bootstrap, and Copy log / Submit diagnostics.
 
 ---
 
@@ -105,7 +112,7 @@ Share the printed portal URL + invite `glitch-factor`. Files (gitignored): `data
 
 ---
 
-## Fallbacks (no EXE yet / power users)
+## Fallbacks (power users)
 
 | Path | How |
 |------|-----|

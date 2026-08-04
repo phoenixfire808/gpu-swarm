@@ -29,7 +29,10 @@ Jobs execute on a worker’s own GPU/CPU. RAM/SSD numbers help the scheduler pic
 | **Connect from code** | Coders / local models / agents | `GPUPool` SDK · `utilize` CLI · [`CONNECTING.md`](CONNECTING.md) |
 
 Product one-pager: [`VISION.md`](VISION.md).  
-**Windows EXE download:** [`DOWNLOAD.md`](DOWNLOAD.md) · [GitHub Releases](https://github.com/phoenixfire808/gpu-swarm/releases/latest).  
+**Download GPU Pool for Windows:**  
+https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
+([v0.1.0](https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe) · [release notes](https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.0) · [`DOWNLOAD.md`](DOWNLOAD.md))  
+
 Connect paths (Contribute / Utilize / code): [`CONNECTING.md`](CONNECTING.md).  
 Paste-ready blurb for Discord: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).  
 Local models / coding agents: [`examples/ollama_or_local_offload.md`](examples/ollama_or_local_offload.md) · [`examples/coding_agent_pool.py`](examples/coding_agent_pool.py) · [`examples/use_pool_from_script.py`](examples/use_pool_from_script.py).  

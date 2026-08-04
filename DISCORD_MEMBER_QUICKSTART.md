@@ -19,11 +19,13 @@ Repo: https://github.com/phoenixfire808/gpu-swarm
 Full notes: DOWNLOAD.md
 
 **Windows EXE**
-1. Download latest EXE:
-   https://github.com/phoenixfire808/gpu-swarm/releases/latest
+1. Download GPUPool.exe:
+   https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
+   (v0.1.0: https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe)
 2. Run wizard → invite **glitch-factor** → set caps (VRAM=0 OK for no-GPU)
 3. Prefer public pool-api URL if Drew shared one; Tailscale optional
-4. Discord: `/pool` `/workers`
+4. If install fails: wizard → Copy log / Submit diagnostics
+5. Discord: `/pool` `/workers`
 
 **Tailscale (optional private path)**
 Portal: http://100.85.165.84:8767/portal

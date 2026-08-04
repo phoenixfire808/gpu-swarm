@@ -1,20 +1,24 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:20 CDT · Friend diagnostics + portable Python (3.10-3.12) + laptop path.
+**Updated:** 2026-08-04 ~12:16 CDT · **GPUPool.exe v0.1.0 published** + public access live.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
-| Service | Local | Tailscale |
-|---------|-------|-----------|
-| Scheduler | `http://127.0.0.1:8766` | `http://100.85.165.84:8766` |
-| Portal | `http://127.0.0.1:8767/portal` | `http://100.85.165.84:8767/portal` |
-| Robinhood CC | `127.0.0.1:8765` | **do not steal** |
+| Service | Local | Public (live now) | Tailscale (optional) |
+|---------|-------|-------------------|----------------------|
+| Portal | `http://127.0.0.1:8767/portal` | `https://rational-delicious-bars-examination.trycloudflare.com/portal` | `http://100.85.165.84:8767/portal` |
+| Scheduler / pool API | `http://127.0.0.1:8766` | `https://rational-delicious-bars-examination.trycloudflare.com/pool-api` | `http://100.85.165.84:8766` |
+| Robinhood CC | `127.0.0.1:8765` | — | **do not steal** |
+
+**DM aariff01 NOW:**  
+`https://rational-delicious-bars-examination.trycloudflare.com/portal`  
+Invite: `glitch-factor` · cloudflared pid `41552` · files in `data/public_endpoints.*` (gitignored)
 
 **Discord:** App **GPU Pool** · Primary guild **Glitch Factor** · Invite code `glitch-factor`  
-**v1 jobs only:** `probe`, `pytorch_cuda_probe` · Auth MVP: invite/password (OAuth later)  
+**v1 jobs only:** `probe`, `pytorch_cuda_probe` · Auth MVP: invite/password (kept on for public)  
 **Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files  
-**Network model:** Private Tailscale/LAN (+ optional public tunnel when Drew runs `start-public-access.cmd`)
+**Network model:** Public Cloudflare quick tunnel ON; Tailscale optional
 
 ---
 
@@ -24,6 +28,7 @@ Living scorecard for Drew private Discord GPU/CPU co-op.
 - [x] CPU-only worker: gpu_available=false without nvidia-smi
 - [x] Utilize-without-GPU probe path; scheduler URL validation; public_endpoints auto-detect
 - [x] Docs: FRIEND_LAPTOP.md
+- [x] **Public access LIVE** — cloudflared quick tunnel; portal+`/pool-api` HTTPS 200
 
 ---
 
@@ -31,13 +36,13 @@ Living scorecard for Drew private Discord GPU/CPU co-op.
 
 | # | Check | Result |
 |---|--------|--------|
-| 1 | Scheduler Tailscale `/status` | **PASS** (prior probe) @ `http://100.85.165.84:8766/status` |
-| 2 | Portal `/api/diagnostics` | **NEW** — POST upload + GET list (invite/session); store `data/diagnostics/` |
-| 3 | Portable Python dry-run | **VERIFY this commit** — `ensure_portable_python(dry_run=True)` |
-| 4 | Purpose-failed error log | **VERIFY this commit** — `write_error_log` → `%LOCALAPPDATA%\GPUPool\logs\error-*.log` |
-| 5 | GPUPool.exe Release | **NEEDS REBUILD** — must include `portable_python` + `diagnostics` |
+| 1 | Public portal HTTPS `/portal` | **PASS 200** — `https://rational-delicious-bars-examination.trycloudflare.com/portal` |
+| 2 | Public `/pool-api/status` | **PASS 200** — proxies scheduler; allowlisted jobs only |
+| 3 | Invite auth still on | **PASS** — `auth: pool_password_or_invite` on public `/health` |
+| 4 | `data/public_endpoints.json` | **PASS** — written; share.txt ready to DM |
+| 5 | GPUPool.exe Release | **PASS** — [v0.1.0](https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.0) · [GPUPool.exe](https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe) (~29 MB); launch smoke OK (wizard title) |
 
-**Demo verdict:** Friends can bootstrap isolated Python + submit redacted logs when join fails. Packaging Worker must rebuild EXE.
+**Demo verdict:** aariff01 can open the public portal **without Tailscale**. Friends can download GPUPool.exe. Invite `glitch-factor` required.
 
 ---
 
@@ -60,6 +65,13 @@ Living scorecard for Drew private Discord GPU/CPU co-op.
 - [x] Document supported matrix in DOWNLOAD.md
 
 
+### Windows EXE Release v0.1.0 (2026-08-04)
+- [x] Built from master `469c30a` via `build_exe.ps1` → `dist/GPUPool.exe` (~29 MB onefile)
+- [x] Launch smoke: wizard window **GPU Pool — Contribute · Utilize · Connect**
+- [x] GitHub Release https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.0
+- [x] Asset https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe
+- [x] DOWNLOAD.md / README / DISCORD_MEMBER_QUICKSTART real URLs (no placeholder)
+
 ### Friend diagnostics + portable Python (2026-08-04)
 - [x] `gpu_swarm/diagnostics.py` — OS/python/pip freeze/nvidia-smi/scheduler test/traceback/wizard step; redact secrets
 - [x] Writes `%LOCALAPPDATA%\GPUPool\logs\error-*.log` (+ json sibling)
@@ -79,25 +91,24 @@ Living scorecard for Drew private Discord GPU/CPU co-op.
 
 ## In progress
 
-- [ ] Packaging Worker: rebuild + publish Windows EXE (must ship portable_python + diagnostics)
+- [x] Packaging Worker: published **v0.1.0** GPUPool.exe (portable_python + diagnostics + Home UX)
 - [ ] Confirm Discord `/pool` smoke in Glitch Factor (manual; optional)
-- [ ] Keep scorecard/TODO in sync
+- [ ] Post member quickstart + EXE download link in Glitch Factor
 
 ---
 
 ## Next (prioritized)
 
-1. **Packaging Worker** — rebuild EXE from this commit; publish Release.
-2. **Member onboarding** — post quickstart + “if join fails → Submit diagnostics”.
-3. Stream smoke: Home → Utilize probe → friend join with portable Python path.
-4. Whisper / bounded LLM (allowlisted).
-5. Portal Discord OAuth (later).
+1. **Member onboarding** — post EXE link + “if join fails → Submit diagnostics”.
+2. Stream smoke: friend downloads EXE → wizard → Join / Utilize.
+3. Whisper / bounded LLM (allowlisted).
+4. Portal Discord OAuth (later).
 
 ### Next 5 Drew should care about right now
 
-1. Packaging Worker rebuild of GPUPool.exe (diagnostics + portable Python).
+1. DM friends: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
 2. Tell friends: on failure use **Submit diagnostics** / **Copy log**.
-3. Live smoke portal `POST /api/diagnostics` after portal restart.
+3. Live smoke portal `POST /api/diagnostics` after friend install.
 4. Plan Whisper/LLM runners.
 5. Keep `.env` / tokens local — never commit.
 
@@ -109,7 +120,6 @@ Living scorecard for Drew private Discord GPU/CPU co-op.
 |---------|-----|---------|
 | **Whisper / LLM jobs** | No runners in `jobs.py` | Design narrow contract → runners + UI |
 | **Portal OAuth** | MVP invite/password only | Implement when auth story ready |
-| **EXE asset** | Needs packaging rebuild | Worker publishes Release |
 
 ---
 

@@ -19,9 +19,9 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [x] Portable Python bootstrap: `portable_python.py` + wizard + EXE first-run hook
 
 ## Now
-- [ ] Packaging Worker: publish Windows EXE with portable_python + diagnostics
+- [x] Packaging Worker: publish Windows EXE v0.1.0 with portable_python + diagnostics
 - [ ] Discord `/pool` channel smoke (optional, stream)
-- [ ] Post member quickstart + “Submit diagnostics on failure” in Glitch Factor
+- [ ] Post member quickstart + EXE link + “Submit diagnostics on failure” in Glitch Factor
 
 ## Next
 - [ ] Allowlisted `whisper_transcribe` (reuse DrewLocalVoice/faster-whisper carefully)
@@ -32,11 +32,9 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 ## Blocked
 - [ ] Whisper/LLM — blocked on design + deps story (intentional)
 - [ ] OAuth — blocked until auth priority (repo is public)
-- [ ] Exact EXE download URL — blocked on packaging Worker Release asset name
-
 ## Next 5
-1. Packaging Worker Release + EXE (diagnostics + portable Python)  
-2. Post EXE-first member quickstart + diagnostics tip in Glitch Factor  
-3. Live smoke: portal Utilize + `/pool` + diagnostics submit  
-4. Plan Whisper/LLM runners  
-5. Keep secrets out of git (never `.env`)
+1. Post EXE download + diagnostics tip in Glitch Factor  
+2. Live smoke: portal Utilize + `/pool` + diagnostics submit  
+3. Plan Whisper/LLM runners  
+4. Keep secrets out of git (never `.env`)  
+5. Rebuild EXE when friend-onboarding UX changes land again  
