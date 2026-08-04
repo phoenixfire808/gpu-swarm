@@ -1,7 +1,9 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 · Scheduler restarted; `/v1/pool/*` live on `:8766`.
+**Updated:** 2026-08-04 · Public GitHub published; scheduler `/v1/pool/*` live on `:8766`.
+
+**GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
 | Service | Local | Tailscale |
 |---------|-------|-----------|
@@ -35,7 +37,7 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 | 5 | Desktop wizard / prereqs / join helpers | **PASS** (code + prior smoke) |
 | 6 | Discord GPU Pool bot + guild slash cmds | **PASS** (6 cmds; process left running in prior session) |
 | 7 | Coding client / `CONNECTING.md` / examples | **PASS** — `GPUPool` + `utilize` CLI + examples e2e |
-| 8 | GitHub remote + push | **FAIL** — no `origin`; `gh` not logged in; dirty tree |
+| 8 | GitHub remote + push | **PASS** — https://github.com/phoenixfire808/gpu-swarm (public; `origin` → `master`) |
 
 Honest v1: GPU/CPU run jobs; RAM/SSD are **capacity ads** for scheduling, not pooled memory/DFS.
 
@@ -85,13 +87,16 @@ Honest v1: GPU/CPU run jobs; RAM/SSD are **capacity ads** for scheduling, not po
 ### Git hygiene (partial, 2026-08-04)
 - [x] Local commits exist on `master` (public-ready baseline + publish checklist commits)
 - [x] Secrets scrubbed from docs for public-safe share (token last4 removed)
-- [ ] Remote + push — see **Blocked**
+- [x] Remote + push — https://github.com/phoenixfire808/gpu-swarm (`origin`/`master`, public)
 
 ---
 
+### GitHub (2026-08-04)
+- [x] **GitHub publish** — public repo https://github.com/phoenixfire808/gpu-swarm (`gh auth` as phoenixfire808; `origin` pushed)
+
 ## In progress
 
-- [ ] Working tree has **uncommitted** safe product work (client, CONNECTING, examples, portal/desktop/CLI/docs). Needs a clean commit before publish — prefer GitHub worker to commit; this progress pass only stages docs.
+- [x] Public repo published — remaining work is Discord smoke + member quickstart, not git publish.
 - [ ] Confirm Discord `/pool` smoke in a Glitch Factor channel (manual; optional but good for stream).
 - [ ] Keep scorecard/TODO in sync as features land (this file + `TODO.md`).
 
@@ -99,22 +104,20 @@ Honest v1: GPU/CPU run jobs; RAM/SSD are **capacity ads** for scheduling, not po
 
 ## Next (prioritized)
 
-1. **Stage/commit safe tree** — include product + docs; **exclude** `.env`, `DISCORD_BOT_TOKEN_PASTE.txt`, `data/`, `logs/`. Coordinate with GitHub worker.
-2. **`gh auth login`** on Drew’s machine (currently: *not logged into any GitHub hosts*).
-3. **`gh repo create` + `git remote add origin` + push** — first public/private share URL.
-4. **Stream-friendly verify** — wizard Join → portal Contribute/Utilize → Discord `/pool` → `coding_agent_pool.py --job probe`.
-5. **Member onboarding paste** — ship `DISCORD_MEMBER_QUICKSTART.md` blurb in Glitch Factor once repo URL exists.
-6. **Future job types** — design then implement `whisper_transcribe` / bounded `llm_generate` (see `examples/ollama_or_local_offload.md`); no shell jobs.
-7. **Discord OAuth** for portal (replace invite/password MVP).
-8. Optional: DFS / pooled memory — out of v1 scope (VISION.md).
+1. **Stream-friendly verify** — wizard Join → portal Contribute/Utilize → Discord `/pool` → `coding_agent_pool.py --job probe`.
+2. **Member onboarding paste** — ship `DISCORD_MEMBER_QUICKSTART.md` blurb in Glitch Factor with repo URL https://github.com/phoenixfire808/gpu-swarm.
+3. **Discord `/pool` channel smoke** (optional, stream).
+4. **Future job types** — design then implement `whisper_transcribe` / bounded `llm_generate` (see `examples/ollama_or_local_offload.md`); no shell jobs.
+5. **Discord OAuth** for portal (replace invite/password MVP).
+6. Optional: DFS / pooled memory — out of v1 scope (VISION.md).
 
 ### Next 5 Drew should care about right now
 
-1. Commit the dirty safe files (no secrets).
-2. Authenticate GitHub CLI (`gh auth login`).
-3. Create remote + push (`gh repo create` / `git push -u origin master`).
-4. Quick live smoke: portal Utilize + Discord `/pool`.
-5. Only after publish: plan Whisper/LLM allowlisted runners (do not rush into OAuth/DFS).
+1. Quick live smoke: portal Utilize + Discord `/pool`.
+2. Post member quickstart + repo URL in Glitch Factor.
+3. Plan Whisper/LLM allowlisted runners (post-publish).
+4. Portal Discord OAuth when auth priority rises.
+5. Keep `.env` / tokens local — never commit.
 
 ---
 
@@ -122,7 +125,6 @@ Honest v1: GPU/CPU run jobs; RAM/SSD are **capacity ads** for scheduling, not po
 
 | Blocker | Why | Unblock |
 |---------|-----|---------|
-| **GitHub publish** | No `git remote`; `gh auth status` → not logged in | `gh auth login` → `gh repo create` → push |
 | **Whisper / LLM jobs** | No runners in `jobs.py`; only sketches in docs | Design narrow contract → `ALLOWED_JOB_TYPES` + runner + UI surfaces |
 | **Portal OAuth** | MVP invite/password only by design | Implement OAuth when publish + auth story is ready |
 | **Public internet expose** | Intentionally LAN/Tailscale only | Keep private; do not open `:8766`/`:8767` to WAN |

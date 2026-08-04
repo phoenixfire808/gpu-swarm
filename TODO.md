@@ -1,7 +1,7 @@
 # TODO — GPU Pool (stream backlog)
 
 Short evolving list. Detail lives in `CURRENT_PROGRESS.md`.  
-Updated: 2026-08-04
+Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 
 ## Done
 - [x] Scheduler + workers + heartbeats (GPU/CPU/RAM/disk)
@@ -12,13 +12,12 @@ Updated: 2026-08-04
 - [x] `CONNECTING.md` + `GPUPool` client + coding examples
 - [x] Prereq / joiner-deps scripts
 - [x] Live smoke: scheduler, worker GPUs, portal 200, e2e jobs
+- [x] `gh auth login` (phoenixfire808)
+- [x] Public GitHub publish + push — https://github.com/phoenixfire808/gpu-swarm
 
 ## Now
-- [ ] Commit dirty **safe** files (no `.env` / token paste / `data/`)
-- [ ] `gh auth login`
-- [ ] `gh repo create` + push `origin`
 - [ ] Discord `/pool` channel smoke (optional, stream)
-- [ ] Post member quickstart + repo URL in Glitch Factor
+- [ ] Post member quickstart + repo URL in Glitch Factor (https://github.com/phoenixfire808/gpu-swarm)
 
 ## Next
 - [ ] Allowlisted `whisper_transcribe` (reuse DrewLocalVoice/faster-whisper carefully)
@@ -27,13 +26,12 @@ Updated: 2026-08-04
 - [ ] More Utilize UX polish after first external joiner
 
 ## Blocked
-- [ ] **GitHub push** — blocked on `gh` auth + missing remote
 - [ ] Whisper/LLM — blocked on design + deps story (intentional)
-- [ ] OAuth — blocked until publish + auth priority
+- [ ] OAuth — blocked until auth priority (repo is public)
 
 ## Next 5
-1. Commit safe tree  
-2. `gh auth login`  
-3. Create remote + push  
-4. Live smoke: portal Utilize + `/pool`  
-5. Plan Whisper/LLM runners (post-publish)
+1. Live smoke: portal Utilize + `/pool`  
+2. Post member quickstart + repo URL in Glitch Factor  
+3. Plan Whisper/LLM runners  
+4. Portal Discord OAuth when ready  
+5. Keep secrets out of git (never `.env`)
