@@ -55,7 +55,8 @@ Living scorecard for Drew private Discord GPU/CPU co-op.
 ### Install harden — multi-machine (2026-08-04)
 - [x] Pin requirements.txt / requirements-app.txt for Win CPython 3.10-3.12
 - [x] Add requirements-joiner.txt (no torch) + requirements-cuda.txt (optional cu128)
-- [x] scripts/install_joiner_deps.ps1 -> %LOCALAPPDATA%\GPUPool\env (coord w/ diagnostics portable Python)
+- [x] scripts/install_joiner_deps.ps1 -> %LOCALAPPDATA%\GPUPool
+env (coord w/ diagnostics portable Python)
 - [x] Prefer 3.12 > 3.11 > 3.10; do not auto-select 3.13
 - [x] Document supported matrix in DOWNLOAD.md
 
