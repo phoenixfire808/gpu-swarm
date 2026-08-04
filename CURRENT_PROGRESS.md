@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:16 CDT · **GPUPool.exe v0.1.0 published** + public access live.
+**Updated:** 2026-08-04 ~12:20 CDT · Public tunnel LIVE + installer prefers `public_endpoints.json`.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -27,8 +27,9 @@ Invite: `glitch-factor` · cloudflared pid `41552` · files in `data/public_endp
 - [x] Portal black screen: removed Google Fonts @import; system fonts; laptop banner
 - [x] CPU-only worker: gpu_available=false without nvidia-smi
 - [x] Utilize-without-GPU probe path; scheduler URL validation; public_endpoints auto-detect
-- [x] Docs: FRIEND_LAPTOP.md
+- [x] Docs: FRIEND_LAPTOP.md / DOWNLOAD.md / DISCORD_MEMBER_QUICKSTART (current public URL + rotate note)
 - [x] **Public access LIVE** — cloudflared quick tunnel; portal+`/pool-api` HTTPS 200
+- [x] **Fix:** `endpoints.load_public_endpoints` maps tunnel keys (`pool_api_public_url` / `portal_path`) so installer prefers public `/pool-api` when file present (verified probe source=`public_endpoints.json`)
 
 ---
 

@@ -41,16 +41,14 @@ def public_endpoints_path() -> Path:
 
 def load_public_endpoints(path: Path | None = None) -> dict[str, Any] | None:
     """
-    Read data/public_endpoints.json written by the host public-tunnel scripts.
+    Read data/public_endpoints.json written by start_public_tunnel.ps1 / start-public-access.cmd.
 
-    Expected shape (flexible keys):
-      {
-        "version": 1,
-        "provider": "cloudflare-quick-tunnel",
-        "scheduler_url": "https://….trycloudflare.com",
-        "portal_url": "https://….trycloudflare.com/portal",
-        "updated_at": "…"
-      }
+    Accepts both tunnel-script keys and normalized aliases:
+      portal_public_url / portal_path / pool_api_public_url
+      portal_url / scheduler_url / public_scheduler_url
+
+    When present, installer/app auto-detect prefers these over Tailscale/localhost.
+    Ephemeral trycloudflare.com URLs — file is gitignored; do not commit live URLs.
     """
     p = path or PUBLIC_ENDPOINTS_PATH
     if not p.is_file():
@@ -61,33 +59,62 @@ def load_public_endpoints(path: Path | None = None) -> dict[str, Any] | None:
         return None
     if not isinstance(raw, dict):
         return None
-    sched = (
-        raw.get("scheduler_url")
+
+    portal_base = str(
+        raw.get("portal_public_url")
+        or raw.get("public_portal_url")
+        or ""
+    ).strip().rstrip("/")
+
+    portal = str(
+        raw.get("portal_path")
+        or raw.get("portal_url")
+        or raw.get("portal")
+        or ""
+    ).strip().rstrip("/")
+    if not portal and portal_base:
+        portal = f"{portal_base}/portal"
+    if portal and not portal.endswith("/portal"):
+        # Base host (trycloudflare) or :8767 root → UI path
+        if "trycloudflare" in portal or portal.endswith(":8767"):
+            portal = f"{portal}/portal"
+
+    if not portal_base and portal:
+        portal_base = portal[: -len("/portal")] if portal.endswith("/portal") else portal
+
+    sched = str(
+        raw.get("pool_api_public_url")
+        or raw.get("scheduler_url")
         or raw.get("scheduler")
         or raw.get("public_scheduler_url")
         or ""
-    )
-    portal = (
-        raw.get("portal_url")
-        or raw.get("portal")
-        or raw.get("public_portal_url")
-        or ""
-    )
-    sched = str(sched).strip().rstrip("/")
-    portal = str(portal).strip().rstrip("/")
-    if portal and not portal.endswith("/portal") and "trycloudflare" in portal:
-        # quick tunnel to portal root — append /portal for the UI path
-        if not portal.endswith("/portal"):
-            portal = f"{portal}/portal"
+    ).strip().rstrip("/")
+    if not sched and portal_base:
+        sched = f"{portal_base}/pool-api"
+
     if not sched and not portal:
         return None
+
+    provider = (
+        raw.get("provider")
+        or raw.get("source")
+        or raw.get("mode")
+        or "public"
+    )
     return {
         "version": raw.get("version", 1),
-        "provider": raw.get("provider") or raw.get("source") or "public",
+        "provider": provider,
+        "mode": raw.get("mode") or "",
         "scheduler_url": sched,
         "portal_url": portal,
+        "portal_public_url": portal_base,
+        "portal_path": portal,
+        "pool_api_public_url": sched,
         "updated_at": raw.get("updated_at") or raw.get("updated") or "",
+        "invite_code": raw.get("invite_code") or "glitch-factor",
         "note": raw.get("note") or "",
+        "no_tailscale_needed": True,
+        "active": True,
         "raw": raw,
         "path": str(p),
     }

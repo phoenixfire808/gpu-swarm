@@ -1,0 +1,11 @@
+{
+  "mode": "cloudflared_quick",
+  "portal_public_url": "https://REPLACE-WITH-LIVE.trycloudflare.com",
+  "portal_path": "https://REPLACE-WITH-LIVE.trycloudflare.com/portal",
+  "pool_api_public_url": "https://REPLACE-WITH-LIVE.trycloudflare.com/pool-api",
+  "scheduler_local": "http://127.0.0.1:8766",
+  "portal_local": "http://127.0.0.1:8767",
+  "updated_at": "",
+  "invite_code": "glitch-factor",
+  "note": "TEMPLATE ONLY — live file is data/public_endpoints.json (gitignored). Quick-tunnel URLs change when start-public-access.cmd restarts. Ask Drew for the current public link, or read data/public_endpoints.share.txt on the host."
+}

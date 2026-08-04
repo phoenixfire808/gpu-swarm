@@ -21,11 +21,13 @@ Asset name: **`GPUPool.exe`** (~29 MB onefile). Includes Contribute / Utilize / 
 
 | Path | Tailscale? | How |
 |------|------------|-----|
-| **Public portal URL** (preferred when Drew posts it) | **No** | Open the `https://….trycloudflare.com/portal` link → invite **`glitch-factor`** + display name → Utilize (or Contribute CPU) |
-| **Installer / EXE** | Optional | Download EXE → wizard → same invite. Use public pool-api URL if Drew shared one; else Tailscale scheduler |
+| **Public portal URL** (preferred) | **No** | Open Drew’s current `https://….trycloudflare.com/portal` → invite **`glitch-factor`** + display name → Utilize (or Contribute CPU) |
+| **Installer / EXE** | Optional | Download EXE → wizard auto-detects `data/public_endpoints.json` → public `/pool-api` when present; else Tailscale |
 | **Tailscale** (optional private path) | Yes | Join Drew’s tailnet → `http://100.85.165.84:8767/portal` |
 
 Drew starts public access on the host with `start-public-access.cmd` (Cloudflare quick tunnel → portal `:8767`; `/pool-api` proxies the scheduler so **one** public URL works). Invite-code auth stays on.
+
+**URL rotates** when the tunnel restarts — ask Drew for the current public link, or (on Drew’s PC) read `data/public_endpoints.share.txt`. Do not rely on an old trycloudflare.com hostname from chat history.
 
 ---
 
@@ -43,7 +45,7 @@ Friends on MacBooks, Intel/AMD laptops, or any PC without NVIDIA are still welco
 
 | Do this | Details |
 |---------|---------|
-| Open the link Drew DMs | Prefer the **public** `…trycloudflare.com/portal` URL — **no Tailscale needed** while the tunnel is up |
+| Open the link Drew DMs | Prefer the **current** public `…trycloudflare.com/portal` URL — **no Tailscale needed** while the tunnel is up |
 | Or Tailscale (optional) | Portal: `http://100.85.165.84:8767/portal` · Scheduler: `http://100.85.165.84:8766` |
 | Utilize the pool | Browser → invite **`glitch-factor`** + display name → **Utilize** → allowlisted jobs (`probe`, etc.). Jobs run on whoever has GPUs online |
 | Optional: Contribute CPU | Register machine with CPU/RAM/disk caps; leave GPU/VRAM at **0**. Helps non-CUDA work when the job allows it. CUDA probes still need an NVIDIA worker |
@@ -92,10 +94,13 @@ Tokens/passwords are redacted before copy/submit.
 
 | What | URL |
 |------|-----|
-| **Public portal** (when tunnel on) | See `data/public_endpoints.share.txt` on host / Drew’s Discord DM |
-| **Public pool API** | `https://….trycloudflare.com/pool-api` (proxies scheduler) |
+| **Public portal** (live example — may change) | `https://rational-delicious-bars-examination.trycloudflare.com/portal` |
+| **Public pool API** | `https://rational-delicious-bars-examination.trycloudflare.com/pool-api` (proxies scheduler) |
+| **Canonical source** | Ask Drew, or read `data/public_endpoints.share.txt` / `data/public_endpoints.json` on the host (gitignored) |
 | Contributor portal (Tailscale) | `http://100.85.165.84:8767/portal` |
 | Scheduler API (Tailscale) | `http://100.85.165.84:8766` |
+
+Shape reference (no live URL): [`public_endpoints.example.json`](public_endpoints.example.json).
 
 ### Drew: start public access
 
