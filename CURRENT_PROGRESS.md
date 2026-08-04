@@ -68,7 +68,7 @@ Living scorecard for Drew private Discord GPU/CPU co-op.
 - [x] `gpu_swarm/portable_python.py` — NuGet CPython 3.12 → `%LOCALAPPDATA%\GPUPool\python\` + venv at `\venv`
 - [x] Wizard **Bootstrap portable Python**; EXE first-run background bootstrap when no usable Python
 - [x] pip installs prefer isolated venv (never fight global site-packages)
-- [x] scripts/install_joiner_deps.ps1 -> %LOCALAPPDATA%\GPUPool\venv (coord w/ diagnostics portable Python)
+- [x] `scripts/install_joiner_deps.ps1` restored → GPUPool venv + `requirements-joiner.txt`
 - [x] Docs: DOWNLOAD / RELEASE / CURRENT_PROGRESS / TODO; `gpu_pool.spec` hiddenimports + req datas
 
 ### Tailscale/LAN UX + Desktop three-mode (2026-08-04)
