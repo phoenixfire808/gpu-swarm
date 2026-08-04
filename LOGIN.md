@@ -75,25 +75,35 @@ If login suddenly fails after it worked before, ask Drew whether the invite was 
 
 ### Path B — Tailscale portal (private network)
 
-1. Install [Tailscale](https://tailscale.com/download) and join Drew’s Glitch Factor tailnet (ask Drew).
-2. Open exactly:  
+1. **Automated (preferred):** from a gpu-swarm checkout run `scripts\install-prereqs.cmd` (or wizard step **Network & Workspace** → **Install & connect**). It detects Tailscale, installs if missing, then opens login. Approve UAC if asked; finish the **one** Tailscale browser login. Optional unattended: set `GPU_SWARM_TAILSCALE_AUTHKEY` (never commit).
+2. Or install manually from [Tailscale](https://tailscale.com/download) and join Drew’s Glitch Factor tailnet (ask Drew).
+3. Open exactly:  
    `http://100.85.165.84:8767/portal`
-3. Continue to [§4 Login form](#4-exact-login-form-fields).
+4. Continue to [§4 Login form](#4-exact-login-form-fields).
 
 **Common mistake:** opening `http://100.85.165.84` without **`:8767`** and `/portal` — that will not load the portal.
 
-### Path C — Windows desktop app (`GPUPool.exe`)
+### Path C — Windows desktop app (source tip ready; EXE v0.1.1 pending)
 
-1. Download:  
-   https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
-   (also: [`DOWNLOAD.md`](DOWNLOAD.md))
-2. Run the EXE. If Windows SmartScreen appears → **More info** → **Run anyway** (only if you trust Drew’s release).
-3. In the wizard:
-   - Prefer the **public pool-api / portal** URL Drew shared (no Tailscale needed when the tunnel is up).
-   - Enter invite **`glitch-factor`** + your Discord display name.
-   - Set **your** resource caps (VRAM can be **0** if you have no NVIDIA GPU). Caps save locally and apply to **your** worker only.
-   - **Save + Join**.
-4. Optional: open the browser portal (Path A or B) for Utilize / Connect UI.
+**Ready today from source:**
+
+```bat
+cd C:\Users\Drew\Projects\gpu-swarm
+scripts\install-prereqs.cmd
+start-gpu-pool-app.cmd
+```
+
+Published EXE: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
+(see [`DOWNLOAD.md`](DOWNLOAD.md) — **v0.1.0 is stale**; prefer source until **v0.1.1+**).
+
+1. Run app / EXE. SmartScreen on unsigned EXE → **More info** → **Run anyway** (only if you trust Drew’s release).
+2. Wizard: **Network & Workspace** → Detect / Install & connect (Tailscale; optional VirtualBox+Vagrant for Workspace).
+3. Prefer the **public pool-api / portal** URL Drew shared when the tunnel is up; else Tailscale.
+4. Enter invite **`glitch-factor`** + your Discord display name.
+5. Set **your** resource caps (VRAM can be **0** if you have no NVIDIA GPU) → **Save + Join**.
+6. Home → **Contribute** or **Utilize**. Optional: Workspace / Connect local model.
+
+Shared agent-dev steps: [`SHARED_AGENT_DEV.md`](SHARED_AGENT_DEV.md).
 
 **Personal offer control:** Only you control how much of your PC is offered. Change anytime on your machine or in Contribute settings. Nobody else can remotely raise your caps.
 

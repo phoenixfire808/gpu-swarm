@@ -5,7 +5,8 @@ Members of a **private Discord** (and friends on Tailscale) plug home PCs into a
 This is a co-op pool — **not** a public marketplace. **No Docker.**
 
 **Friends: how to log in → [`LOGIN.md`](LOGIN.md)** (what it’s for, invite code, public / Tailscale / EXE paths).  
-**Download / install progress → [`DOWNLOAD.md`](DOWNLOAD.md)** (verbose steps, SmartScreen, no-NVIDIA path).
+**Download / install progress → [`DOWNLOAD.md`](DOWNLOAD.md)** (verbose steps, SmartScreen, no-NVIDIA path).  
+**Ready-to-go shared agent space → [`SHARED_AGENT_DEV.md`](SHARED_AGENT_DEV.md)** · prereqs: `scripts\install-prereqs.cmd`.
 
 ## Product vision (v1)
 

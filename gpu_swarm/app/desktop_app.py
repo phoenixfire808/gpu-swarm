@@ -93,7 +93,16 @@ class GpuPoolApp(ctk.CTk):
 
 
 class WizardFrame(ctk.CTkFrame):
-    STEPS = ("Welcome", "Python & Deps", "Hardware", "Identity", "Connect", "Caps", "Join")
+    STEPS = (
+        "Welcome",
+        "Network & Workspace",
+        "Python & Deps",
+        "Hardware",
+        "Identity",
+        "Connect",
+        "Caps",
+        "Join",
+    )
 
     def __init__(self, master: Any, app: GpuPoolApp, on_done: Callable[[], None]) -> None:
         super().__init__(master, fg_color=BG)
@@ -105,6 +114,7 @@ class WizardFrame(ctk.CTkFrame):
         self._host_info: dict[str, Any] = {}
         self._no_gpu = False
         self._join_busy = False
+        self._prereq_busy = False
         self._build()
         self._render_step()
 
@@ -148,12 +158,13 @@ class WizardFrame(ctk.CTkFrame):
 
         {
             0: self._step_welcome,
-            1: self._step_deps,
-            2: self._step_hardware,
-            3: self._step_identity,
-            4: self._step_connect,
-            5: self._step_caps,
-            6: self._step_join,
+            1: self._step_network_tools,
+            2: self._step_deps,
+            3: self._step_hardware,
+            4: self._step_identity,
+            5: self._step_connect,
+            6: self._step_caps,
+            7: self._step_join,
         }[self.step]()
 
     def _title(self, text: str, sub: str = "") -> None:
@@ -214,7 +225,9 @@ class WizardFrame(ctk.CTkFrame):
         ctk.CTkLabel(
             expect,
             text=(
-                "Next steps show live progress (Downloading Python…, Installing dependencies 1/5…).\n"
+                "Next: install network tools (Tailscale) and optional Workspace tools (VirtualBox + Vagrant) — "
+                "already-installed apps are skipped.\n"
+                "Then: live Python progress (Downloading…, Installing dependencies…).\n"
                 "Windows SmartScreen may warn on unsigned builds → More info → Run anyway (only if you trust Drew’s GitHub release).\n"
                 "Invite code: glitch-factor + your Discord display name. Public portal URL rotates — ask Drew for the current link."
             ),
@@ -302,6 +315,156 @@ class WizardFrame(ctk.CTkFrame):
                 wraplength=820,
                 justify="left",
             ).pack(anchor="w", padx=14, pady=(0, 12))
+
+    def _step_network_tools(self) -> None:
+        self._title(
+            "Network & Workspace tools",
+            "We detect what’s already installed and skip re-downloads. "
+            "Tailscale = private friend network. VirtualBox + Vagrant = optional shared Linux Workspace. "
+            "Contribute / Utilize work without VirtualBox if you use the public portal or Tailscale only.",
+        )
+        try:
+            from gpu_swarm.diagnostics import set_wizard_step
+
+            set_wizard_step("Network & Workspace")
+        except Exception:  # noqa: BLE001
+            pass
+
+        why = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
+        why.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(
+            why,
+            text=(
+                "• Tailscale — join Drew’s private network (skip if you have the public trycloudflare portal link)\n"
+                "• VirtualBox — runs the shared Workspace VM (capped CPU/RAM; GPU stays on the host worker)\n"
+                "• Vagrant — starts/stops that Workspace via Hermes/agent-vms\n"
+                "UAC prompts are normal once per install — click Yes. Auth keys stay in env vars only (never committed)."
+            ),
+            text_color=MUTED,
+            justify="left",
+            wraplength=820,
+        ).pack(anchor="w", padx=16, pady=14)
+
+        self.prereq_status_lbl = ctk.CTkLabel(
+            self.body,
+            text="Click Detect to scan this PC…",
+            text_color=MUTED,
+            wraplength=860,
+            justify="left",
+        )
+        self.prereq_status_lbl.pack(anchor="w", pady=(4, 2))
+        self.prereq_progress = ctk.CTkProgressBar(self.body, height=14, progress_color=ACCENT)
+        self.prereq_progress.pack(fill="x", pady=(0, 6))
+        self.prereq_progress.set(0)
+        self.prereq_log = self._log_box(200)
+        self._append_log(
+            self.prereq_log,
+            "Ready. Detect = scan only. Install & connect = install missing tools + open Tailscale login if needed.\n"
+            "Share-only shortcut: Install Tailscale only (skips VirtualBox/Vagrant).\n",
+        )
+
+        row = ctk.CTkFrame(self.body, fg_color="transparent")
+        row.pack(fill="x", pady=6)
+        ctk.CTkButton(
+            row,
+            text="Detect installed tools",
+            width=170,
+            fg_color="#2A3544",
+            command=lambda: self._run_prereqs(detect_only=True),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Install & connect",
+            width=150,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: self._run_prereqs(detect_only=False, connect_tailscale=True),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Install Tailscale only",
+            width=160,
+            fg_color="#2A3544",
+            command=lambda: self._run_prereqs(
+                detect_only=False,
+                connect_tailscale=True,
+                skip_virtualbox=True,
+                skip_vagrant=True,
+            ),
+        ).pack(side="left")
+
+        self.after(200, lambda: self._run_prereqs(detect_only=True))
+
+    def _run_prereqs(
+        self,
+        *,
+        detect_only: bool,
+        connect_tailscale: bool = False,
+        skip_virtualbox: bool = False,
+        skip_vagrant: bool = False,
+    ) -> None:
+        if self._prereq_busy:
+            return
+        if not hasattr(self, "prereq_log"):
+            return
+        self._prereq_busy = True
+        self.prereq_log.delete("1.0", "end")
+        if hasattr(self, "prereq_progress"):
+            self.prereq_progress.set(0.05)
+        mode = "Detecting" if detect_only else "Installing / connecting"
+        self._append_log(self.prereq_log, f"{mode}… (already-installed tools are skipped)\n\n")
+        if hasattr(self, "prereq_status_lbl"):
+            self.prereq_status_lbl.configure(text=f"{mode}…", text_color=ACCENT)
+
+        def work() -> None:
+            result = be.install_prereqs(
+                detect_only=detect_only,
+                connect_tailscale=connect_tailscale,
+                skip_virtualbox=skip_virtualbox,
+                skip_vagrant=skip_vagrant,
+            )
+            self.after(0, lambda: self._prereqs_done(result, detect_only=detect_only))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _prereqs_done(self, result: dict[str, Any], *, detect_only: bool) -> None:
+        self._prereq_busy = False
+        if hasattr(self, "prereq_progress"):
+            self.prereq_progress.set(1.0 if result.get("ok") else 0.4)
+        log_text = result.get("log_text") or ""
+        if log_text:
+            self._append_log(self.prereq_log, log_text + "\n")
+        for key in ("tailscale", "virtualbox", "vagrant"):
+            block = result.get(key) or {}
+            if isinstance(block, dict) and block.get("message"):
+                self._append_log(self.prereq_log, f"{key}: {block.get('message')}\n")
+        warns = result.get("warnings") or []
+        for w in warns:
+            self._append_log(self.prereq_log, f"WARN: {w}\n")
+        next_steps = result.get("next_steps") or []
+        if next_steps:
+            self._append_log(self.prereq_log, "\nNext:\n")
+            for s in next_steps:
+                self._append_log(self.prereq_log, f"  • {s}\n")
+        ts = result.get("tailscale") or {}
+        ws_ok = bool(result.get("workspace_tools_ready"))
+        parts = []
+        if ts.get("logged_in"):
+            parts.append(f"Tailscale on ({ts.get('ipv4') or 'ok'})")
+        elif ts.get("installed"):
+            parts.append("Tailscale installed — finish browser login if prompted")
+        elif ts.get("skipped"):
+            parts.append("Tailscale skipped")
+        else:
+            parts.append("Tailscale missing — use public portal or Install")
+        parts.append("Workspace tools OK" if ws_ok else "Workspace optional / incomplete")
+        summary = " · ".join(parts)
+        if hasattr(self, "prereq_status_lbl"):
+            self.prereq_status_lbl.configure(
+                text=summary,
+                text_color=OK_GREEN if (ts.get("logged_in") or detect_only) else WARN,
+            )
+        self._append_log(self.prereq_log, f"\n{summary}\n")
 
     def _set_portal(self, url: str) -> None:
         if hasattr(self, "portal_entry"):

@@ -12,7 +12,7 @@ For friends on a **laptop without an NVIDIA GPU**. You can still use the pool.
 
 Quick tunnels rotate when Drew restarts `start-public-access.cmd` — do not reuse an old trycloudflare.com URL from chat. On Drew’s PC the live link is also in `data/public_endpoints.share.txt`.
 
-**Or Tailscale:** install [Tailscale](https://tailscale.com/download), join Drew’s Glitch Factor tailnet.
+**Or Tailscale (automated):** from gpu-swarm run `scripts\install-prereqs.cmd` (or app wizard → **Network & Workspace** → **Install Tailscale only**). Approve UAC; finish the one browser login. Manual: [Tailscale download](https://tailscale.com/download).
 
 ## 2) Open the portal (full URL)
 

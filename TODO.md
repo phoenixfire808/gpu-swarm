@@ -22,28 +22,31 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 ## Now
 - [x] Workspace VM MVP — GPU Pool → Hermes agent-vm with Contribute/host_protect CPU+RAM caps
 - [x] Verbose install progress + plain-language friend UX (scripts, wizard, DOWNLOAD/LOGIN/FRIEND docs)
-- [ ] Drew: Ollama serve + model + worker restart → full chat e2e (and `llm_ready` on hub)
-- [ ] Packaging Worker: publish Windows EXE **v0.1.1+** with host_protect + local_endpoint + llm_chat + workspace bridge + verbose install UX
-- [ ] Post member tip: `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`
+- [x] **install-prereqs automation** — Tailscale / VirtualBox / Vagrant detect-or-install + wizard Network & Workspace
+- [x] **Ready-to-go source tip** — SHARED_AGENT_DEV.md; hub/worker/workspace/prereqs usable today
+- [x] Ollama serve + Drew-Home `llm_ready=yes` (endpoint `/v1/models` OK; skipped 27B chat load)
+- [ ] Packaging Worker: publish Windows EXE **v0.1.1+** (hub + workspace + install-prereqs + host_protect)
+- [ ] Post member tip: `OPENAI_BASE_URL=http://127.0.0.1:18080/v1` (or `:8080` when free)
 
 ## Next
+- [ ] Shared Agent Dev: multi-session create from Pool UI (`session create` CLI exists)
 - [ ] Streaming on local endpoint (`stream=true`)
 - [ ] Allowlisted `whisper_transcribe`
 - [ ] Portal Discord OAuth (replace invite/password MVP)
 - [ ] Worker advertise `llm_models` into `/status` for richer `/v1/models`
 - [ ] Stable public URL (durable tunnel / DNS)
 - [ ] Workspace: confirm dialog for halt+start when running above offer
-- [ ] Workspace: multi-session create from desktop UI
 - [ ] Workspace: disk resize / quota (today: scheduling soft-cap only)
+- [ ] Prefer a small default Ollama model for light chat smoke
 
 ## Blocked
-- [ ] Full LLM e2e — Ollama not running on host worker yet
+- [ ] Light `llm_chat` completion smoke — only large ~27B GGUF local; host_protect pausing on high util
 - [ ] OAuth — blocked until auth priority
 - [ ] Exact EXE download URL freshness — blocked on packaging Worker Release rebuild
 
 ## Next 5
-1. Enable Ollama on Drew-Home + restart worker (`llm_ready=yes`)
-2. Smoke: local endpoint → chat completion via pool
-3. Packaging: `build_exe.ps1 -Clean` → publish **v0.1.1** (`RELEASE.md` commands)
-4. Try Workspace: `start-gpu-pool-app.cmd` → Home → Workspace → Start / Open
-5. Keep secrets out of git (never `.env` / `data/public_endpoints*`)
+1. Packaging: `build_exe.ps1 -Clean` → publish **v0.1.1** (`RELEASE.md`)
+2. Friend trial: `install-prereqs` → app → invite → Contribute/Utilize
+3. Workspace Start/Open from desktop when needed (RDP 3390)
+4. Optional: smaller Ollama model for safe chat smoke
+5. Keep secrets out of git (never `.env` / auth keys / `data/public_endpoints*`)

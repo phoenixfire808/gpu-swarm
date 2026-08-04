@@ -73,6 +73,7 @@ __all__ = [
     "install_requirements",
     "install_torch_cuda",
     "install_joiner_deps",
+    "install_prereqs",
     "check_prereqs",
     "script_paths",
     "is_worker_running",
@@ -141,11 +142,11 @@ PRIVATE_NETWORK_BLURB = (
     "no Tailscale needed (invite code still required). Tailscale remains an optional private path."
 )
 FRIENDS_CONNECT_STEPS = (
-    "1) Preferred: open the public portal URL Drew DMs (no Tailscale)",
-    "2) Or install Tailscale — https://tailscale.com/download — and join the Glitch Factor tailnet",
-    f"3) Open portal (public link or {DEFAULT_PORTAL_URL}) or run the GPU Pool EXE",
+    "1) Run GPU Pool → wizard → Install network & workspace tools (or scripts\\install-prereqs.cmd)",
+    "2) Prefer public portal URL Drew DMs (no Tailscale) OR finish Tailscale login",
+    f"3) Open portal (public link or {DEFAULT_PORTAL_URL}) or continue in the app",
     f"4) Sign in with invite code {PORTAL_INVITE_CODE} + your display name",
-    "5) Contribute (GPU or CPU-only / VRAM=0) or Utilize (allowlisted jobs)",
+    "5) Home → Contribute or Utilize (Workspace optional — needs VirtualBox+Vagrant)",
 )
 
 
@@ -290,8 +291,10 @@ def get_friends_connect_text() -> str:
 SCRIPTS_DIR = BUNDLE_ROOT / "scripts"
 SCRIPT_CHECK_PREREQS = SCRIPTS_DIR / "check_prereqs.ps1"
 SCRIPT_INSTALL_JOINER_DEPS = SCRIPTS_DIR / "install_joiner_deps.ps1"
+SCRIPT_INSTALL_PREREQS = SCRIPTS_DIR / "install-prereqs.ps1"
 SCRIPT_CHECK_PREREQS_CMD = SCRIPTS_DIR / "check_prereqs.cmd"
 SCRIPT_INSTALL_JOINER_DEPS_CMD = SCRIPTS_DIR / "install_joiner_deps.cmd"
+SCRIPT_INSTALL_PREREQS_CMD = SCRIPTS_DIR / "install-prereqs.cmd"
 CONNECTING_DOC = BUNDLE_ROOT / "CONNECTING.md"
 LOCAL_MODEL_DOC = BUNDLE_ROOT / "LOCAL_MODEL.md"
 ADVANCED_VM_DOC = BUNDLE_ROOT / "ADVANCED_VM.md"
@@ -1120,6 +1123,8 @@ def script_paths() -> dict[str, str]:
         "check_prereqs_cmd": str(SCRIPT_CHECK_PREREQS_CMD),
         "install_joiner_deps_ps1": str(SCRIPT_INSTALL_JOINER_DEPS),
         "install_joiner_deps_cmd": str(SCRIPT_INSTALL_JOINER_DEPS_CMD),
+        "install_prereqs_ps1": str(SCRIPT_INSTALL_PREREQS),
+        "install_prereqs_cmd": str(SCRIPT_INSTALL_PREREQS_CMD),
     }
 
 
@@ -1244,6 +1249,64 @@ def check_prereqs(
         },
         "source": "app_backend.check_prereqs",
         "script": script_paths(),
+    }
+
+
+def install_prereqs(
+    *,
+    detect_only: bool = False,
+    skip_tailscale: bool = False,
+    skip_virtualbox: bool = False,
+    skip_vagrant: bool = False,
+    connect_tailscale: bool = False,
+    prefer_script: bool = True,
+    timeout: float = 1800.0,
+) -> dict[str, Any]:
+    """
+    Detect/install Tailscale + optional VirtualBox/Vagrant (Workspace).
+    Prefer scripts/install-prereqs.ps1. Never reads or writes Discord secrets.
+    Tailscale auth key only via process env TS_AUTHKEY / GPU_SWARM_TAILSCALE_AUTHKEY.
+    """
+    if prefer_script and SCRIPT_INSTALL_PREREQS.is_file():
+        args: list[str] = ["-Json"]
+        if detect_only:
+            args.append("-DetectOnly")
+        if skip_tailscale:
+            args.append("-SkipTailscale")
+        if skip_virtualbox:
+            args.append("-SkipVirtualBox")
+        if skip_vagrant:
+            args.append("-SkipVagrant")
+        if connect_tailscale:
+            args.append("-ConnectTailscale")
+        raw = _run_powershell(SCRIPT_INSTALL_PREREQS, args=args, timeout=timeout)
+        parsed = _parse_json_tail(raw.get("stdout") or "")
+        if isinstance(parsed, dict):
+            parsed.setdefault("source", "scripts/install-prereqs.ps1")
+            parsed.setdefault("script", script_paths())
+            parsed["raw_code"] = raw.get("code")
+            # Surface progress text for the wizard log (JSON stripped from tip).
+            stdout = raw.get("stdout") or ""
+            tip = stdout
+            brace = tip.rfind("{")
+            if brace > 0:
+                tip = tip[:brace].strip()
+            if tip:
+                parsed["log_text"] = tip[-4000:]
+            return parsed
+        return {
+            "ok": bool(raw.get("ok")),
+            "message": (raw.get("stderr") or raw.get("stdout") or "install-prereqs failed")[-800:],
+            "code": raw.get("code"),
+            "source": "scripts/install-prereqs.ps1",
+            "script": script_paths(),
+            "log_text": (raw.get("stdout") or "")[-4000:],
+        }
+
+    return {
+        "ok": False,
+        "message": f"Missing {SCRIPT_INSTALL_PREREQS} — clone full repo or run from source",
+        "source": "app_backend.install_prereqs",
     }
 
 

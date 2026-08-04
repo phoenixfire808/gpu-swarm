@@ -38,9 +38,11 @@ Asset name: **`GPUPool.exe`** (~29 MB onefile).
 | Path | Tailscale? | How |
 |------|------------|-----|
 | **Public portal URL** (preferred) | **No** | Open Drew’s current `https://….trycloudflare.com/portal` → invite **`glitch-factor`** + display name → Utilize (or Contribute CPU) |
-| **Installer / EXE** | Optional | Download EXE → wizard shows **live install progress** → public `/pool-api` when present; else Tailscale |
-| **From source** | Optional | Clone → `scripts\install_joiner_deps.cmd` (verbose steps) → `start-gpu-pool-app.cmd` |
-| **Tailscale** (optional private path) | Yes | Join Drew’s tailnet → `http://100.85.165.84:8767/portal` |
+| **From source (ready-to-go tip)** | Optional | `scripts\install-prereqs.cmd` → `start-gpu-pool-app.cmd` → wizard **Network & Workspace** → invite → Contribute/Utilize |
+| **Installer / EXE** | Optional | Download EXE → wizard (v0.1.1+ includes prereqs step; **v0.1.0 stale**) → public `/pool-api` when present; else Tailscale |
+| **Tailscale** (optional private path) | Yes | Auto via `install-prereqs` or manual install → `http://100.85.165.84:8767/portal` |
+
+**Shared agent development space** (hub + Workspace VM + pool endpoint): [`SHARED_AGENT_DEV.md`](SHARED_AGENT_DEV.md).
 
 Drew starts public access on the host with `start-public-access.cmd` (Cloudflare quick tunnel → portal `:8767`; `/pool-api` proxies the scheduler so **one** public URL works). Invite-code auth stays on.
 
@@ -50,9 +52,10 @@ Drew starts public access on the host with `start-public-access.cmd` (Cloudflare
 
 ## Prerequisites
 
-1. **Access** — either Drew’s **public portal URL** (no Tailscale) **or** Tailscale on Drew’s private network (ask in Discord).
+1. **Access** — public portal URL **or** Tailscale. Automate with `scripts\install-prereqs.cmd` (detects/installs Tailscale; optional VirtualBox+Vagrant for Workspace). Already-installed tools are skipped.
 2. **Invite code** — `glitch-factor` (Glitch Factor Discord). Use it with your display name at portal login / app join.
-3. **NVIDIA drivers** — only if you want to **Contribute a GPU**. Install current Game Ready / Studio drivers so `nvidia-smi` works. **No GPU?** Skip this — use Utilize (and optional CPU contribute) below.
+3. **NVIDIA drivers** — only if you want to **Contribute a GPU**. **No GPU?** Skip — Utilize / CPU contribute still work.
+4. **Workspace (optional)** — VirtualBox + Vagrant via the same `install-prereqs` script; UAC once; then Home → Workspace.
 
 ---
 
