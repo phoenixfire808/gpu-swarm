@@ -50,6 +50,7 @@ class WorkerHeartbeat(BaseModel):
     cpu_cores: int | None = None
     ram_total_mb: int | None = None
     ram_available_mb: int | None = None
+    max_vram_mb: int | None = None
     max_ram_mb: int | None = None
     disk_free_mb: int | None = None
     disk_total_mb: int | None = None
@@ -60,6 +61,30 @@ class WorkerHeartbeat(BaseModel):
     dedicated_disk_mb: int | None = None
     dedicated_cpu_cores: float | None = None
     contributor_name: str | None = None
+
+
+# Job payloads must not remotely raise another contributor's offer caps.
+_FORBIDDEN_CAP_OVERRIDE_KEYS = frozenset(
+    {
+        "max_vram_mb",
+        "max_cpu_percent",
+        "max_ram_mb",
+        "max_disk_mb",
+        "max_disk_gb",
+        "dedicated_ram_mb",
+        "dedicated_disk_mb",
+        "dedicated_cpu_cores",
+        "force_max_vram_mb",
+        "force_max_ram_mb",
+        "force_max_disk_mb",
+        "force_max_cpu_percent",
+        "override_caps",
+        "force_caps",
+        "raise_caps",
+        "set_worker_caps",
+        "worker_caps",
+    }
+)
 
 
 class JobSubmit(BaseModel):
@@ -121,6 +146,20 @@ def _normalize_capacity(data: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _sanitize_job_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Drop (and reject if only-override) payload keys that try to raise worker caps."""
+    raw = dict(payload or {})
+    bad = sorted(k for k in raw if k in _FORBIDDEN_CAP_OVERRIDE_KEYS)
+    if bad:
+        raise HTTPException(
+            400,
+            "job payload cannot set or raise worker offer caps "
+            f"(rejected keys: {', '.join(bad)}). "
+            "Only the contributor's worker process controls max_vram/cpu/ram/disk.",
+        )
+    return raw
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -128,11 +167,13 @@ async def health() -> dict[str, str]:
 
 @app.post("/workers/register")
 async def workers_register(body: WorkerRegister) -> dict[str, Any]:
+    # Caps come only from this worker's own register body (worker process config).
     return await _store().register_worker(_normalize_capacity(body.model_dump()))
 
 
 @app.post("/workers/{worker_id}/heartbeat")
 async def workers_heartbeat(worker_id: str, body: WorkerHeartbeat) -> dict[str, Any]:
+    # Caps update only via this worker_id's own heartbeat — no admin overwrite path.
     raw = _normalize_capacity(body.model_dump())
     row = await _store().heartbeat(worker_id, raw)
     if not row:
@@ -157,10 +198,11 @@ async def jobs_submit(body: JobSubmit) -> dict[str, Any]:
         require_gpu = True
     if body.job_type == "llm_chat":
         require_gpu = bool(body.require_gpu)
+    payload = _sanitize_job_payload(body.payload)
     return await _store().submit_job(
         {
             "job_type": body.job_type,
-            "payload": body.payload,
+            "payload": payload,
             "require_gpu": require_gpu,
             "min_vram_mb": body.min_vram_mb,
             "submitted_by": body.submitted_by,
@@ -273,6 +315,7 @@ async def v1_pool_jobs_submit(body: PoolJobSubmit) -> dict[str, Any]:
         require_gpu = body.job_type == "pytorch_cuda_probe"
     if body.job_type == "pytorch_cuda_probe":
         require_gpu = True
+    payload = _sanitize_job_payload(payload)
     return await _store().submit_job(
         {
             "job_type": body.job_type,

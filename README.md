@@ -77,7 +77,7 @@ Default URLs on Drew’s host (Tailscale):
 1. Install Tailscale and join Drew’s private network (ask Drew). Private Tailscale/LAN pool — not exposed to the open internet.
 2. Open the portal URL → sign in with **invite code / pool password** + display name (OAuth comes later).
 3. **Home** shows three big paths: **Contribute** · **Utilize** · **Connect** (URLs, Discord commands, CLI/SDK — [`CONNECTING.md`](CONNECTING.md)).
-4. **Contribute — register this machine** — set dedication caps:
+4. **Contribute — register this machine** — set **your** dedication caps:
    - GPU VRAM (MiB)
    - CPU (% or cores)
    - RAM (MiB advertised / capped)
@@ -86,6 +86,8 @@ Default URLs on Drew’s host (Tailscale):
 6. Confirm in Discord: `/pool` and `/workers` show the new machine.
 
 Leave anytime from the portal (or stop the worker). Caps persist for the next session.
+
+**Personal offer control:** Only **you** control how much of your PC is offered. Change anytime on your machine or in Contribute settings. The worker is the source of truth; admins cannot remotely raise another contributor’s caps.
 
 > Portal launcher: `start-portal.cmd` or `python -m gpu_swarm portal` → **8767**/portal. Scheduler stays on **8766**.
 

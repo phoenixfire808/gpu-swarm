@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:25 CDT · Friend login docs (`LOGIN.md`) + Local Pool Endpoint / `llm_chat`.
+**Updated:** 2026-08-04 ~12:27 CDT · Contributor offer-cap ownership (worker source of truth).
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -55,6 +55,14 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 
 ### Tailscale/LAN UX + Desktop three-mode (2026-08-04)
 - [x] Private-network messaging, Utilize/Connect, portal friends cards
+
+### Contributor offer-cap ownership (2026-08-04)
+- [x] Worker is source of truth for `max_vram` / CPU / RAM / disk (heartbeat + register only)
+- [x] Portal: caps editable only for session owner; PATCH other user’s machine → 403
+- [x] Desktop Contribute: local joiner_settings only + ownership copy
+- [x] Scheduler rejects job payloads that try to force/raise worker caps; lease respects advertised caps
+- [x] Docs note in LOGIN.md / CONNECTING.md / README
+- [x] Unit check: cross-user update denied (`tests/test_offer_ownership.py`)
 
 ---
 

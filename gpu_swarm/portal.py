@@ -83,6 +83,18 @@ class MachineBody(BaseModel):
     notes: str | None = None
 
 
+class MachineCapsPatch(BaseModel):
+    """Owner-only cap updates. Does not change another user's machine."""
+
+    worker_name: str | None = Field(default=None, max_length=80)
+    max_vram_mb: int | None = None
+    max_cpu_percent: float | None = None
+    dedicated_ram_mb: int | None = None
+    dedicated_disk_mb: int | None = None
+    dedicated_cpu_cores: float | None = None
+    notes: str | None = None
+
+
 class JobSubmitBody(BaseModel):
     job_type: str = Field(min_length=1, max_length=64)
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -508,6 +520,47 @@ async def api_machines_create(body: MachineBody, request: Request) -> dict[str, 
     return {"ok": True, "machine": machine, "instructions": instructions}
 
 
+@app.patch("/api/machines/{machine_id}")
+async def api_machines_patch(
+    machine_id: str, body: MachineCapsPatch, request: Request
+) -> dict[str, Any]:
+    """Update offer caps for a machine owned by the logged-in user only.
+
+    Cross-user PATCH → 403. Unknown id → 404.
+    Regenerates start-token launch instructions for *this* owner (token unchanged).
+    """
+    user = await _require_user(request)
+    existing = await _store().get_machine(machine_id)
+    if not existing:
+        raise HTTPException(404, "machine not found")
+    if str(existing.get("user_id") or "") != str(user["id"]):
+        raise HTTPException(
+            403,
+            "forbidden: only you can change how much of your PC is offered",
+        )
+    try:
+        machine = await _store().update_machine_caps(
+            machine_id,
+            user["id"],
+            body.model_dump(exclude_unset=True),
+        )
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    if not machine:
+        raise HTTPException(404, "machine not found")
+    portal_base = _public_base(request)
+    instructions = _worker_instructions(machine, portal_base)
+    return {
+        "ok": True,
+        "machine": machine,
+        "instructions": instructions,
+        "ownership": (
+            "Only you control how much of your PC is offered. "
+            "Change anytime on your machine or in your Contribute settings."
+        ),
+    }
+
+
 @app.get("/api/worker-bootstrap/{token}")
 async def api_worker_bootstrap(token: str) -> dict[str, Any]:
     machine = await _store().bootstrap_token(token)
@@ -684,9 +737,10 @@ def _worker_instructions(machine: dict[str, Any], portal_base: str) -> dict[str,
             f'--start-token {token} --portal-url {portal_base}'
         ),
         "note": (
-            "The start token loads your dedication caps from the portal, then the worker "
-            "heartbeats real GPU/CPU inventory to the scheduler. Desktop app users can paste "
-            "the same scheduler URL + caps into the joiner."
+            "The start token loads YOUR dedication caps from the portal, then the worker "
+            "heartbeats real GPU/CPU inventory to the scheduler. Only you control how much "
+            "of your PC is offered — pool admins cannot remotely raise another contributor's caps. "
+            "Desktop app users save the same caps locally in joiner settings."
         ),
     }
 
@@ -1070,6 +1124,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
       <div class="panel">
         <h2>Contribute — register this machine</h2>
         <p class="lede">Set dedication caps, then copy a start-token command. The worker reports real nvidia-smi / host inventory — nothing mocked.</p>
+        <p class="note" id="ownershipNote" style="margin:0.5rem 0 1rem">Only you control how much of your PC is offered. Change anytime on your machine or in your Contribute settings. Nobody else (including pool admin via Discord) can remotely raise your caps.</p>
         <label for="workerName">Worker name</label>
         <input id="workerName" type="text" placeholder="My-PC-gpu" />
         <label for="schedulerUrl">Scheduler URL</label>
@@ -1103,9 +1158,15 @@ PORTAL_HTML = r"""<!DOCTYPE html>
 
         <div class="actions">
           <button id="registerBtn" type="button">Create start token</button>
+          <button class="secondary" id="updateCapsBtn" type="button" disabled>Update my caps</button>
           <button class="secondary" type="button" data-go="home">Back to Home</button>
         </div>
         <div class="err hidden" id="regErr"></div>
+        <div id="myMachinesBox" style="margin-top:1rem">
+          <h2>Your machines (editable by you only)</h2>
+          <p class="lede">Select a machine you own to edit sliders, then <strong>Update my caps</strong>. This refreshes <em>your</em> start-token launch instructions — not anyone else's worker.</p>
+          <div id="myMachinesList" class="lede">Loading…</div>
+        </div>
         <div id="instrBox" class="hidden" style="margin-top:1rem">
           <h2>Run worker</h2>
           <p class="lede">Windows (cmd):</p>
@@ -1190,6 +1251,8 @@ bindSlider("disk", "diskVal", v => `${v} MB`);
 let currentJobId = null;
 let jobPollTimer = null;
 let portalConfig = null;
+let selectedMachineId = null;
+let myMachines = [];
 
 async function api(path, opts={}) {
   const r = await fetch(path, {
@@ -1221,6 +1284,71 @@ function setView(name) {
     btn.classList.toggle("active", btn.dataset.view === name);
   });
   if (name === "home") refreshDash();
+  if (name === "contribute") refreshMyMachines();
+}
+
+function paintInstructions(i) {
+  if (!i) return;
+  $("instrWin").textContent = i.windows_cmd;
+  $("instrOne").textContent = i.one_liner;
+  $("instrEnv").textContent = i.env_direct;
+  $("instrBox").classList.remove("hidden");
+}
+
+function selectMachine(m) {
+  selectedMachineId = m.id;
+  $("workerName").value = m.worker_name || "";
+  if (m.scheduler_url) $("schedulerUrl").value = m.scheduler_url;
+  $("vram").value = m.max_vram_mb || 0;
+  $("cpuPct").value = m.max_cpu_percent || 50;
+  $("cpuCores").value = m.dedicated_cpu_cores || 0;
+  $("ram").value = m.dedicated_ram_mb || 0;
+  $("disk").value = m.dedicated_disk_mb || 0;
+  ["vram","cpuPct","cpuCores","ram","disk"].forEach(id => $(id).dispatchEvent(new Event("input")));
+  $("updateCapsBtn").disabled = !selectedMachineId;
+  refreshMyMachinesListOnly();
+}
+
+function refreshMyMachinesListOnly() {
+  const box = $("myMachinesList");
+  if (!box) return;
+  if (!myMachines.length) {
+    box.textContent = "No machines yet — Create start token above. Caps apply only to your worker.";
+    return;
+  }
+  box.innerHTML = myMachines.map(m => {
+    const sel = m.id === selectedMachineId ? " · selected" : "";
+    return `<div style="margin:0.35rem 0;padding:0.45rem 0.6rem;border:1px solid #2a3a32;border-radius:8px;cursor:pointer;background:${m.id===selectedMachineId?"rgba(232,168,74,0.12)":"transparent"}" data-mid="${escapeHtml(m.id)}">
+      <strong>${escapeHtml(m.worker_name||"worker")}</strong>${sel}<br>
+      VRAM ${m.max_vram_mb||0} MB · CPU ${m.max_cpu_percent||0}% · RAM ${m.dedicated_ram_mb||0} MB · Disk ${m.dedicated_disk_mb||0} MB
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-mid]").forEach(el => {
+    el.onclick = () => {
+      const m = myMachines.find(x => x.id === el.getAttribute("data-mid"));
+      if (m) selectMachine(m);
+    };
+  });
+}
+
+async function refreshMyMachines() {
+  try {
+    const data = await api("/api/machines");
+    myMachines = data.machines || [];
+    if (!selectedMachineId && myMachines.length) selectedMachineId = myMachines[0].id;
+    if (selectedMachineId && !myMachines.find(m => m.id === selectedMachineId)) {
+      selectedMachineId = myMachines.length ? myMachines[0].id : null;
+    }
+    $("updateCapsBtn").disabled = !selectedMachineId;
+    const cur = myMachines.find(m => m.id === selectedMachineId);
+    if (cur) {
+      $("workerName").value = cur.worker_name || $("workerName").value;
+      if (cur.scheduler_url) $("schedulerUrl").value = cur.scheduler_url;
+    }
+    refreshMyMachinesListOnly();
+  } catch (e) {
+    if ($("myMachinesList")) $("myMachinesList").textContent = String(e.message||e);
+  }
 }
 
 function fmtMb(n) {
@@ -1440,26 +1568,50 @@ $("submitJobBtn").onclick = async () => {
   }
 };
 
+function capsPayload() {
+  return {
+    worker_name: $("workerName").value.trim() || "browser-worker",
+    scheduler_url: $("schedulerUrl").value.trim(),
+    max_vram_mb: Number($("vram").value),
+    max_cpu_percent: Number($("cpuPct").value),
+    dedicated_ram_mb: Number($("ram").value),
+    dedicated_disk_mb: Number($("disk").value),
+    dedicated_cpu_cores: Number($("cpuCores").value),
+  };
+}
+
 $("registerBtn").onclick = async () => {
   $("regErr").classList.add("hidden");
   try {
     const data = await api("/api/machines", {
       method: "POST",
-      body: JSON.stringify({
-        worker_name: $("workerName").value.trim() || "browser-worker",
-        scheduler_url: $("schedulerUrl").value.trim(),
-        max_vram_mb: Number($("vram").value),
-        max_cpu_percent: Number($("cpuPct").value),
-        dedicated_ram_mb: Number($("ram").value),
-        dedicated_disk_mb: Number($("disk").value),
-        dedicated_cpu_cores: Number($("cpuCores").value),
-      }),
+      body: JSON.stringify(capsPayload()),
     });
-    const i = data.instructions;
-    $("instrWin").textContent = i.windows_cmd;
-    $("instrOne").textContent = i.one_liner;
-    $("instrEnv").textContent = i.env_direct;
-    $("instrBox").classList.remove("hidden");
+    selectedMachineId = data.machine && data.machine.id;
+    paintInstructions(data.instructions);
+    await refreshMyMachines();
+  } catch (e) {
+    $("regErr").textContent = String(e.message||e);
+    $("regErr").classList.remove("hidden");
+  }
+};
+
+$("updateCapsBtn").onclick = async () => {
+  $("regErr").classList.add("hidden");
+  if (!selectedMachineId) {
+    $("regErr").textContent = "Select one of your machines first (or create a start token).";
+    $("regErr").classList.remove("hidden");
+    return;
+  }
+  try {
+    const body = capsPayload();
+    delete body.scheduler_url; // owner may update caps; scheduler URL stays as registered
+    const data = await api("/api/machines/" + encodeURIComponent(selectedMachineId), {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    paintInstructions(data.instructions);
+    await refreshMyMachines();
   } catch (e) {
     $("regErr").textContent = String(e.message||e);
     $("regErr").classList.remove("hidden");

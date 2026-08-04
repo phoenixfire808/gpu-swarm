@@ -21,13 +21,15 @@ You advertise GPU/CPU/RAM/disk and run allowlisted jobs for the pool.
 
 | Path | How |
 |------|-----|
-| **Portal** (easiest) | Open public or Tailscale `/portal` → invite + display name → set caps → start worker |
-| **Desktop app** | `start-gpu-pool-app.cmd` → wizard → **Save + Join** |
-| **CLI** | `python -m gpu_swarm worker --name YourName --discord-user YourName` |
+| **Portal** (easiest) | Open public or Tailscale `/portal` → invite + display name → set **your** caps → start worker |
+| **Desktop app** | `start-gpu-pool-app.cmd` → wizard → set caps → **Save + Join** (saved in `data/joiner_settings.json`) |
+| **CLI** | `python -m gpu_swarm worker --name YourName --discord-user YourName` (+ env/CLI caps) |
 | **Discord** | `/contribute` for instructions; `/workers` to confirm you’re online |
 | **CPU-only / no NVIDIA** | Leave VRAM at 0; advertise CPU/RAM/disk. Still useful for non-CUDA work |
 
 Leave anytime (portal/app Leave, or stop the worker). Caps are soft ads for scheduling — not a shared NAS.
+
+**Personal offer control:** Only **you** control how much of your PC is offered (VRAM/CPU/RAM/disk). Change anytime on your machine or in your Contribute settings. The worker process is the source of truth; the scheduler stores what your worker heartbeats. Pool admins cannot remotely raise another contributor’s offer via Discord or an admin API.
 
 ---
 

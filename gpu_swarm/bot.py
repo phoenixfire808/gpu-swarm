@@ -112,11 +112,14 @@ def build_bot():
     async def contribute(ctx):
         msg = (
             "**Contribute spare GPU/CPU to this private co-op**\n"
-            "1. Clone/open `gpu-swarm` on your Windows PC\n"
-            "2. Set `GPU_SWARM_SCHEDULER_URL` to the pool host (LAN/Tailscale)\n"
-            "3. Run: `python -m gpu_swarm worker --name YourDiscordName`\n"
-            "4. Leave it idle-friendly; Ctrl+C to stop anytime\n"
-            "Only allowlisted jobs run (`probe`, `pytorch_cuda_probe`) — no arbitrary shell."
+            "1. Clone/open `gpu-swarm` on your Windows PC (or use `GPUPool.exe`)\n"
+            "2. Set `GPU_SWARM_SCHEDULER_URL` to the pool host (LAN/Tailscale/public `/pool-api`)\n"
+            "3. Set **your** offer caps (VRAM/CPU/RAM/disk) in Contribute / joiner settings / env\n"
+            "4. Run: `python -m gpu_swarm worker --name YourDiscordName`\n"
+            "5. Leave it idle-friendly; Ctrl+C to stop anytime\n"
+            "**Personal offer control:** Only **you** control how much of your PC is offered. "
+            "Admins cannot remotely raise another contributor's caps via Discord.\n"
+            "Only allowlisted jobs run (`probe`, `pytorch_cuda_probe`, `llm_chat`) — no arbitrary shell."
         )
         await ctx.send(msg)
 

@@ -154,6 +154,7 @@ class Worker:
                 "free_vram_mb": caps["free_vram_mb"],
                 "total_vram_mb": caps["total_vram_mb"],
                 "cpu_cores": caps["cpu_cores"],
+                "max_vram_mb": caps["max_vram_mb"],
                 "max_cpu_percent": caps["max_cpu_percent"],
                 "ram_total_mb": caps["ram_total_mb"],
                 "ram_available_mb": caps["ram_available_mb"],

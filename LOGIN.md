@@ -75,9 +75,11 @@ If login suddenly fails after it worked before, ask Drew whether the invite was 
 3. In the wizard:
    - Prefer the **public pool-api / portal** URL Drew shared (no Tailscale needed when the tunnel is up).
    - Enter invite **`glitch-factor`** + your Discord display name.
-   - Set resource caps (VRAM can be **0** if you have no NVIDIA GPU).
+   - Set **your** resource caps (VRAM can be **0** if you have no NVIDIA GPU). Caps save locally and apply to **your** worker only.
    - **Save + Join**.
 4. Optional: open the browser portal (Path A or B) for Utilize / Connect UI.
+
+**Personal offer control:** Only you control how much of your PC is offered. Change anytime on your machine or in Contribute settings. Nobody else can remotely raise your caps.
 
 ---
 
@@ -98,7 +100,7 @@ You should land on **Home** signed in as your display name.
 
 | Path | What it does | Who it’s for |
 |------|--------------|--------------|
-| **Contribute** | Register this PC, set GPU/CPU/RAM/disk caps, run a worker that takes allowlisted jobs | Friends with spare compute (GPU optional — VRAM=0 = CPU-only) |
+| **Contribute** | Register this PC, set **your** GPU/CPU/RAM/disk offer caps, run a worker that takes allowlisted jobs. Only you can change your offer. | Friends with spare compute (GPU optional — VRAM=0 = CPU-only) |
 | **Utilize** | Submit allowlisted jobs (`probe`, CUDA probe, etc.); they run on online workers | Anyone — especially laptops with **no NVIDIA** |
 | **Connect** | URLs, Discord slash commands, CLI / Python SDK how-to | Coders and agents |
 

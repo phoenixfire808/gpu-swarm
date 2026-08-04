@@ -206,6 +206,7 @@ class Store:
         cpu_cores = data.get("cpu_cores")
         ram_total = data.get("ram_total_mb")
         ram_avail = data.get("ram_available_mb")
+        max_vram = data.get("max_vram_mb")
         max_ram = data.get("max_ram_mb")
         if max_ram is None and data.get("dedicated_ram_mb") is not None:
             max_ram = data.get("dedicated_ram_mb")
@@ -228,6 +229,7 @@ class Store:
                 cpu_cores=COALESCE(?, cpu_cores),
                 ram_total_mb=COALESCE(?, ram_total_mb),
                 ram_available_mb=COALESCE(?, ram_available_mb),
+                max_vram_mb=COALESCE(?, max_vram_mb),
                 max_ram_mb=COALESCE(?, max_ram_mb),
                 disk_free_mb=COALESCE(?, disk_free_mb),
                 disk_total_mb=COALESCE(?, disk_total_mb),
@@ -249,6 +251,7 @@ class Store:
                 int(cpu_cores) if cpu_cores is not None else None,
                 int(ram_total) if ram_total is not None else None,
                 int(ram_avail) if ram_avail is not None else None,
+                int(max_vram) if max_vram is not None else None,
                 int(max_ram) if max_ram is not None else None,
                 int(disk_free) if disk_free is not None else None,
                 int(disk_total) if disk_total is not None else None,
@@ -316,8 +319,22 @@ class Store:
         if not worker:
             return None
         free_vram = int(caps.get("free_vram_mb", worker["free_vram_mb"]))
+        # Never schedule beyond the worker's own advertised soft cap.
+        worker_max_vram = int(worker.get("max_vram_mb") or 0)
+        if worker_max_vram > 0:
+            free_vram = min(free_vram, worker_max_vram)
         has_gpu = bool(caps.get("has_gpu", bool(worker.get("gpus"))))
         llm_ready = bool(caps.get("llm_ready"))
+        ram_avail = int(
+            caps.get("ram_available_mb", worker.get("ram_available_mb") or 0)
+        )
+        worker_max_ram = int(worker.get("max_ram_mb") or worker.get("dedicated_ram_mb") or 0)
+        if worker_max_ram > 0:
+            ram_avail = min(ram_avail, worker_max_ram)
+        disk_free = int(caps.get("disk_free_mb", worker.get("disk_free_mb") or 0))
+        worker_max_disk = int(worker.get("max_disk_mb") or worker.get("dedicated_disk_mb") or 0)
+        if worker_max_disk > 0:
+            disk_free = min(disk_free, worker_max_disk)
         cur = await self.db.execute(
             """
             SELECT * FROM jobs
@@ -335,6 +352,17 @@ class Store:
         for row in rows:
             jtype = str(row["job_type"] or "")
             if jtype == "llm_chat" and not llm_ready:
+                continue
+            job_preview = _job_row(row)
+            payload = job_preview.get("payload") or {}
+            # Ignore/skip jobs that demand more RAM/disk than this worker offers.
+            min_ram = int(payload.get("min_ram_mb") or payload.get("required_ram_mb") or 0)
+            min_disk = int(payload.get("min_disk_mb") or payload.get("required_disk_mb") or 0)
+            if min_ram > 0 and ram_avail > 0 and min_ram > ram_avail:
+                continue
+            if min_disk > 0 and disk_free > 0 and min_disk > disk_free:
+                continue
+            if worker_max_vram > 0 and int(job_preview.get("min_vram_mb") or 0) > worker_max_vram:
                 continue
             chosen = row
             break

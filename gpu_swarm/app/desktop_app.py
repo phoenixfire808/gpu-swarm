@@ -769,7 +769,9 @@ class WizardFrame(ctk.CTkFrame):
     def _step_caps(self) -> None:
         self._title(
             "Resource dedication",
-            "Soft caps for what this machine contributes. Persisted into joiner config + worker env. "
+            "Only you control how much of your PC is offered. Change anytime on your machine or in "
+            "your Contribute settings. Sliders save locally (joiner_settings.json / LOCALAPPDATA) and "
+            "apply to your worker only — nobody else can remotely raise your caps. "
             "0 VRAM/RAM/Disk = no extra soft cap (advertise detected free).",
         )
         gpus = be.get_gpus()
@@ -1825,6 +1827,17 @@ class MainFrame(ctk.CTkFrame):
 
     def _build_caps(self, parent: Any) -> None:
         inner = self._card(parent, "Dedication — VRAM · CPU · RAM · Disk")
+        ctk.CTkLabel(
+            inner,
+            text=(
+                "Only you control how much of your PC is offered. Change anytime on your machine "
+                "or in your Contribute settings. Saves to local joiner settings for this worker only."
+            ),
+            text_color=MUTED,
+            wraplength=900,
+            justify="left",
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", pady=(0, 8))
         gpus = be.get_gpus()
         host = be.detect_host_resources()
         total_vram = max(sum(int(g.get("memory_total_mb") or 0) for g in gpus), 1024)
@@ -1921,7 +1934,13 @@ class MainFrame(ctk.CTkFrame):
     def _save_settings(self) -> None:
         self.settings = self._collect()
         be.save_config(self.settings)
-        self.action_lbl.configure(text="Saved caps & identity (worker will honor on next Join).", text_color=OK_GREEN)
+        self.action_lbl.configure(
+            text=(
+                "Saved your offer caps locally (this worker only). "
+                "Only you control how much of your PC is offered."
+            ),
+            text_color=OK_GREEN,
+        )
 
     def _open_portal(self) -> None:
         url = self.portal_entry.get().strip()

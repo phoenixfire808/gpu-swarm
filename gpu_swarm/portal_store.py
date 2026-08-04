@@ -178,6 +178,76 @@ class PortalStore:
         row = await cur.fetchone()
         return dict(row) if row else None
 
+    async def update_machine_caps(
+        self, machine_id: str, user_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Update dedication caps for a machine owned by ``user_id``.
+
+        Returns the updated machine, or raises ``PermissionError`` if the machine
+        exists but belongs to another user. Returns ``None`` if the machine id
+        is unknown.
+        """
+        row = await self.get_machine(machine_id)
+        if not row:
+            return None
+        if str(row.get("user_id") or "") != str(user_id):
+            raise PermissionError("only the machine owner can change offer caps")
+        max_vram = int(
+            data["max_vram_mb"] if data.get("max_vram_mb") is not None else row["max_vram_mb"]
+        )
+        max_cpu = float(
+            data["max_cpu_percent"]
+            if data.get("max_cpu_percent") is not None
+            else row["max_cpu_percent"]
+        )
+        ded_ram = int(
+            data["dedicated_ram_mb"]
+            if data.get("dedicated_ram_mb") is not None
+            else row["dedicated_ram_mb"]
+        )
+        ded_disk = int(
+            data["dedicated_disk_mb"]
+            if data.get("dedicated_disk_mb") is not None
+            else row["dedicated_disk_mb"]
+        )
+        ded_cpu = float(
+            data["dedicated_cpu_cores"]
+            if data.get("dedicated_cpu_cores") is not None
+            else row["dedicated_cpu_cores"]
+        )
+        worker_name = row["worker_name"]
+        if data.get("worker_name"):
+            worker_name = str(data["worker_name"]).strip()[:80] or worker_name
+        notes = row.get("notes")
+        if "notes" in data:
+            notes = data.get("notes")
+        await self.db.execute(
+            """
+            UPDATE portal_machines SET
+                worker_name=?,
+                max_vram_mb=?,
+                max_cpu_percent=?,
+                dedicated_ram_mb=?,
+                dedicated_disk_mb=?,
+                dedicated_cpu_cores=?,
+                notes=?
+            WHERE id=? AND user_id=?
+            """,
+            (
+                worker_name,
+                max_vram,
+                max_cpu,
+                ded_ram,
+                ded_disk,
+                ded_cpu,
+                notes,
+                machine_id,
+                user_id,
+            ),
+        )
+        await self.db.commit()
+        return await self.get_machine(machine_id)
+
     async def list_machines(self, user_id: str | None = None) -> list[dict[str, Any]]:
         if user_id:
             cur = await self.db.execute(

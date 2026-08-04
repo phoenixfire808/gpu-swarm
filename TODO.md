@@ -13,6 +13,7 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [x] Local Pool Endpoint (`local-endpoint` / `start-local-endpoint.cmd`)
 - [x] Friend diagnostics + portable Python bootstrap
 - [x] Public GitHub publish — https://github.com/phoenixfire808/gpu-swarm
+- [x] **Contributor offer ownership** — only owner changes VRAM/CPU/RAM/disk caps; cross-user PATCH 403; scheduler ignores force-cap payloads
 
 ## Now
 - [ ] Drew: Ollama serve + model + worker restart → full chat e2e
