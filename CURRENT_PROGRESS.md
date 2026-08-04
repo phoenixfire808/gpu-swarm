@@ -149,12 +149,24 @@ start-bot.cmd
 - Did **not** use Jarvis bot token
 - Did **not** commit `.env`
 
-
 ## Worker 4 — GitHub publish readiness (2026-08-04)
 
 - [x] Audited `.gitignore`: blocks `.env`, `DISCORD_BOT_TOKEN_PASTE.txt` / `*TOKEN*PASTE*`, `data/`, `logs/`, `smoke_results/`, `venv/` / `.venv/`, `__pycache__/`, `*.pyc` / `*.py[cod]`, `tokens/`, `*.pem` / `*.key`
 - [x] Scrubbed token last4 from this progress file for public-safe commit
-- [x] Confirmed `.env` and paste file are not staged
-- [x] Local commit of safe project files (desktop app, backend, docs, bot/scheduler/worker)
-- [ ] `gh repo create` + push — requires GitHub CLI install/auth on Drew's machine if not present
-- GitHub URL: *(pending `gh repo create`)*
+- [x] Confirmed `.env` and paste file are **not** staged/committed
+- [x] Local commits on `master` (desktop app, app_backend, portal, bot/scheduler/worker, docs/VISION, joiner scripts)
+- [ ] Public GitHub repo + push — **blocked: `gh` not authenticated** (portable `gh` at `C:/Users/Drew/bin/gh.exe`, v2.74.1)
+- GitHub URL: *(pending — run commands below)*
+
+### Exact commands for Drew (publish)
+
+```bat
+cd C:/Users/Drew/Projects/gpu-swarm
+set PATH=C:/Users/Drew/bin;%PATH%
+gh auth login
+gh repo create gpu-swarm --public --source=. --remote=origin --push --description "Discord GPU/CPU co-op swarm (Glitch Factor / GPU Pool)"
+```
+
+Alternate name if `gpu-swarm` taken: `glitch-gpu-pool`.
+
+After push, URL: `https://github.com/<you>/gpu-swarm`
