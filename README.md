@@ -40,7 +40,7 @@ https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
 Connect paths (Contribute / Utilize / code): [`CONNECTING.md`](CONNECTING.md).  
 Paste-ready blurb for Discord: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).  
 Local models / coding agents: [`examples/ollama_or_local_offload.md`](examples/ollama_or_local_offload.md) · [`examples/coding_agent_pool.py`](examples/coding_agent_pool.py) · [`examples/use_pool_from_script.py`](examples/use_pool_from_script.py).  
-Optional VM workspaces (not GPU passthrough): [`ADVANCED_VM.md`](ADVANCED_VM.md).
+Workspace VM (Hermes agent-vms, CPU/RAM from Contribute share — no GPU passthrough): [`ADVANCED_VM.md`](ADVANCED_VM.md).
 
 ## What's included
 

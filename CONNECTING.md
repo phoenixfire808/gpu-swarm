@@ -73,6 +73,10 @@ print(pool.submit_probe(wait=True)["status"])
 
 Env: `GPU_SWARM_SCHEDULER_URL` — public friends use `…/pool-api`; host scripts often use `http://127.0.0.1:8766`; Tailscale default `http://100.85.165.84:8766`.
 
+### Workspace VM (Drew host — one product)
+
+Desktop app **Home → Workspace** (or Connect → Workspace card) opens the Hermes agent Ubuntu VM with **CPU/RAM clamped to your Contribute share** (+ `host_protect`). Real GPU/VRAM stays on the **host worker** — VirtualBox does not pass through NVIDIA. Details: [`ADVANCED_VM.md`](ADVANCED_VM.md).
+
 ---
 
 ## Discord (status + submit)

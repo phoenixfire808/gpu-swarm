@@ -18,6 +18,7 @@ extra_datas = [
     ("requirements-cuda.txt", "."),
     ("CONNECTING.md", "."),
     ("DOWNLOAD.md", "."),
+    ("ADVANCED_VM.md", "."),
     ("examples/coding_agent_pool.py", "examples"),
     ("examples/ollama_or_local_offload.md", "examples"),
 ]
@@ -92,6 +93,7 @@ a = Analysis(
         "gpu_swarm.local_endpoint",
         "gpu_swarm.llm_runtime",
         "gpu_swarm.host_protect",
+        "gpu_swarm.agent_vm_bridge",
         "gpu_swarm.cli",
         "fastapi",
         "uvicorn",
