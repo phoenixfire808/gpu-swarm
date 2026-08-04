@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 · Utilizer SDK/CLI e2e verified on live `:8766`.
+**Updated:** 2026-08-04 · Scheduler restarted; `/v1/pool/*` live on `:8766`.
 
 | Service | Local | Tailscale |
 |---------|-------|-----------|
@@ -16,6 +16,15 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 ---
 
 ## Live scorecard (spot-check 2026-08-04)
+
+### Scheduler restart (2026-08-04, post-SDK `/v1/pool`)
+- Restarted **only** `python -m gpu_swarm scheduler --host 0.0.0.0 --port 8766`; did **not** touch Robinhood `:8765` or Discord bot
+- **PASS** scheduler: listening `0.0.0.0:8766`
+- **PASS** classic: `GET /status` 200; `POST /jobs` + `GET /jobs/{id}` 200
+- **PASS** `/v1/pool`: `GET /v1/pool/status` 200; `POST /v1/pool/jobs` + `GET /v1/pool/jobs/{id}` 200
+- **PASS** worker: `Drew-Home` stayed online (no worker restart)
+
+
 
 | # | Check | Result |
 |---|--------|--------|
@@ -71,7 +80,7 @@ Honest v1: GPU/CPU run jobs; RAM/SSD are **capacity ads** for scheduling, not po
 - [x] Hermes skill stub `shared-skills/gpu-swarm/SKILL.md`
 - [x] Local-model honesty doc: no Ollama proxy in v1; path sketched for Whisper/LLM later
 - [x] **E2E (this pass):** SDK probe+cuda (`cuda:0`); CLI utilize probe+cuda; `use_pool_from_script.py` probe — all completed on live scheduler
-- [ ] Scheduler process restart needed before live `/v1/pool/*` + chat shim (code in `scheduler.py`; SDK/CLI already use classic `/jobs`)
+- [x] Scheduler process restart applied — `/v1/pool/status`, `POST/GET /v1/pool/jobs` live; classic `/status`+`/jobs` still OK; Drew-Home stayed online (no worker restart)
 
 ### Git hygiene (partial, 2026-08-04)
 - [x] Local commits exist on `master` (public-ready baseline + publish checklist commits)
