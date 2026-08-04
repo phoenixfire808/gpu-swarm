@@ -74,7 +74,7 @@ Default URLs on Drew’s host (Tailscale):
 
 Leave anytime from the portal (or stop the worker). Caps persist for the next session.
 
-> If portal scripts land as `start-portal.cmd` / `python -m gpu_swarm.portal`, use those; docs will match the launcher once it ships. Until then assume portal on **8767** and scheduler on **8766**.
+> Portal launcher: `start-portal.cmd` or `python -m gpu_swarm portal` → **8767**/portal. Scheduler stays on **8766**.
 
 ---
 
@@ -171,7 +171,7 @@ REM python -m pip install --user -r requirements.txt   # only if missing
 |--------|----------------|
 | `start-scheduler.cmd` | Scheduler on `127.0.0.1:8766` (local only) |
 | `start-scheduler-lan.cmd` | Scheduler on `0.0.0.0:8766` (Tailscale/LAN) |
-| `start-portal.cmd` | Contributor web portal on `:8767` *(when present)* |
+| `start-portal.cmd` | Contributor web portal on `:8767/portal` |
 | `start-gpu-pool-app.cmd` | Desktop joiner UI *(when present)* |
 | `start-worker.cmd` | Worker `Drew-Home` → localhost scheduler |
 | `start-bot.cmd` | Discord bot (`DISCORD_BOT_TOKEN` in `.env`) |

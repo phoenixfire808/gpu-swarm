@@ -21,14 +21,18 @@ from typing import Any
 
 from gpu_swarm.config import ROOT
 from gpu_swarm.joiner_settings import (
+    DEFAULT_LOCAL_PORTAL_URL,
     DEFAULT_LOCAL_SCHEDULER_URL,
     DEFAULT_PORTAL_URL,
     DEFAULT_SCHEDULER_URL,
+    PORTAL_INVITE_CODE,
     JoinerSettings,
     agent_vms_present,
     default_scheduler_url_for_host,
+    detect_python_runtime,
     detect_tailscale_ipv4,
     load_settings,
+    portal_url_candidates,
     python_deps_status,
     save_settings,
 )
@@ -36,6 +40,7 @@ from gpu_swarm.joiner_settings import (
 __all__ = [
     "JoinerSettings",
     "WorkerRuntimeStatus",
+    "PORTAL_INVITE_CODE",
     # Task / UI contract
     "get_gpus",
     "load_config",
@@ -46,20 +51,26 @@ __all__ = [
     "get_status",
     # Worker1 aliases
     "check_nvidia",
+    "check_python",
     "check_python_deps",
+    "check_torch_cuda",
     "detect_gpus",
     "detect_host_resources",
     "fetch_scheduler_status",
     "get_discord_helper_text",
     "get_agent_vms_info",
     "get_default_scheduler_url",
+    "get_portal_hints",
     "get_portal_url",
     "get_tailscale_ipv4",
     "install_requirements",
+    "install_torch_cuda",
     "is_worker_running",
     "load_joiner_settings",
     "open_portal_url",
+    "resolve_portal_url",
     "save_joiner_settings",
+    "wait_for_worker_online",
     "worker_runtime_status",
 ]
 
@@ -151,25 +162,109 @@ def get_default_scheduler_url() -> str:
 
 
 def get_portal_url(settings: JoinerSettings | None = None) -> str:
-    """Browser portal URL (easiest remote join path). Default :8767/portal."""
+    """Browser portal URL (easiest remote join path). Prefer a live URL."""
     if settings and settings.portal_url:
         return settings.portal_url.strip()
     s = load_joiner_settings()
-    return (s.portal_url or DEFAULT_PORTAL_URL).strip()
+    saved = (s.portal_url or "").strip()
+    if saved:
+        return saved
+    return resolve_portal_url().get("url") or DEFAULT_LOCAL_PORTAL_URL
+
+
+def resolve_portal_url(timeout: float = 2.5) -> dict[str, Any]:
+    """
+    Probe candidate portal URLs and return the first that responds.
+    Prefers local http://127.0.0.1:8767/portal when live; Tailscale is a share hint.
+    Never returns or reads the pool password.
+    """
+    import httpx
+
+    attempts: list[dict[str, Any]] = []
+    for candidate in portal_url_candidates():
+        try:
+            with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+                r = client.get(candidate)
+            ok = r.status_code < 500
+            attempts.append({"url": candidate, "ok": ok, "status": r.status_code})
+            if ok:
+                return {
+                    "ok": True,
+                    "url": candidate,
+                    "local_url": DEFAULT_LOCAL_PORTAL_URL,
+                    "tailscale_url": DEFAULT_PORTAL_URL,
+                    "invite_code": PORTAL_INVITE_CODE,
+                    "attempts": attempts,
+                    "message": f"Portal reachable at {candidate}",
+                }
+        except Exception as exc:  # noqa: BLE001
+            attempts.append({"url": candidate, "ok": False, "error": str(exc)})
+
+    return {
+        "ok": False,
+        "url": DEFAULT_LOCAL_PORTAL_URL,
+        "local_url": DEFAULT_LOCAL_PORTAL_URL,
+        "tailscale_url": DEFAULT_PORTAL_URL,
+        "invite_code": PORTAL_INVITE_CODE,
+        "attempts": attempts,
+        "message": (
+            "Portal not reachable. Start it with start-portal.cmd "
+            f"then open {DEFAULT_LOCAL_PORTAL_URL}"
+        ),
+        "fix": (
+            f"1) Run start-portal.cmd on Drew's host\n"
+            f"2) Open {DEFAULT_LOCAL_PORTAL_URL} (same machine) or "
+            f"{DEFAULT_PORTAL_URL} (Tailscale)\n"
+            f"3) Sign in with invite code: {PORTAL_INVITE_CODE}"
+        ),
+    }
+
+
+def get_portal_hints() -> dict[str, Any]:
+    """UI-safe portal onboarding hints (invite code only — never pool password)."""
+    resolved = resolve_portal_url()
+    return {
+        "invite_code": PORTAL_INVITE_CODE,
+        "local_url": DEFAULT_LOCAL_PORTAL_URL,
+        "tailscale_url": DEFAULT_PORTAL_URL,
+        "url": resolved.get("url") or DEFAULT_LOCAL_PORTAL_URL,
+        "reachable": bool(resolved.get("ok")),
+        "message": resolved.get("message") or "",
+        "fix": resolved.get("fix") or "",
+        "auth_note": (
+            f"Browser portal login: invite code `{PORTAL_INVITE_CODE}` "
+            "(or the shared pool password from .env — not shown here)."
+        ),
+    }
 
 
 def open_portal_url(url: str | None = None) -> dict[str, Any]:
-    """Open the web portal in the default browser."""
+    """Open the web portal in the default browser (deep-link to a live URL when possible)."""
     import webbrowser
 
-    target = (url or get_portal_url()).strip()
+    if url and url.strip():
+        target = url.strip()
+    else:
+        resolved = resolve_portal_url()
+        target = (resolved.get("url") or get_portal_url()).strip()
     if not target:
-        return {"ok": False, "message": "Empty portal URL"}
+        return {"ok": False, "message": "Empty portal URL", "invite_code": PORTAL_INVITE_CODE}
     try:
         webbrowser.open(target)
-        return {"ok": True, "message": f"Opened {target}", "url": target}
+        return {
+            "ok": True,
+            "message": f"Opened {target} — invite code: {PORTAL_INVITE_CODE}",
+            "url": target,
+            "invite_code": PORTAL_INVITE_CODE,
+        }
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "message": str(exc), "url": target}
+        return {
+            "ok": False,
+            "message": str(exc),
+            "url": target,
+            "invite_code": PORTAL_INVITE_CODE,
+            "fix": f"Open manually: {target}",
+        }
 
 
 def get_tailscale_ipv4() -> str | None:
@@ -295,31 +390,156 @@ def get_gpus() -> list[dict[str, Any]]:
     return list(result.get("gpus") or [])
 
 
+def check_python() -> dict[str, Any]:
+    """Detect the Python runtime powering this app."""
+    return detect_python_runtime()
+
+
 def check_python_deps() -> dict[str, Any]:
     return python_deps_status()
 
 
-def install_requirements() -> dict[str, Any]:
-    """Install from requirements.txt only when deps are missing (avoid reinstall loops)."""
+def check_torch_cuda() -> dict[str, Any]:
+    """Optional CUDA PyTorch presence (not required to join the pool)."""
+    try:
+        import torch  # type: ignore
+    except ImportError:
+        return {
+            "ok": False,
+            "installed": False,
+            "cuda": False,
+            "version": "",
+            "message": "PyTorch not installed (optional — needed for CUDA compute jobs)",
+            "fix": "Use the Install CUDA PyTorch button (large download; consent required).",
+        }
+    cuda = bool(getattr(torch, "cuda", None) and torch.cuda.is_available())
+    ver = str(getattr(torch, "__version__", "?"))
+    return {
+        "ok": True,
+        "installed": True,
+        "cuda": cuda,
+        "version": ver,
+        "message": f"torch {ver} — CUDA {'available' if cuda else 'not available'}",
+        "fix": (
+            ""
+            if cuda
+            else "CPU-only torch detected. Install a CUDA build if you want GPU compute jobs."
+        ),
+    }
+
+
+def install_requirements(*, force: bool = False) -> dict[str, Any]:
+    """
+    Install from requirements.txt only when deps are missing (avoid reinstall loops).
+    Pass force=True to repair/upgrade from requirements.txt.
+    """
     status = check_python_deps()
-    if status.get("ok"):
-        return {"ok": True, "message": "Dependencies already installed", "skipped": True}
+    if status.get("ok") and not force:
+        return {
+            "ok": True,
+            "message": "Dependencies already satisfied — skipped full reinstall.",
+            "skipped": True,
+            "missing": [],
+        }
     req = ROOT / "requirements.txt"
     if not req.is_file():
-        return {"ok": False, "message": f"Missing {req}"}
+        return {
+            "ok": False,
+            "message": f"Missing {req}",
+            "fix": "Restore requirements.txt in the repo root.",
+        }
+    missing = status.get("missing") or []
+    cmd = [sys.executable, "-m", "pip", "install", "--user", "-r", str(req)]
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--user", "-r", str(req)],
+            cmd,
             capture_output=True,
             text=True,
             timeout=600,
             check=False,
+            cwd=str(ROOT),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return {"ok": False, "message": str(exc)}
+        return {
+            "ok": False,
+            "message": str(exc),
+            "fix": f'Run manually: "{sys.executable}" -m pip install --user -r requirements.txt',
+        }
     ok = proc.returncode == 0
-    tail = (proc.stdout or proc.stderr or "")[-800:]
-    return {"ok": ok, "message": tail or ("installed" if ok else "pip failed"), "code": proc.returncode}
+    tail = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else ""))[-1200:]
+    after = check_python_deps()
+    if ok and after.get("ok"):
+        return {
+            "ok": True,
+            "message": tail or "Installed requirements successfully.",
+            "code": proc.returncode,
+            "missing_before": missing,
+        }
+    still = after.get("missing") or missing
+    return {
+        "ok": False,
+        "message": tail or "pip failed",
+        "code": proc.returncode,
+        "missing": still,
+        "fix": (
+            f"Still missing: {', '.join(still)}\n"
+            f'Fix: "{sys.executable}" -m pip install --user -r "{req}"'
+        ),
+    }
+
+
+def install_torch_cuda(*, index_url: str = "https://download.pytorch.org/whl/cu124") -> dict[str, Any]:
+    """
+    Optional large download — only call after explicit user consent in the UI.
+    Installs torch/torchvision/torchaudio from the CUDA wheel index.
+    """
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--user",
+        "torch",
+        "torchvision",
+        "torchaudio",
+        "--index-url",
+        index_url,
+    ]
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=1800,
+            check=False,
+            cwd=str(ROOT),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "ok": False,
+            "message": str(exc),
+            "fix": " ".join(cmd),
+        }
+    ok = proc.returncode == 0
+    tail = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else ""))[-1200:]
+    status = check_torch_cuda()
+    if ok:
+        return {
+            "ok": True,
+            "message": tail or "PyTorch install finished.",
+            "torch": status,
+            "code": proc.returncode,
+        }
+    return {
+        "ok": False,
+        "message": tail or "PyTorch install failed",
+        "code": proc.returncode,
+        "fix": (
+            f'Retry: "{sys.executable}" -m pip install --user torch torchvision torchaudio '
+            f"--index-url {index_url}"
+        ),
+        "torch": status,
+    }
 
 
 def fetch_scheduler_status(scheduler_url: str | None = None, timeout: float = 5.0) -> dict[str, Any]:
@@ -409,7 +629,12 @@ def is_worker_running() -> bool:
     return False
 
 
-def start_worker(settings: JoinerSettings | None = None, **_kwargs: Any) -> dict[str, Any]:
+def start_worker(
+    settings: JoinerSettings | None = None,
+    *,
+    wait_online_sec: float = 8.0,
+    **_kwargs: Any,
+) -> dict[str, Any]:
     """Start contribution worker subprocess with joiner env caps."""
     global _worker_proc, _worker_log_handle
     if is_worker_running():
@@ -418,6 +643,22 @@ def start_worker(settings: JoinerSettings | None = None, **_kwargs: Any) -> dict
 
     settings = settings or load_joiner_settings()
     save_joiner_settings(settings)
+
+    # Preflight: scheduler reachable
+    sched = test_scheduler(settings.scheduler_url)
+    if not sched.get("ok"):
+        return {
+            "ok": False,
+            "message": f"Scheduler unreachable: {sched.get('error') or 'unknown'}",
+            "pid": None,
+            "fix": (
+                f"1) Confirm scheduler is running on Drew's host\n"
+                f"2) Test URL: {settings.scheduler_url}\n"
+                f"3) Same-machine fallback: {DEFAULT_LOCAL_SCHEDULER_URL}\n"
+                f"4) Tailscale members: {DEFAULT_SCHEDULER_URL}"
+            ),
+            "scheduler": sched,
+        }
 
     env = dict(os.environ)
     env["PYTHONUNBUFFERED"] = "1"
@@ -428,6 +669,9 @@ def start_worker(settings: JoinerSettings | None = None, **_kwargs: Any) -> dict
     env["GPU_SWARM_MAX_CPU_PERCENT"] = str(float(settings.max_cpu_percent))
     env["GPU_SWARM_MAX_RAM_MB"] = str(int(getattr(settings, "max_ram_mb", 0) or 0))
     env["GPU_SWARM_MAX_DISK_GB"] = str(float(getattr(settings, "max_disk_gb", 0) or 0))
+    disk_mb = int(float(getattr(settings, "max_disk_gb", 0) or 0) * 1024)
+    if disk_mb > 0:
+        env["GPU_SWARM_MAX_DISK_MB"] = str(disk_mb)
     # Separate id file so desktop joiner does not clash with start-worker.cmd
     env["GPU_SWARM_WORKER_ID_FILE"] = str(JOINER_WORKER_ID_FILE)
 
@@ -442,13 +686,18 @@ def start_worker(settings: JoinerSettings | None = None, **_kwargs: Any) -> dict
         settings.scheduler_url.rstrip("/"),
         "--max-vram-mb",
         str(int(settings.max_vram_mb or 0)),
+        "--max-cpu-percent",
+        str(float(settings.max_cpu_percent)),
+        "--max-ram-mb",
+        str(int(getattr(settings, "max_ram_mb", 0) or 0)),
+        "--max-disk-mb",
+        str(disk_mb),
     ]
     if settings.discord_user:
         cmd.extend(["--discord-user", settings.discord_user])
 
     creationflags = 0
     if sys.platform == "win32":
-        # Own process group so we can send CTRL_BREAK for a cleaner stop.
         creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
     try:
@@ -474,30 +723,90 @@ def start_worker(settings: JoinerSettings | None = None, **_kwargs: Any) -> dict
         )
     except OSError as exc:
         _worker_proc = None
-        return {"ok": False, "message": str(exc), "pid": None}
+        return {
+            "ok": False,
+            "message": str(exc),
+            "pid": None,
+            "fix": f"Could not spawn worker. Check Python: {sys.executable}",
+        }
 
     _write_pid_file(_worker_proc.pid)
-    # Brief settle — catch immediate crash
-    time.sleep(0.4)
+    time.sleep(0.5)
     if _worker_proc.poll() is not None:
         code = _worker_proc.returncode
         _worker_proc = None
         _clear_pid_file()
+        log_tail = _tail_log(40)
         return {
             "ok": False,
             "message": f"Worker exited immediately (code={code}). See {LOG_FILE}",
             "pid": None,
             "log": str(LOG_FILE),
+            "log_tail": log_tail,
+            "fix": f"Open {LOG_FILE} for the exact traceback, then fix and Join again.",
+        }
+
+    online = wait_for_worker_online(settings, timeout_sec=wait_online_sec)
+    if online.get("ok"):
+        return {
+            "ok": True,
+            "message": f"Joined pool as {settings.worker_name}",
+            "pid": _worker_proc.pid if _worker_proc else None,
+            "log": str(LOG_FILE),
+            "worker_name": settings.worker_name,
+            "scheduler_url": settings.scheduler_url.rstrip("/"),
+            "runtime": online.get("runtime"),
         }
 
     return {
         "ok": True,
-        "message": "Worker started",
-        "pid": _worker_proc.pid,
+        "message": (
+            f"Worker started (pid={_worker_proc.pid if _worker_proc else '?'}) but not "
+            f"visible on scheduler yet: {online.get('detail') or 'waiting'}"
+        ),
+        "pid": _worker_proc.pid if _worker_proc else None,
         "log": str(LOG_FILE),
         "worker_name": settings.worker_name,
         "scheduler_url": settings.scheduler_url.rstrip("/"),
+        "warning": online.get("detail") or "not registered yet",
+        "fix": (
+            "Worker process is running. Wait a few seconds and Refresh status. "
+            f"If it never appears, check {LOG_FILE}."
+        ),
     }
+
+
+def wait_for_worker_online(
+    settings: JoinerSettings | None = None,
+    *,
+    timeout_sec: float = 8.0,
+) -> dict[str, Any]:
+    """Poll local process + scheduler until this worker shows online/busy."""
+    settings = settings or load_joiner_settings()
+    deadline = time.time() + max(0.5, timeout_sec)
+    last: WorkerRuntimeStatus | None = None
+    while time.time() < deadline:
+        last = worker_runtime_status(settings)
+        if last.running and last.connected:
+            return {"ok": True, "runtime": asdict(last), "detail": last.detail}
+        time.sleep(0.5)
+    detail = last.detail if last else "timeout"
+    return {
+        "ok": False,
+        "runtime": asdict(last) if last else None,
+        "detail": detail,
+    }
+
+
+def _tail_log(lines: int = 40) -> str:
+    if not LOG_FILE.is_file():
+        return ""
+    try:
+        text = LOG_FILE.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    parts = text.splitlines()
+    return "\n".join(parts[-lines:])
 
 
 def stop_worker() -> dict[str, Any]:
@@ -613,6 +922,10 @@ def get_status() -> dict[str, Any]:
             "gpus_advertised": runtime.gpus_advertised,
             "free_vram_mb": runtime.free_vram_mb,
             "total_vram_mb": runtime.total_vram_mb,
+            "cpu_cores": runtime.cpu_cores,
+            "ram_total_mb": runtime.ram_total_mb,
+            "ram_available_mb": runtime.ram_available_mb,
+            "disk_free_mb": runtime.disk_free_mb,
             "detail": runtime.detail,
             "pid": runtime.pid,
         },
@@ -632,18 +945,23 @@ def get_status() -> dict[str, Any]:
 
 
 def get_discord_helper_text() -> str:
+    hints = get_portal_hints()
     return (
         "Glitch Factor — GPU Pool Discord commands\n"
         "\n"
-        "  /pool         Pool overview (workers + VRAM)\n"
+        "  /pool         Pool overview (workers + VRAM + host metrics)\n"
         "  /workers      List workers\n"
         "  /contribute   How to contribute / soft caps\n"
         "  /submit_probe Submit a live GPU probe job\n"
         "  /submit_compute  CUDA matmul probe\n"
         "  /job_status   Check a job by id\n"
         "\n"
-        "Easiest remote path: open the web portal in a browser and plug in machines.\n"
-        "This desktop app is the power-user native joiner (local caps + worker control).\n"
+        "Easiest remote path: open the web portal in a browser.\n"
+        f"  Local:     {hints['local_url']}\n"
+        f"  Tailscale: {hints['tailscale_url']}\n"
+        f"  Invite:    {hints['invite_code']}  (pool password stays in .env — not shown)\n"
+        "\n"
+        "This desktop app is the power-user native joiner (local caps + Join/Leave).\n"
         "CLI path: see DISCORD_MEMBER_QUICKSTART.md\n"
         "Do not expose the scheduler to the public internet."
     )
