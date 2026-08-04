@@ -2,6 +2,8 @@
 
 Get the Windows desktop joiner from GitHub Releases — no Python install required for the common path.
 
+**How to log in (invite, portal URLs, troubleshooting):** [`LOGIN.md`](LOGIN.md)
+
 **Repo:** https://github.com/phoenixfire808/gpu-swarm  
 **Releases:** https://github.com/phoenixfire808/gpu-swarm/releases  
 
@@ -60,6 +62,7 @@ Friends on MacBooks, Intel/AMD laptops, or any PC without NVIDIA are still welco
 | Black / blank portal screen | Hard refresh (**Ctrl+F5**), reopen the latest portal URL Drew posted |
 | Tunnel URL expired | Quick tunnels rotate when Drew restarts `start-public-access.cmd` — ask for a fresh link |
 
+Login walkthrough: [`LOGIN.md`](LOGIN.md).  
 Paste-ready Discord blurb (includes no-GPU path): [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).
 
 ---
@@ -125,6 +128,7 @@ Share the printed portal URL + invite `glitch-factor`. Files (gitignored): `data
 | **From source** | Clone repo → `start-gpu-pool-app.cmd` (needs Python) |
 | **CLI** | `python -m gpu_swarm worker --name YourName --discord-user YourName` |
 
+Login: [`LOGIN.md`](LOGIN.md).  
 Paste-ready Discord blurb: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).  
 Contribute / Utilize / code: [`CONNECTING.md`](CONNECTING.md).
 

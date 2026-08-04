@@ -75,6 +75,7 @@ Env: `GPU_SWARM_SCHEDULER_URL` — public friends use `…/pool-api`; host scrip
 
 `/pool` `/workers` `/contribute` `/submit_probe` `/submit_compute` `/job_status`
 
+Login walkthrough: [`LOGIN.md`](LOGIN.md).  
 Paste-ready member blurb: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).
 
 ---

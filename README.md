@@ -4,6 +4,8 @@ Members of a **private Discord** (and friends on Tailscale) plug home PCs into a
 
 This is a co-op pool — **not** a public marketplace.
 
+**Friends: how to log in → [`LOGIN.md`](LOGIN.md)** (invite code, where to get it, public / Tailscale / EXE paths).
+
 ## Product vision (v1)
 
 **Browser-first:** anyone Drew invites can log into a web portal, register a machine, set resource caps, and keep a worker online so the pool grows dynamically.
@@ -33,6 +35,7 @@ Product one-pager: [`VISION.md`](VISION.md).
 https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
 ([v0.1.0](https://github.com/phoenixfire808/gpu-swarm/releases/download/v0.1.0/GPUPool.exe) · [release notes](https://github.com/phoenixfire808/gpu-swarm/releases/tag/v0.1.0) · [`DOWNLOAD.md`](DOWNLOAD.md))  
 
+**Login (friends):** [`LOGIN.md`](LOGIN.md).  
 Connect paths (Contribute / Utilize / code): [`CONNECTING.md`](CONNECTING.md).  
 Paste-ready blurb for Discord: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).  
 Local models / coding agents: [`examples/ollama_or_local_offload.md`](examples/ollama_or_local_offload.md) · [`examples/coding_agent_pool.py`](examples/coding_agent_pool.py) · [`examples/use_pool_from_script.py`](examples/use_pool_from_script.py).  

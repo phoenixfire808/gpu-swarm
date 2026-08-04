@@ -2,6 +2,8 @@
 
 For friends on a **laptop without an NVIDIA GPU**. You can still use the pool.
 
+**Full login guide:** [`LOGIN.md`](LOGIN.md) (where to get invite / public URL, all three paths, troubleshooting).
+
 ## 1) Get on the network
 
 **Preferred (no Tailscale):** ask Drew for the **current public portal HTTPS link**.
@@ -22,8 +24,11 @@ Public links are `https://….trycloudflare.com/portal` (no `:8767`). Tailscale/
 
 ## 3) Login
 
-- Invite: **`glitch-factor`**
+See [`LOGIN.md`](LOGIN.md) for the full form and paths.
+
+- Invite: **`glitch-factor`** (from Drew in Glitch Factor — not a public signup)
 - Display name: your Discord name (e.g. `aariff01`)
+- Pool password: optional (only if Drew DMs it)
 
 ## 4) What to do (no GPU)
 
@@ -68,4 +73,4 @@ Common mistake: bare `100.85.165.84` (missing **`:8766`**) or using the portal U
 | Can’t reach from public internet | Ask Drew for the current public link, or use Tailscale. |
 | No nvidia-smi | Expected on laptop — Utilize or Contribute CPU. |
 
-See also: [`DOWNLOAD.md`](DOWNLOAD.md) · [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md) · [`CONNECTING.md`](CONNECTING.md)
+See also: [`LOGIN.md`](LOGIN.md) · [`DOWNLOAD.md`](DOWNLOAD.md) · [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md) · [`CONNECTING.md`](CONNECTING.md)

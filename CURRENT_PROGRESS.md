@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:20 CDT · Local Pool Endpoint + allowlisted `llm_chat`.
+**Updated:** 2026-08-04 ~12:25 CDT · Friend login docs (`LOGIN.md`) + Local Pool Endpoint / `llm_chat`.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -36,6 +36,10 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 ---
 
 ## Done (with dates)
+
+### Friend login docs (2026-08-04)
+- [x] `LOGIN.md` — invite/display name, where to get info, Paths A/B/C, form fields, Contribute/Utilize/Connect, troubleshooting, Drew host section, Discord blurb
+- [x] Cross-links from README, DISCORD_MEMBER_QUICKSTART, DOWNLOAD, FRIEND_LAPTOP, CONNECTING
 
 ### Local Pool Endpoint + llm_chat (2026-08-04)
 - [x] `gpu_swarm/local_endpoint.py` + CLI `python -m gpu_swarm local-endpoint` + `start-local-endpoint.cmd`

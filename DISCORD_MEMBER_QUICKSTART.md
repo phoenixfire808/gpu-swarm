@@ -1,17 +1,25 @@
-# Discord member quickstart (paste-ready)
+# Discord member quickstart
 
-Copy everything inside the fence below into Discord.
+**Full login guide (step-by-step, troubleshooting, host notes):** [`LOGIN.md`](LOGIN.md)
+
+Short version below is paste-ready for Discord.
 
 **URL note:** Cloudflare quick-tunnel hostnames **change** when Drew restarts `start-public-access.cmd`. Prefer “ask Drew for the current public link,” or (on host) read `data/public_endpoints.share.txt`. The URL below is the one live at last doc update — verify before pasting if unsure.
 
 ```text
 **GPU Pool** — contribute GPUs/CPUs or utilize the pool
 
+Login guide: https://github.com/phoenixfire808/gpu-swarm/blob/master/LOGIN.md
+
 Primary Discord: **Glitch Factor**
 Bot: **GPU Pool**
 Commands: `/pool` `/workers` `/contribute` `/submit_probe` `/submit_compute` `/job_status`
 Repo: https://github.com/phoenixfire808/gpu-swarm
 EXE: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
+
+**Login (invite from Drew — not public signup)**
+• Invite: **glitch-factor** (+ your Discord display name)
+• Pool password: optional (only if Drew DMs it)
 
 **Easiest — public portal (no Tailscale)**
 1. Open (current public link — ask Drew if this 404s):
@@ -21,7 +29,7 @@ EXE: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPoo
 4. Optional SDK/CLI: GPU_SWARM_SCHEDULER_URL=
    https://rational-delicious-bars-examination.trycloudflare.com/pool-api
    (same host; /pool-api proxies the scheduler)
-Full notes: DOWNLOAD.md · FRIEND_LAPTOP.md
+Full notes: LOGIN.md · DOWNLOAD.md · FRIEND_LAPTOP.md
 
 **Windows EXE**
 1. Download GPUPool.exe:
@@ -49,7 +57,7 @@ Leave anytime. Invite required. Allowlisted jobs only. Never share .env / bot to
 | Optional Contribute | CPU/RAM/disk only; VRAM=0. CUDA probes need an NVIDIA worker online |
 | Tailscale | Optional fallback: `http://100.85.165.84:8767/portal` |
 
-Invite: **`glitch-factor`**. See also [`DOWNLOAD.md`](DOWNLOAD.md).
+Invite: **`glitch-factor`**. See [`LOGIN.md`](LOGIN.md) · [`DOWNLOAD.md`](DOWNLOAD.md).
 
 ## Host (Drew) — publish a public link
 
@@ -60,4 +68,5 @@ start-portal.cmd
 start-public-access.cmd
 ```
 
-DM friends the portal line from `data\public_endpoints.share.txt` (gitignored; URL rotates on tunnel restart).
+DM friends the portal line from `data\public_endpoints.share.txt` (gitignored; URL rotates on tunnel restart).  
+Auth keys (names only — see `.env.example`): `GPU_SWARM_INVITE_CODES`, `GPU_SWARM_POOL_PASSWORD`.
