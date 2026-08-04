@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~11:57 CDT · Portal Home = Contribute / Utilize / Connect polish.
+**Updated:** 2026-08-04 ~12:00 CDT · Docs: laptop / no-NVIDIA Utilize path + common URL mistakes.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -16,6 +16,12 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 **Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files
 
 ---
+
+## Docs: laptop / no NVIDIA (2026-08-04)
+
+- [x] `DISCORD_MEMBER_QUICKSTART.md` — paste blurb + section: Tailscale-private normal; full URLs `:8767` / `:8766`; Utilize first; optional CPU contribute; common mistakes (port, env, black screen)
+- [x] `DOWNLOAD.md` — same laptop path + troubleshooting table
+- [x] Push docs to GitHub + paste-ready Discord reply for aariff01
 
 ## Portal Home polish (2026-08-04)
 

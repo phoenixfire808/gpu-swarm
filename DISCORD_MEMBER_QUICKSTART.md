@@ -49,6 +49,27 @@ pool to discover capacity / prove CUDA. From the repo:
   python examples\coding_agent_pool.py --job pytorch_cuda_probe
 Docs: CONNECTING.md · examples/ollama_or_local_offload.md
 
+**Laptop / no NVIDIA GPU? (still useful)**
+You do **not** need a GPU to join the crew.
+1. Join Tailscale (ask Drew) — pool is Tailscale-private, **not** on the
+   public internet. “Can’t reach it from Chrome without Tailscale” is normal.
+2. Open the portal with the **full URL including port**:
+   http://100.85.165.84:8767/portal
+   Scheduler API (CLI / env): http://100.85.165.84:8766
+3. Sign in: invite **glitch-factor** + your Discord display name
+4. Use **Utilize** — submit allowlisted jobs (`probe`, etc.) onto the pool’s
+   GPUs. Optional: **Contribute** CPU/RAM/disk only (skip GPU caps / leave
+   VRAM at 0). CUDA jobs need someone else’s NVIDIA box online.
+5. Discord: `/pool` `/submit_probe` `/job_status`
+
+**Common mistakes (fix these first)**
+- Missing port → `…84/portal` fails; must be `:8767/portal` and `:8766` for API
+- Wrong env → CLI needs `GPU_SWARM_SCHEDULER_URL=http://100.85.165.84:8766`
+  (not the portal URL, not bare host without port)
+- Black / blank portal → hard refresh (Ctrl+F5) or reopen latest portal URL
+  after Drew updates; confirm Tailscale is connected
+- Expecting public internet → won’t work; stay on Tailscale
+
 **Honest v1 limits**
 Jobs actually run on GPU/CPU. RAM + SSD numbers are capacity you advertise
 for scheduling — not a magic shared hard drive or pooled RAM across PCs yet.
@@ -57,6 +78,20 @@ Leave anytime (EXE Leave / portal Leave / app Leave / Ctrl+C on CLI).
 Do **not** expose the scheduler or portal to the public internet.
 Never share `.env` or bot tokens.
 ```
+
+## Laptop / no NVIDIA (friends)
+
+You can still use the pool without a GPU.
+
+| Point | Detail |
+|-------|--------|
+| Private by design | Scheduler + portal are **Tailscale-only**, not public internet. That is normal. |
+| Full URLs + ports | Portal `http://100.85.165.84:8767/portal` · Scheduler `http://100.85.165.84:8766` |
+| Utilize first | Login → **Utilize** → submit jobs; pool GPUs (e.g. Drew’s) run them |
+| Optional Contribute | Advertise CPU/RAM/disk only; leave GPU/VRAM at 0. CUDA probes need an NVIDIA worker online |
+| Fixes | Missing `:8767`/`:8766`; wrong env (`GPU_SWARM_SCHEDULER_URL` = scheduler, not portal); black screen → Ctrl+F5 / latest portal + Tailscale up |
+
+Invite: **`glitch-factor`**. See also [`DOWNLOAD.md`](DOWNLOAD.md) → “Laptop / no NVIDIA”.
 
 ## URLs (Drew host)
 
