@@ -49,6 +49,12 @@ class JoinerSettings:
     agent_vms_path: str = str(AGENT_VMS_DEFAULT)
     # Host GPU safety ceiling — leave desktop headroom (default ON).
     host_protect: bool = True
+    # When this PC accepts pool jobs (always | daily window | timer).
+    availability_mode: str = "always"
+    availability_daily_start: str = "22:00"
+    availability_daily_end: str = "08:00"
+    availability_until: float = 0.0
+    availability_preset: str = "always"
 
     def __post_init__(self) -> None:
         if not self.worker_name:
@@ -77,6 +83,19 @@ def load_settings() -> JoinerSettings:
         data["host_protect"] = True
     else:
         data["host_protect"] = bool(raw.get("host_protect"))
+    for key, default in (
+        ("availability_mode", "always"),
+        ("availability_daily_start", "22:00"),
+        ("availability_daily_end", "08:00"),
+        ("availability_preset", "always"),
+    ):
+        if key in raw and raw[key] is not None:
+            data[key] = raw[key]
+    if "availability_until" in raw and raw["availability_until"] is not None:
+        try:
+            data["availability_until"] = float(raw["availability_until"])
+        except (TypeError, ValueError):
+            data["availability_until"] = 0.0
     return JoinerSettings(**data)
 
 

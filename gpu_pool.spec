@@ -90,6 +90,8 @@ a = Analysis(
         "gpu_swarm.joiner_settings",
         "gpu_swarm.portable_python",
         "gpu_swarm.win_subprocess",
+        "gpu_swarm.availability_schedule",
+        "gpu_swarm.use_cases",
         "gpu_swarm.diagnostics",
         "gpu_swarm.endpoints",
         "gpu_swarm.public_endpoints",

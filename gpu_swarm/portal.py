@@ -81,6 +81,14 @@ class MachineBody(BaseModel):
     dedicated_disk_mb: int = 0
     dedicated_cpu_cores: float = 0.0
     notes: str | None = None
+    availability_preset: str = "always"
+    availability_mode: str = "always"
+    availability_daily_start: str = "22:00"
+    availability_daily_end: str = "08:00"
+    availability_until: float = 0.0
+    availability_preset: str = "always"
+    availability_daily_start: str = "22:00"
+    availability_daily_end: str = "08:00"
 
 
 class MachineCapsPatch(BaseModel):
@@ -93,6 +101,14 @@ class MachineCapsPatch(BaseModel):
     dedicated_disk_mb: int | None = None
     dedicated_cpu_cores: float | None = None
     notes: str | None = None
+    availability_preset: str | None = None
+    availability_mode: str | None = None
+    availability_daily_start: str | None = None
+    availability_daily_end: str | None = None
+    availability_until: float | None = None
+    availability_preset: str | None = None
+    availability_daily_start: str | None = None
+    availability_daily_end: str | None = None
 
 
 class JobSubmitBody(BaseModel):
@@ -258,10 +274,12 @@ async def api_config(request: Request) -> dict[str, Any]:
     portal_public = (urls.get("portal_public") or "").rstrip("/")
     env_sched = sched_public or sched_tailscale
     from gpu_swarm.share_invite import build_share_pack
+    from gpu_swarm.use_cases import USE_CASES
 
     share = build_share_pack()
     return {
         "share": share,
+        "use_cases": list(USE_CASES),
         "scheduler_url": cfg.scheduler_url,
         "portal_url": portal_base,
         "public_access": bool(urls.get("no_tailscale_needed")),
@@ -543,7 +561,7 @@ async def api_machines_create(body: MachineBody, request: Request) -> dict[str, 
             "dedicated_ram_mb": body.dedicated_ram_mb,
             "dedicated_disk_mb": body.dedicated_disk_mb,
             "dedicated_cpu_cores": body.dedicated_cpu_cores,
-            "notes": body.notes,
+            "notes": _encode_machine_notes(body),
         },
     )
     portal_base = _public_base(request)
@@ -610,6 +628,7 @@ async def api_worker_bootstrap(token: str) -> dict[str, Any]:
         "dedicated_ram_mb": machine["dedicated_ram_mb"],
         "dedicated_disk_mb": machine["dedicated_disk_mb"],
         "dedicated_cpu_cores": machine["dedicated_cpu_cores"],
+        **_availability_env_from_machine(machine),
     }
 
 
@@ -826,10 +845,70 @@ async def api_diagnostics_list(request: Request, limit: int = 50) -> dict[str, A
     return {"ok": True, "count": len(items), "items": items}
 
 
+def _encode_machine_notes(body: MachineBody) -> str | None:
+    import json
+
+    from gpu_swarm.availability_schedule import AvailabilityConfig, apply_preset, config_to_settings_fields
+
+    preset = (body.availability_preset or "always").strip().lower()
+    if preset == "custom":
+        cfg = AvailabilityConfig(
+            mode="daily",
+            daily_start=body.availability_daily_start or "22:00",
+            daily_end=body.availability_daily_end or "08:00",
+        )
+    else:
+        cfg = apply_preset(preset)
+    payload: dict[str, Any] = {
+        "availability_preset": preset,
+        "availability": config_to_settings_fields(cfg),
+    }
+    if body.notes:
+        payload["text"] = body.notes
+    if preset == "always" and not body.notes:
+        return body.notes
+    return json.dumps(payload)
+
+
+def _parse_machine_notes(notes: str | None) -> dict[str, Any]:
+    import json
+
+    if not notes:
+        return {}
+    try:
+        parsed = json.loads(notes)
+        return parsed if isinstance(parsed, dict) else {"text": notes}
+    except json.JSONDecodeError:
+        return {"text": notes}
+
+
+def _availability_env_from_machine(machine: dict[str, Any]) -> dict[str, str]:
+    from gpu_swarm.availability_schedule import AvailabilityConfig, to_env_dict
+
+    meta = _parse_machine_notes(machine.get("notes"))
+    avail = meta.get("availability") or {}
+    cfg = AvailabilityConfig(
+        mode=str(avail.get("availability_mode") or "always"),
+        daily_start=str(avail.get("availability_daily_start") or "22:00"),
+        daily_end=str(avail.get("availability_daily_end") or "08:00"),
+        until_ts=float(avail.get("availability_until") or 0),
+    )
+    return to_env_dict(cfg)
+
+
 def _worker_instructions(machine: dict[str, Any], portal_base: str) -> dict[str, Any]:
     token = machine["start_token"]
     sched = machine["scheduler_url"]
     name = machine["worker_name"]
+    from gpu_swarm.availability_schedule import AvailabilityConfig, to_env_dict
+
+    sched_cfg = AvailabilityConfig(
+        mode=str(machine.get("availability_mode") or "always"),
+        daily_start=str(machine.get("availability_daily_start") or "22:00"),
+        daily_end=str(machine.get("availability_daily_end") or "08:00"),
+        until_ts=float(machine.get("availability_until") or 0),
+    ).normalized()
+    sched_env = to_env_dict(sched_cfg)
     bat = (
         f"set GPU_SWARM_PORTAL_URL={portal_base}\r\n"
         f"set GPU_SWARM_START_TOKEN={token}\r\n"
@@ -855,6 +934,9 @@ def _worker_instructions(machine: dict[str, Any], portal_base: str) -> dict[str,
         f"GPU_SWARM_CONTRIBUTOR_NAME={machine.get('contributor_name') or ''}\n"
         f"GPU_SWARM_HOST_PROTECT=1\n"
     )
+    for key, val in _availability_env_from_machine(machine).items():
+        if val:
+            env_direct += f"{key}={val}\n"
     return {
         "start_token": token,
         "portal_url": portal_base,

@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 
 from gpu_swarm import MAX_RESULT_BYTES
+from gpu_swarm.availability_schedule import AvailabilityConfig, is_available, status_dict
 from gpu_swarm.config import WorkerConfig, worker_config
 from gpu_swarm.gpu import inventory_summary
 from gpu_swarm.host import query_host
@@ -46,6 +47,13 @@ class Worker:
         self._client = httpx.Client(base_url=cfg.scheduler_url.rstrip("/"), timeout=30.0)
         self._host_protect = load_host_protect(enabled_override=bool(cfg.host_protect))
         self._last_protect_log = 0.0
+        self._last_schedule_log = 0.0
+        self._availability = AvailabilityConfig(
+            mode=str(getattr(cfg, "availability_mode", "always") or "always"),
+            daily_start=str(getattr(cfg, "availability_daily_start", "22:00") or "22:00"),
+            daily_end=str(getattr(cfg, "availability_daily_end", "08:00") or "08:00"),
+            until_ts=float(getattr(cfg, "availability_until", 0) or 0),
+        ).normalized()
 
     def _load_or_create_id(self) -> str:
         state_file = _worker_id_path()
@@ -62,6 +70,16 @@ class Worker:
         self._stop = True
         print("\n[worker] stop requested — finishing current cycle…", flush=True)
 
+    def _reload_availability(self) -> None:
+        """Re-read joiner_settings.json so schedule edits apply without restart."""
+        try:
+            from gpu_swarm.availability_schedule import settings_to_config
+            from gpu_swarm.joiner_settings import load_settings
+
+            self._availability = settings_to_config(load_settings())
+        except Exception:  # noqa: BLE001
+            pass
+
     def _caps(self) -> dict[str, Any]:
         """
         Advertised capacity after soft caps.
@@ -73,6 +91,7 @@ class Worker:
           disk_free_mb, disk_total_mb, disk_path, max_disk_mb,
           dedicated_ram_mb, dedicated_disk_mb, dedicated_cpu_cores, contributor_name
         """
+        self._reload_availability()
         inv = inventory_summary()
         host = query_host()
 
@@ -110,6 +129,7 @@ class Worker:
             vram_ceiling_mb=int(offered.get("vram_ceiling_mb") or 0),
         )
         llm = detect_llm_runtime(timeout=1.0)
+        sched = status_dict(self._availability)
         return {
             "gpus": inv["gpus"],
             "free_vram_mb": free_vram,
@@ -138,6 +158,9 @@ class Worker:
             "host_protect_admit": bool(admission.admit),
             "host_protect_reason": admission.reason,
             "vram_ceiling_mb": int(offered.get("vram_ceiling_mb") or 0),
+            "availability": sched,
+            "schedule_admit": bool(sched.get("available")),
+            "schedule_label": sched.get("label") or "",
         }
 
     def register(self) -> dict[str, Any]:
@@ -172,6 +195,9 @@ class Worker:
 
     def heartbeat(self, status: str = "online") -> None:
         caps = self._caps()
+        sched = caps.get("availability") or {}
+        if not sched.get("available") and status == "online":
+            status = "paused_schedule"
         r = self._client.post(
             f"/workers/{self.worker_id}/heartbeat",
             json={
@@ -200,6 +226,15 @@ class Worker:
 
     def lease(self) -> dict[str, Any] | None:
         caps = self._caps()
+        if not caps.get("schedule_admit", True):
+            now = time.time()
+            if now - self._last_schedule_log >= 30.0:
+                print(
+                    f"[worker] schedule PAUSE lease — {caps.get('schedule_label') or 'outside window'}",
+                    flush=True,
+                )
+                self._last_schedule_log = now
+            return None
         # Pause admission when live GPU util / free VRAM would freeze the desktop.
         if not caps.get("host_protect_admit", True):
             now = time.time()
@@ -299,6 +334,9 @@ class Worker:
                 "[worker] host_protect=OFF — no desktop GPU safety ceiling",
                 flush=True,
             )
+        sched = caps.get("availability") or {}
+        if sched.get("mode") and sched.get("mode") != "always":
+            print(f"[worker] availability: {sched.get('label')}", flush=True)
         if caps.get("llm_ready"):
             models = caps.get("llm_models") or []
             preview = ", ".join(models[:5]) if models else "(models unknown)"
@@ -366,6 +404,14 @@ def run_worker(args: argparse.Namespace | None = None) -> int:
             cfg.max_cpu_percent = args.max_cpu_percent
         if getattr(args, "host_protect", None) is not None:
             cfg.host_protect = bool(args.host_protect)
+        if getattr(args, "availability_mode", None):
+            cfg.availability_mode = str(args.availability_mode)
+        if getattr(args, "availability_daily_start", None):
+            cfg.availability_daily_start = str(args.availability_daily_start)
+        if getattr(args, "availability_daily_end", None):
+            cfg.availability_daily_end = str(args.availability_daily_end)
+        if getattr(args, "availability_until", None) is not None:
+            cfg.availability_until = float(args.availability_until)
         if args.discord_user:
             cfg.discord_user = args.discord_user
     Worker(cfg).run_forever()

@@ -65,6 +65,11 @@ class WorkerConfig:
     portal_url: str = "http://127.0.0.1:8767"
     # Host GPU safety (desktop headroom). Default ON — see host_protect.py.
     host_protect: bool = True
+    # Contributor availability window — see availability_schedule.py.
+    availability_mode: str = "always"
+    availability_daily_start: str = "22:00"
+    availability_daily_end: str = "08:00"
+    availability_until: float = 0.0
 
 
 @dataclass
@@ -111,6 +116,13 @@ def worker_config() -> WorkerConfig:
         host_protect = True
     else:
         host_protect = hp_raw.lower() not in ("0", "false", "no", "off", "disabled")
+    until_raw = _env("GPU_SWARM_AVAILABILITY_UNTIL")
+    until_ts = 0.0
+    if until_raw:
+        try:
+            until_ts = float(until_raw)
+        except ValueError:
+            until_ts = 0.0
     return WorkerConfig(
         scheduler_url=_env("GPU_SWARM_SCHEDULER_URL", "http://127.0.0.1:8766")
         or "http://127.0.0.1:8766",
@@ -129,6 +141,10 @@ def worker_config() -> WorkerConfig:
         portal_url=_env("GPU_SWARM_PORTAL_URL", "http://127.0.0.1:8767")
         or "http://127.0.0.1:8767",
         host_protect=host_protect,
+        availability_mode=_env("GPU_SWARM_AVAILABILITY_MODE", "always") or "always",
+        availability_daily_start=_env("GPU_SWARM_AVAILABILITY_START", "22:00") or "22:00",
+        availability_daily_end=_env("GPU_SWARM_AVAILABILITY_END", "08:00") or "08:00",
+        availability_until=until_ts,
     )
 
 

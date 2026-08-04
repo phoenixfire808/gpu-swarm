@@ -18,6 +18,9 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 
 ### Added
 
+- **Use-case onboarding** — "What can you use this for?" in portal hub, desktop Welcome/Home, `START_HERE.md` (`gpu_swarm/use_cases.py`).
+- **Availability timers (MVP)** — Contribute schedule presets (Always / Nights & weekends / Next 2h / Custom); `joiner_settings.json` + env; worker pauses lease outside window; UI status "Sharing now" / "Paused — resumes at …" (`gpu_swarm/availability_schedule.py`, `tests/test_availability_schedule.py`).
+
 - **`START_HERE.md`** — 5-minute friend path + paste-ready Discord growth blurb.
 - **Portal newcomer UX** — clearer hero/login; three huge post-login actions (Share / Use / Invite); How it works (3 steps); Chat/Suggest demoted to secondary nav; mobile-friendly action buttons.
 - **Share / Invite others** — `gpu_swarm/share_invite.py`; portal Hub **Invite others** view + desktop **4 · Invite others** with one-click copy (friend message, full blurb, portal URL, invite code, GitHub download). Primary actions: Join / Share my PC / Use the pool / Invite others.

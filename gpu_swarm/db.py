@@ -434,6 +434,11 @@ class Store:
     async def status_summary(self, stale_sec: int = 45) -> dict[str, Any]:
         workers = await self.list_workers(stale_sec)
         online = [w for w in workers if w["online"]]
+        accepting = [
+            w
+            for w in online
+            if str(w.get("status") or "").lower() in ("online", "busy")
+        ]
         cur = await self.db.execute(
             """
             SELECT status, COUNT(*) AS n FROM jobs GROUP BY status
@@ -441,24 +446,25 @@ class Store:
         )
         counts = {row["status"]: row["n"] for row in await cur.fetchall()}
         gpu_names: list[str] = []
-        for w in online:
+        for w in accepting:
             for g in w.get("gpus") or []:
                 name = g.get("name")
                 if name:
                     gpu_names.append(f"{w['name']}: {name}")
         return {
             "workers_total": len(workers),
-            "workers_online": len(online),
-            "free_vram_mb": sum(int(w.get("free_vram_mb") or 0) for w in online),
-            "total_vram_mb": sum(int(w.get("total_vram_mb") or 0) for w in online),
-            "cpu_cores": sum(int(w.get("cpu_cores") or 0) for w in online),
-            "ram_available_mb": sum(int(w.get("ram_available_mb") or 0) for w in online),
-            "ram_total_mb": sum(int(w.get("ram_total_mb") or 0) for w in online),
-            "disk_free_mb": sum(int(w.get("disk_free_mb") or 0) for w in online),
-            "dedicated_ram_mb": sum(int(w.get("dedicated_ram_mb") or 0) for w in online),
-            "dedicated_disk_mb": sum(int(w.get("dedicated_disk_mb") or 0) for w in online),
+            "workers_online": len(accepting),
+            "workers_registered": len(online),
+            "free_vram_mb": sum(int(w.get("free_vram_mb") or 0) for w in accepting),
+            "total_vram_mb": sum(int(w.get("total_vram_mb") or 0) for w in accepting),
+            "cpu_cores": sum(int(w.get("cpu_cores") or 0) for w in accepting),
+            "ram_available_mb": sum(int(w.get("ram_available_mb") or 0) for w in accepting),
+            "ram_total_mb": sum(int(w.get("ram_total_mb") or 0) for w in accepting),
+            "disk_free_mb": sum(int(w.get("disk_free_mb") or 0) for w in accepting),
+            "dedicated_ram_mb": sum(int(w.get("dedicated_ram_mb") or 0) for w in accepting),
+            "dedicated_disk_mb": sum(int(w.get("dedicated_disk_mb") or 0) for w in accepting),
             "dedicated_cpu_cores": round(
-                sum(float(w.get("dedicated_cpu_cores") or 0) for w in online), 2
+                sum(float(w.get("dedicated_cpu_cores") or 0) for w in accepting), 2
             ),
             "gpus": gpu_names,
             "jobs": {
@@ -468,6 +474,7 @@ class Store:
                 "failed": counts.get("failed", 0),
             },
             "workers": online,
+            "workers_accepting_jobs": accepting,
         }
 
 

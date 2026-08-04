@@ -22,6 +22,9 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [x] Verbose install + plain-language UX + install-prereqs automation
 - [x] **Share / Invite others** grow flow (`share_invite.py`, portal + desktop copy buttons)
 - [x] Personal-name scrub; `FRIEND_LAPTOP.md` → `NO_GPU_LAPTOP.md`
+- [x] Console window spam fix (`win_subprocess`, hidden `start-*.cmd`)
+- [x] Use-case onboarding copy (portal + desktop + START_HERE)
+- [x] Availability timers MVP (Contribute schedule + worker lease pause)
 
 ## Now
 - [x] Packaging Worker: publish Windows EXE **v0.1.1** (hub + Invite friends + host_protect + START_HERE)

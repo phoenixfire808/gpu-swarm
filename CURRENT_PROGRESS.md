@@ -1,55 +1,39 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
-Living scorecard for the private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~16:05 CDT · console-spam fix + grandma onboarding.
+Living scorecard. **Updated:** 2026-08-04 ~16:25 CDT · use cases + availability timers + console fix.
 
-**GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
-
-| Service | Local | Tailscale |
-|---------|-------|-----------|
-| Scheduler | `http://127.0.0.1:8766` | `http://100.85.165.84:8766` |
-| Portal | `http://127.0.0.1:8767/portal` | `http://100.85.165.84:8767/portal` |
-| **Local model endpoint** | `http://127.0.0.1:18080/v1` (8080 busy → fallback) | localhost only |
-| Public portal (when tunnel up) | see `data/public_endpoints.share.txt` | — |
-| Robinhood CC | `127.0.0.1:8765` | **do not steal** |
-
-**Discord:** App **GPU Pool** · Primary guild **Glitch Factor** · Invite code `glitch-factor`  
-**Rules:** No Docker · No mock GPU/host data · Never commit `.env` / tokens / `data/public_endpoints*` / `data/portal.db`  
-**Living docs:** [`TODO.md`](TODO.md) · [`ROADMAP.md`](ROADMAP.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`START_HERE.md`](START_HERE.md)
+**GitHub:** https://github.com/phoenixfire808/gpu-swarm
 
 ---
 
 ## Done (this turn)
 
-- [x] **Root cause:** Windows subprocesses lacked `CREATE_NO_WINDOW`; Connect tab polled Hermes `agent-vm` every 4s → flashing cmd/powershell loops
-- [x] **`gpu_swarm/win_subprocess.py`** — shared hidden-spawn flags for Popen/run
-- [x] Applied to `app_backend`, `agent_vm_bridge`, `portable_python`, diagnostics, joiner_settings, gpu
-- [x] Stopped auto `_refresh_workspace()` on 4s poll (manual Refresh only)
-- [x] **`scripts/run-hidden.cmd`** + all `start-*.cmd` → background pythonw, logs under `%LOCALAPPDATA%\GPUPool\logs\`
-- [x] Grandma-friendly Welcome / `START_HERE.md` / portal hub copy (numbered steps, plain tool names)
-- [x] Killed duplicate nohup bot/portal wrappers from prior run-stack
+- [x] **Console spam fix** (prior commit `c45ffc8`) — `CREATE_NO_WINDOW`, hidden `start-*.cmd`, no workspace poll loop
+- [x] **Use-case copy** — portal hub, desktop Welcome/Home, `START_HERE.md`, `gpu_swarm/use_cases.py`
+- [x] **Availability timers MVP** — Always / Nights & weekends / Next 2h / Custom; worker lease pause + `paused_schedule` heartbeat; Contribute UI + portal Share form; `tests/test_availability_schedule.py` (9 tests pass)
+- [x] Grandma-friendly onboarding preserved — Join → Share / Use / Invite big buttons
 
-## How a non-tech person starts now
+## How timers work
 
-**Browser (easiest):** ask for web link → invite `glitch-factor` + Discord name → Join → Share / Use / Invite.
+| Preset | Behavior |
+|--------|----------|
+| **Always on** | Worker accepts jobs anytime (default) |
+| **Nights & weekends** | Daily 10pm–8am local time |
+| **Next 2 hours** | Sharing until timer ends, then paused |
+| **Custom** | Your daily start/end times (supports overnight e.g. 22:00–08:00) |
 
-**Windows app:** download GPUPool.exe → follow numbered wizard → same three big buttons.
+Outside the window: worker **stays registered**, heartbeats `paused_schedule`, **won't lease new jobs**. Status panel shows e.g. "Paused — resumes at 10pm".
 
-**Host background services:** double-click `start-all-local.cmd` once — no extra console windows; logs in `%LOCALAPPDATA%\GPUPool\logs\`.
+Settings: `joiner_settings.json` + `GPU_SWARM_AVAILABILITY_*` env (synced on Join).
+
+## How a non-tech person starts
+
+1. **Browser:** web link → invite `glitch-factor` + name → Join → Share / Use / Invite  
+2. **App:** GPUPool.exe → numbered wizard → same three buttons  
+3. **Share schedule:** Share my PC → pick "When should we use your PC?" → Join pool  
 
 ## Next
 
-- Restart portal once so live hub serves updated HTML
-- Rebuild GPUPool.exe when ready to ship frozen path with win_subprocess bundled
+- Restart portal for updated hub HTML
+- Rebuild GPUPool.exe when shipping frozen build with schedule module
 - Post Discord invite blurb
-
----
-
-## Ready-to-go checklist
-
-| # | Check | Result |
-|---|--------|--------|
-| 1 | One app window; background hidden | **FIXED** this turn |
-| 2 | Portal + EXE grandma copy | **SHIPPED** |
-| 3 | Share / Use / Invite path | **PASS** |
-| 4 | Workers + scheduler | **PASS** (one stack; duplicates trimmed) |

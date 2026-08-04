@@ -11,6 +11,18 @@ Share spare power · use friends' PCs · invite others.
 
 ---
 
+## What can you use this for?
+
+1. **Run AI chat on friends' GPUs** — no NVIDIA needed on your laptop  
+2. **Share idle evening/weekend GPU** — set a schedule so the group runs faster  
+3. **Shared coding workspace** — optional Linux VM for projects together  
+4. **Local AI for Cursor & agents** — localhost OpenAI URL, skip cloud GPU bills  
+5. **Quick GPU health checks** — probe/CUDA checks across the pool  
+6. **Chat & suggest** — talk with the pool on the web hub  
+7. **Invite friends** — every PC that joins gives everyone more compute  
+
+---
+
 ## Path A — Web browser (easiest)
 
 **Just do this:**

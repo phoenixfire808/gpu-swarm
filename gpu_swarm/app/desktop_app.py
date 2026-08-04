@@ -15,6 +15,7 @@ from typing import Any, Callable
 import customtkinter as ctk
 
 from gpu_swarm import app_backend as be
+from gpu_swarm.availability_schedule import PRESET_LABELS, apply_preset, config_to_settings_fields
 from gpu_swarm.joiner_settings import (
     DEFAULT_LOCAL_PORTAL_URL,
     DEFAULT_LOCAL_SCHEDULER_URL,
@@ -22,6 +23,7 @@ from gpu_swarm.joiner_settings import (
     DEFAULT_SCHEDULER_URL,
     PORTAL_INVITE_CODE,
 )
+from gpu_swarm.use_cases import USE_CASES
 
 APP_TITLE = "GPU Pool"
 ACCENT = "#2DD4A8"
@@ -31,6 +33,29 @@ BG = "#0F1419"
 PANEL = "#1A2332"
 DANGER = "#E85D5D"
 OK_GREEN = "#3DDC97"
+
+
+def _apply_availability_fields(
+    settings: be.JoinerSettings,
+    preset: str,
+    *,
+    daily_start: str = "",
+    daily_end: str = "",
+) -> None:
+    from gpu_swarm.availability_schedule import AvailabilityConfig
+
+    key = (preset or "always").strip().lower()
+    settings.availability_preset = key
+    if key == "custom":
+        cfg = AvailabilityConfig(
+            mode="daily",
+            daily_start=daily_start or "22:00",
+            daily_end=daily_end or "08:00",
+        )
+    else:
+        cfg = apply_preset(key)
+    for field, val in config_to_settings_fields(cfg).items():
+        setattr(settings, field, val)
 
 
 def run_app() -> int:
@@ -288,6 +313,23 @@ class WizardFrame(ctk.CTkFrame):
                 "• VirtualBox + Vagrant — only if you want an optional Linux desktop (most people skip this)\n\n"
                 "Already installed? We skip it. Windows may ask Yes once (normal)."
             ),
+            text_color=MUTED,
+            justify="left",
+            wraplength=820,
+        ).pack(anchor="w", padx=16, pady=(0, 14))
+
+        uses = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
+        uses.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(
+            uses,
+            text="What can you use this for?",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=ACCENT,
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+        bullet = "\n".join(f"• {u['title']} — {u['body']}" for u in USE_CASES)
+        ctk.CTkLabel(
+            uses,
+            text=bullet,
             text_color=MUTED,
             justify="left",
             wraplength=820,
@@ -1132,6 +1174,72 @@ class WizardFrame(ctk.CTkFrame):
             variable=self.host_protect_var,
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", pady=(12, 0))
+        self._build_availability_controls(self.body, wizard=True)
+
+    def _build_availability_controls(self, parent: Any, *, wizard: bool = False) -> None:
+        frame = ctk.CTkFrame(parent, fg_color=PANEL if wizard else "transparent", corner_radius=8)
+        frame.pack(fill="x", pady=(12, 0))
+        pad = 12 if wizard else 0
+        ctk.CTkLabel(
+            frame,
+            text="When should we use your PC?",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=ACCENT,
+        ).pack(anchor="w", padx=pad, pady=(pad, 4))
+        ctk.CTkLabel(
+            frame,
+            text=(
+                "Pick when friends may run jobs. Outside the window the worker still checks in "
+                "but pauses new jobs — same idea as host GPU safety."
+            ),
+            text_color=MUTED,
+            wraplength=860,
+            justify="left",
+            font=ctk.CTkFont(size=11),
+        ).pack(anchor="w", padx=pad, pady=(0, 6))
+        preset = str(getattr(self.settings, "availability_preset", "always") or "always")
+        self.availability_preset_var = ctk.StringVar(value=preset)
+        menu = ctk.CTkOptionMenu(
+            frame,
+            variable=self.availability_preset_var,
+            values=list(PRESET_LABELS.keys()),
+            command=lambda _v: self._update_availability_status_lbl(),
+        )
+        menu.pack(anchor="w", padx=pad, pady=(0, 6))
+        custom_row = ctk.CTkFrame(frame, fg_color="transparent")
+        custom_row.pack(fill="x", padx=pad, pady=(0, 6))
+        ctk.CTkLabel(custom_row, text="Custom start (HH:MM)", text_color=MUTED, font=ctk.CTkFont(size=11)).pack(
+            side="left", padx=(0, 8)
+        )
+        self.avail_start_entry = ctk.CTkEntry(custom_row, width=80, height=28)
+        self.avail_start_entry.pack(side="left", padx=(0, 12))
+        self.avail_start_entry.insert(0, getattr(self.settings, "availability_daily_start", "22:00") or "22:00")
+        ctk.CTkLabel(custom_row, text="Custom end (HH:MM)", text_color=MUTED, font=ctk.CTkFont(size=11)).pack(
+            side="left", padx=(0, 8)
+        )
+        self.avail_end_entry = ctk.CTkEntry(custom_row, width=80, height=28)
+        self.avail_end_entry.pack(side="left")
+        self.avail_end_entry.insert(0, getattr(self.settings, "availability_daily_end", "08:00") or "08:00")
+        self.availability_status_lbl = ctk.CTkLabel(
+            frame, text="", text_color=OK_GREEN, wraplength=860, justify="left"
+        )
+        self.availability_status_lbl.pack(anchor="w", padx=pad, pady=(0, pad))
+        self._update_availability_status_lbl()
+
+    def _update_availability_status_lbl(self) -> None:
+        if not hasattr(self, "availability_status_lbl"):
+            return
+        try:
+            s = be.load_config()
+            _apply_availability_fields(
+                s,
+                self.availability_preset_var.get(),
+                daily_start=self.avail_start_entry.get() if hasattr(self, "avail_start_entry") else "",
+                daily_end=self.avail_end_entry.get() if hasattr(self, "avail_end_entry") else "",
+            )
+            self.availability_status_lbl.configure(text=be.get_availability_status(s).get("label") or "")
+        except Exception as exc:  # noqa: BLE001
+            self.availability_status_lbl.configure(text=f"Schedule: {exc}", text_color=WARN)
 
     def _slider_row(
         self,
@@ -1595,6 +1703,23 @@ class MainFrame(ctk.CTkFrame):
             wraplength=980,
             justify="left",
         ).pack(anchor="w", pady=(0, 14))
+
+        uses = ctk.CTkFrame(parent, fg_color=PANEL, corner_radius=10)
+        uses.pack(fill="x", pady=(0, 14))
+        ctk.CTkLabel(
+            uses,
+            text="What can you use this for?",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=ACCENT,
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+        bullet = "\n".join(f"• {u['title']} — {u['body']}" for u in USE_CASES[:5])
+        ctk.CTkLabel(
+            uses,
+            text=bullet + "\n• Invite friends — every PC that joins gives everyone more power.",
+            text_color=MUTED,
+            justify="left",
+            wraplength=960,
+        ).pack(anchor="w", padx=16, pady=(0, 14))
 
         cards = ctk.CTkFrame(parent, fg_color="transparent")
         cards.pack(fill="both", expand=True)
@@ -2428,6 +2553,7 @@ class MainFrame(ctk.CTkFrame):
         self._cap_slider(inner, "Max CPU %", self.cpu_var, 5, 100)
         self._cap_slider(inner, "Max RAM MiB", self.ram_var, 0, total_ram)
         self._cap_slider(inner, "Max Disk GiB", self.disk_var, 0, total_disk)
+        self._build_availability_controls(inner)
         self.host_protect_var = ctk.BooleanVar(value=bool(getattr(self.settings, "host_protect", True)))
         ctk.CTkCheckBox(
             inner,
@@ -2515,19 +2641,29 @@ class MainFrame(ctk.CTkFrame):
         s.max_disk_gb = float(self.disk_var.get())
         if getattr(self, "host_protect_var", None) is not None:
             s.host_protect = bool(self.host_protect_var.get())
+        if getattr(self, "availability_preset_var", None) is not None:
+            _apply_availability_fields(
+                s,
+                self.availability_preset_var.get(),
+                daily_start=self.avail_start_entry.get() if hasattr(self, "avail_start_entry") else "",
+                daily_end=self.avail_end_entry.get() if hasattr(self, "avail_end_entry") else "",
+            )
         return s
 
     def _save_settings(self) -> None:
         self.settings = self._collect()
         be.save_config(self.settings)
         hp = "ON" if getattr(self.settings, "host_protect", True) else "OFF"
+        avail = be.get_availability_status(self.settings).get("label") or "Always on"
         self.action_lbl.configure(
             text=(
                 "Saved your offer caps locally (this worker only). "
-                f"Host GPU safety {hp}. Only you control how much of your PC is offered."
+                f"Host GPU safety {hp}. Schedule: {avail}"
             ),
             text_color=OK_GREEN,
         )
+        if hasattr(self, "availability_status_lbl"):
+            self._update_availability_status_lbl()
 
     def _open_portal(self) -> None:
         url = self.portal_entry.get().strip()
@@ -3160,6 +3296,7 @@ class MainFrame(ctk.CTkFrame):
             f"Local worker: {'RUNNING' if w.get('running') else 'stopped'}"
             + (f"  pid={w.get('pid')}" if w.get("pid") else ""),
             f"Connected: {'yes' if w.get('connected') else 'no'}  ·  {w.get('detail') or ''}",
+            f"Schedule: {(status.get('availability') or {}).get('label') or w.get('availability_label') or '—'}",
             f"Worker id:   {w.get('worker_id') or '—'}",
             f"Worker name: {w.get('worker_name') or '—'}",
             f"Last heartbeat: {w.get('last_heartbeat') or '—'}",

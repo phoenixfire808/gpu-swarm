@@ -320,6 +320,10 @@ _SAFE_ENV_KEYS = (
     "GPU_SWARM_MAX_RAM_MB",
     "GPU_SWARM_MAX_DISK_GB",
     "GPU_SWARM_HOST_PROTECT",
+    "GPU_SWARM_AVAILABILITY_MODE",
+    "GPU_SWARM_AVAILABILITY_START",
+    "GPU_SWARM_AVAILABILITY_END",
+    "GPU_SWARM_AVAILABILITY_UNTIL",
 )
 
 _FORBIDDEN_ENV_KEYS = frozenset(
@@ -347,6 +351,7 @@ class WorkerRuntimeStatus:
     ram_available_mb: int = 0
     disk_free_mb: int = 0
     detail: str = ""
+    availability_label: str = ""
     pid: int | None = None
 
 
@@ -1585,6 +1590,9 @@ def start_worker(
     env["GPU_SWARM_MAX_DISK_GB"] = str(float(getattr(settings, "max_disk_gb", 0) or 0))
     host_protect = bool(getattr(settings, "host_protect", True))
     env["GPU_SWARM_HOST_PROTECT"] = "1" if host_protect else "0"
+    from gpu_swarm.availability_schedule import settings_to_config, to_env_dict
+
+    env.update(to_env_dict(settings_to_config(settings)))
     disk_mb = int(float(getattr(settings, "max_disk_gb", 0) or 0) * 1024)
     if disk_mb > 0:
         env["GPU_SWARM_MAX_DISK_MB"] = str(disk_mb)
@@ -1829,7 +1837,8 @@ def worker_runtime_status(settings: JoinerSettings | None = None) -> WorkerRunti
             break
 
     if mine:
-        st.connected = str(mine.get("status", "")).lower() in ("online", "busy")
+        mine_status = str(mine.get("status", "")).lower()
+        st.connected = mine_status in ("online", "busy", "paused_schedule")
         st.worker_id = mine.get("id") or st.worker_id
         st.worker_name = mine.get("name") or st.worker_name
         hb = mine.get("last_heartbeat")
@@ -1845,7 +1854,14 @@ def worker_runtime_status(settings: JoinerSettings | None = None) -> WorkerRunti
             st.gpus_advertised = [g.get("name", "?") for g in gpus]
         elif isinstance(gpus, list):
             st.gpus_advertised = [str(g) for g in gpus]
-        st.detail = f"status={mine.get('status')}"
+        from gpu_swarm.availability_schedule import settings_to_config, status_dict
+
+        local_sched = status_dict(settings_to_config(settings))
+        st.availability_label = local_sched.get("label") or ""
+        if mine_status == "paused_schedule":
+            st.detail = st.availability_label or "Paused — outside your schedule"
+        else:
+            st.detail = f"status={mine.get('status')}"
     else:
         st.connected = False
         st.detail = "Not registered on scheduler yet" if running else "Not in pool"
@@ -1857,6 +1873,47 @@ def worker_runtime_status(settings: JoinerSettings | None = None) -> WorkerRunti
         st.disk_free_mb = int(data.get("disk_free_mb") or 0)
 
     return st
+
+
+def get_availability_status(settings: JoinerSettings | None = None) -> dict[str, Any]:
+    """Local schedule evaluation for Contribute UI."""
+    from gpu_swarm.availability_schedule import settings_to_config, status_dict
+
+    settings = settings or load_joiner_settings()
+    return status_dict(settings_to_config(settings))
+
+
+def apply_availability_preset(
+    settings: JoinerSettings,
+    preset: str,
+    *,
+    daily_start: str | None = None,
+    daily_end: str | None = None,
+    save: bool = True,
+) -> JoinerSettings:
+    """Persist a schedule preset onto joiner settings."""
+    from gpu_swarm.availability_schedule import PRESET_CUSTOM, apply_preset_to_settings
+
+    if daily_start:
+        settings.availability_daily_start = daily_start
+    if daily_end:
+        settings.availability_daily_end = daily_end
+    apply_preset_to_settings(settings, preset)
+    if (preset or "").strip().lower() == PRESET_CUSTOM and (daily_start or daily_end):
+        settings.availability_mode = "daily"
+        if daily_start:
+            settings.availability_daily_start = daily_start
+        if daily_end:
+            settings.availability_daily_end = daily_end
+    if save:
+        save_joiner_settings(settings)
+    return settings
+
+
+def get_use_cases_text() -> str:
+    from gpu_swarm.use_cases import format_use_cases_bullets
+
+    return format_use_cases_bullets()
 
 
 def get_status() -> dict[str, Any]:
@@ -1880,8 +1937,10 @@ def get_status() -> dict[str, Any]:
             "ram_available_mb": runtime.ram_available_mb,
             "disk_free_mb": runtime.disk_free_mb,
             "detail": runtime.detail,
+            "availability_label": runtime.availability_label,
             "pid": runtime.pid,
         },
+        "availability": get_availability_status(settings),
         "scheduler": {
             "ok": bool(sched.get("ok")),
             "url": sched.get("url") or settings.scheduler_url,
@@ -2358,6 +2417,9 @@ def _sync_env_file(settings: JoinerSettings) -> None:
             "1" if bool(getattr(settings, "host_protect", True)) else "0"
         ),
     }
+    from gpu_swarm.availability_schedule import settings_to_config, to_env_dict
+
+    updates.update(to_env_dict(settings_to_config(settings)))
     for key in _FORBIDDEN_ENV_KEYS:
         updates.pop(key, None)
 

@@ -587,6 +587,18 @@
       </div>
 
       <div class="section">
+        <h2>What can you use this for?</h2>
+        <ul class="how-steps">
+          <li><span class="n">AI chat</span><span class="t">Run on friends' GPUs</span><span class="d">No NVIDIA on your laptop? Still run chat and jobs on whoever is online.</span></li>
+          <li><span class="n">Share idle GPU</span><span class="t">Evenings & weekends</span><span class="d">Lend spare power on a schedule — the group trains and runs faster together.</span></li>
+          <li><span class="n">Coding workspace</span><span class="t">Optional Linux VM</span><span class="d">Shared project desktop for coding together (CPU/RAM only).</span></li>
+          <li><span class="n">Local AI URL</span><span class="t">Cursor & agents</span><span class="d">OpenAI-compatible localhost endpoint — skip cloud GPU bills.</span></li>
+          <li><span class="n">Health checks</span><span class="t">Probe the pool</span><span class="d">Quick GPU/CUDA checks across online machines.</span></li>
+          <li><span class="n">Chat & grow</span><span class="t">Talk + invite</span><span class="d">Chat with the pool, suggest improvements, invite friends for more compute.</span></li>
+        </ul>
+      </div>
+
+      <div class="section">
         <div class="section-head">
           <h2>Who's online</h2>
           <button class="ghost" id="refreshBtn" type="button">Refresh</button>
@@ -707,6 +719,24 @@
         <div class="slider-row">
           <input id="disk" type="range" min="0" max="524288" step="1024" value="0" />
           <span class="val" id="diskVal">0</span>
+        </div>
+        <label for="availabilityPreset">When should we use your PC?</label>
+        <select id="availabilityPreset">
+          <option value="always">Always on</option>
+          <option value="nights_weekends">Nights &amp; weekends (10pm–8am)</option>
+          <option value="next_2_hours">Next 2 hours</option>
+          <option value="custom">Custom daily window</option>
+        </select>
+        <p class="note">Outside your window the worker stays registered but won't take new jobs.</p>
+        <div class="row" id="customAvailRow" style="display:none">
+          <div>
+            <label for="availStart">From (24h)</label>
+            <input id="availStart" type="text" value="22:00" placeholder="22:00" />
+          </div>
+          <div>
+            <label for="availEnd">Until (24h)</label>
+            <input id="availEnd" type="text" value="08:00" placeholder="08:00" />
+          </div>
         </div>
         <div class="actions">
           <button id="registerBtn" type="button">Create start token</button>
@@ -1495,6 +1525,7 @@ $("submitJobBtn").onclick = async () => {
 };
 
 function capsPayload() {
+  const preset = $("availabilityPreset").value || "always";
   return {
     worker_name: $("workerName").value.trim() || "browser-worker",
     scheduler_url: $("schedulerUrl").value.trim(),
@@ -1503,8 +1534,16 @@ function capsPayload() {
     dedicated_ram_mb: Number($("ram").value),
     dedicated_disk_mb: Number($("disk").value),
     dedicated_cpu_cores: Number($("cpuCores").value),
+    availability_preset: preset,
+    availability_daily_start: $("availStart").value.trim() || "22:00",
+    availability_daily_end: $("availEnd").value.trim() || "08:00",
   };
 }
+
+$("availabilityPreset").onchange = () => {
+  const custom = $("availabilityPreset").value === "custom";
+  $("customAvailRow").style.display = custom ? "grid" : "none";
+};
 
 $("registerBtn").onclick = async () => {
   $("regErr").classList.add("hidden");
