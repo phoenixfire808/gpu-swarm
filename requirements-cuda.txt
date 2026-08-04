@@ -1,0 +1,13 @@
+# Optional CUDA PyTorch for pytorch_cuda_probe contributors (large download).
+# Do NOT install from PyPI alone — CPU wheels will be selected.
+#
+# Preferred:
+#   scripts\install_joiner_deps.ps1 -WithTorchCuda
+#
+# Manual (into the GPUPool venv):
+#   "%LOCALAPPDATA%\GPUPool\venv\Scripts\python.exe" -m pip install -r requirements-cuda.txt --index-url https://download.pytorch.org/whl/cu128
+#
+# Supported: Windows + Python 3.10–3.12. Python 3.13 torch/CUDA wheels may be missing or fragile.
+# Index default matches install_joiner_deps.ps1 (cu128). Override with -TorchIndexUrl if needed.
+
+torch>=2.5.0,<2.8.0

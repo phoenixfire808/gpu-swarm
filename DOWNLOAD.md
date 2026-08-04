@@ -10,9 +10,21 @@ https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
 
 ---
 
+## Friend path (pick one)
+
+| Path | Tailscale? | How |
+|------|------------|-----|
+| **Public portal URL** (preferred when Drew posts it) | **No** | Open the `https://….trycloudflare.com/portal` link → invite **`glitch-factor`** + display name → Utilize (or Contribute CPU) |
+| **Installer / EXE** | Optional | Download EXE → wizard → same invite. Use public pool-api URL if Drew shared one; else Tailscale scheduler |
+| **Tailscale** (optional private path) | Yes | Join Drew’s tailnet → `http://100.85.165.84:8767/portal` |
+
+Drew starts public access on the host with `start-public-access.cmd` (Cloudflare quick tunnel → portal `:8767`; `/pool-api` proxies the scheduler so **one** public URL works). Invite-code auth stays on.
+
+---
+
 ## Prerequisites
 
-1. **Tailscale** — join Drew’s private network first (ask in Discord). Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use the portal/EXE URLs below.
+1. **Access** — either Drew’s **public portal URL** (no Tailscale) **or** Tailscale on Drew’s private network (ask in Discord).
 2. **Invite code** — `glitch-factor` (Glitch Factor Discord). Use it with your display name at portal login / app join.
 3. **NVIDIA drivers** — only if you want to **Contribute a GPU**. Install current Game Ready / Studio drivers so `nvidia-smi` works. **No GPU?** Skip this — use Utilize (and optional CPU contribute) below.
 
@@ -24,20 +36,20 @@ Friends on MacBooks, Intel/AMD laptops, or any PC without NVIDIA are still welco
 
 | Do this | Details |
 |---------|---------|
-| Stay on Tailscale | Private Tailscale/LAN pool — not exposed to the open internet. If the URL fails without Tailscale, install/login Tailscale and join Drew’s tailnet. |
-| Use full URLs with ports | Portal: `http://100.85.165.84:8767/portal` · Scheduler API: `http://100.85.165.84:8766` |
-| Utilize the pool | Browser portal → invite **`glitch-factor`** + display name → **Utilize** → submit allowlisted jobs (`probe`, etc.). Jobs run on whoever has GPUs online. |
-| Optional: Contribute CPU | Register machine with CPU/RAM/disk caps; leave GPU/VRAM at **0**. You help with non-CUDA work when the job allows it. CUDA probes still need an NVIDIA worker. |
+| Open the link Drew DMs | Prefer the **public** `…trycloudflare.com/portal` URL — **no Tailscale needed** while the tunnel is up |
+| Or Tailscale (optional) | Portal: `http://100.85.165.84:8767/portal` · Scheduler: `http://100.85.165.84:8766` |
+| Utilize the pool | Browser → invite **`glitch-factor`** + display name → **Utilize** → allowlisted jobs (`probe`, etc.). Jobs run on whoever has GPUs online |
+| Optional: Contribute CPU | Register machine with CPU/RAM/disk caps; leave GPU/VRAM at **0**. Helps non-CUDA work when the job allows it. CUDA probes still need an NVIDIA worker |
 | Discord | `/pool` · `/submit_probe` · `/job_status` (Glitch Factor · bot **GPU Pool**) |
 
 ### Common mistakes
 
 | Symptom | Fix |
 |---------|-----|
-| Page won’t load / “can’t reach” | Confirm Tailscale is up; use the **full** Tailscale URL with **`:8767`** (portal) or **`:8766`** (scheduler). Bare host or missing port fails. |
-| CLI / script can’t connect | Set `GPU_SWARM_SCHEDULER_URL=http://100.85.165.84:8766` — scheduler port **8766**, not the portal URL. |
-| Black / blank portal screen | Hard refresh (**Ctrl+F5**), reopen `http://100.85.165.84:8767/portal`, or ask Drew if the portal was just updated. |
-| Expected public link | There isn’t one on the open internet. Friends join via Tailscale, then use these URLs. |
+| Page won’t load | Try Drew’s **public** portal URL first; or confirm Tailscale is up and use full `:8767` / `:8766` URLs |
+| CLI / script can’t connect | Public: `GPU_SWARM_SCHEDULER_URL=https://….trycloudflare.com/pool-api` · Tailscale: `http://100.85.165.84:8766` |
+| Black / blank portal screen | Hard refresh (**Ctrl+F5**), reopen the latest portal URL Drew posted |
+| Tunnel URL expired | Quick tunnels rotate when Drew restarts `start-public-access.cmd` — ask for a fresh link |
 
 Paste-ready Discord blurb (includes no-GPU path): [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).
 
@@ -47,15 +59,25 @@ Paste-ready Discord blurb (includes no-GPU path): [`DISCORD_MEMBER_QUICKSTART.md
 
 1. Open [Releases](https://github.com/phoenixfire808/gpu-swarm/releases) → download the Windows EXE from the latest release.
 2. Run the EXE (Windows SmartScreen may warn on unsigned builds — “More info” → Run anyway if you trust Drew’s release).
-3. Confirm you are on Tailscale (`tailscale status` or the Tailscale tray icon).
+3. Prefer the **public portal / pool-api** URLs Drew shared. Tailscale is optional.
 4. In the wizard:
-   - Scheduler / portal defaults should point at Drew’s Tailscale host (`100.85.165.84`).
+   - **Python & Deps** — if system Python is missing/broken, click **Bootstrap portable Python** (isolated under `%LOCALAPPDATA%\GPUPool\`, never global site-packages). GPUPool.exe also bootstraps in the background on first run when needed.
+   - Scheduler defaults: public `/pool-api` when available, else Tailscale host (`100.85.165.84`).
    - Sign in with invite code **`glitch-factor`** + your Discord display name.
-   - Set caps for GPU VRAM, CPU, RAM, and disk.
+   - Set caps for GPU VRAM, CPU, RAM, and disk (**VRAM=0** is fine for CPU-only).
    - **Save + Join** so the worker heartbeats into the pool.
 5. In Discord (**Glitch Factor**): `/pool` and `/workers` — your machine should appear.
 
 Leave anytime from the app (**Leave**) or by quitting the EXE.
+
+### If install / join fails — report to Drew
+
+1. Wizard → **Copy log** or **Submit diagnostics** (Python & Deps or Join step).
+2. **Submit** POSTs a redacted log to portal `/api/diagnostics` (invite session or invite code).
+3. If portal is down, **Copy log** → paste to Drew in Discord.
+4. On disk: `%LOCALAPPDATA%\GPUPool\logs\error-*.log`
+
+Tokens/passwords are redacted before copy/submit.
 
 ---
 
@@ -63,10 +85,23 @@ Leave anytime from the app (**Leave**) or by quitting the EXE.
 
 | What | URL |
 |------|-----|
-| Contributor portal | `http://100.85.165.84:8767/portal` |
-| Scheduler API | `http://100.85.165.84:8766` |
+| **Public portal** (when tunnel on) | See `data/public_endpoints.share.txt` on host / Drew’s Discord DM |
+| **Public pool API** | `https://….trycloudflare.com/pool-api` (proxies scheduler) |
+| Contributor portal (Tailscale) | `http://100.85.165.84:8767/portal` |
+| Scheduler API (Tailscale) | `http://100.85.165.84:8766` |
 
-If Tailscale IP changes, Drew posts the new URLs in Discord.
+### Drew: start public access
+
+```bat
+cd C:\Users\Drew\Projects\gpu-swarm
+start-scheduler-lan.cmd
+start-portal.cmd
+start-public-access.cmd
+```
+
+Share the printed portal URL + invite `glitch-factor`. Files (gitignored): `data/public_endpoints.json`, `data/public_endpoints.share.txt`.
+
+**Fallback if cloudflared fails:** [ngrok](https://ngrok.com/download) `ngrok http 8767`, then write the https URL into `data/public_endpoints.json` (`portal_public_url`) or re-run after fixing cloudflared.
 
 ---
 
@@ -74,7 +109,7 @@ If Tailscale IP changes, Drew posts the new URLs in Discord.
 
 | Path | How |
 |------|-----|
-| **Browser portal** | Tailscale → open portal URL → invite + name → register machine |
+| **Browser portal** | Public URL or Tailscale → invite + name → Utilize / register machine |
 | **From source** | Clone repo → `start-gpu-pool-app.cmd` (needs Python) |
 | **CLI** | `python -m gpu_swarm worker --name YourName --discord-user YourName` |
 
@@ -85,6 +120,7 @@ Contribute / Utilize / code: [`CONNECTING.md`](CONNECTING.md).
 
 ## Rules
 
-- Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use these URLs (do not put `:8766` / `:8767` on the open WAN without an auth gateway).
+- Invite code required on the portal (public or Tailscale). Do not disable auth for public mode.
 - Allowlisted jobs only (`probe`, `pytorch_cuda_probe` in v1).
 - Never share `.env` or Discord bot tokens — invite code in Discord is fine; tokens are not.
+- No Docker for this stack.

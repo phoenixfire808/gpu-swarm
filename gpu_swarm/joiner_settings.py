@@ -141,7 +141,14 @@ def agent_vms_present(path: str | Path | None = None) -> dict[str, Any]:
 
 
 def detect_python_runtime() -> dict[str, Any]:
-    """Describe the interpreter running this process (the joiner itself)."""
+    """Describe the interpreter running this process + isolated pip Python status."""
+    try:
+        from gpu_swarm.portable_python import python_runtime_report
+
+        report = python_runtime_report()
+    except Exception:  # noqa: BLE001
+        report = {}
+
     if is_frozen():
         return {
             "ok": True,
@@ -149,25 +156,51 @@ def detect_python_runtime() -> dict[str, Any]:
             "version": "bundled",
             "version_info": list(sys.version_info[:3]),
             "frozen": True,
-            "message": f"GPU Pool Windows runtime @ {sys.executable}",
-            "fix": "",
+            "message": report.get("message")
+            or f"GPU Pool Windows runtime @ {sys.executable}",
+            "fix": report.get("fix") or "",
+            "conflict_hint": report.get("conflict_hint") or "",
+            "pip_python": report.get("pip_python") or "",
+            "pip_source": report.get("pip_source") or "",
+            "portable_present": bool(report.get("portable_present")),
+            "venv_present": bool(report.get("venv_present")),
+            "report": report,
         }
     major, minor, micro = sys.version_info[:3]
-    ok = (major, minor) >= (3, 10)
-    fix = ""
-    if not ok:
+    app_ok = (major, minor) >= (3, 10)
+    pip_ok = bool(report.get("pip_ok")) if report else app_ok
+    # App can launch on 3.10+; pip work prefers isolated venv when system is broken.
+    ok = app_ok or pip_ok
+    fix = report.get("fix") or ""
+    if not app_ok and not fix:
         fix = (
-            "Install Python 3.10+ from https://www.python.org/downloads/windows/ "
-            "and check 'Add python.exe to PATH', then re-run start-gpu-pool-app.cmd"
+            "System Python is below 3.10 or broken. Click “Bootstrap portable Python” "
+            "to install an isolated CPython 3.12 + venv under %LOCALAPPDATA%\\GPUPool\\ "
+            "(do not fight global site-packages)."
         )
+    conflict = report.get("conflict_hint") or ""
+    if not app_ok and not conflict:
+        conflict = (
+            "Python version conflict: this machine’s interpreter is too old or broken. "
+            "GPU Pool will bootstrap portable Python instead of using global site-packages."
+        )
+    msg = report.get("message") or f"Python {major}.{minor}.{micro} @ {sys.executable}"
+    if conflict and not app_ok:
+        msg = f"NEEDS PORTABLE PYTHON — {msg}"
     return {
         "ok": ok,
         "executable": sys.executable,
         "version": f"{major}.{minor}.{micro}",
         "version_info": [major, minor, micro],
         "frozen": False,
-        "message": f"Python {major}.{minor}.{micro} @ {sys.executable}",
+        "message": msg,
         "fix": fix,
+        "conflict_hint": conflict,
+        "pip_python": report.get("pip_python") or "",
+        "pip_source": report.get("pip_source") or "",
+        "portable_present": bool(report.get("portable_present")),
+        "venv_present": bool(report.get("venv_present")),
+        "report": report,
     }
 
 
@@ -190,15 +223,33 @@ def python_deps_status() -> dict[str, Any]:
             present.append(pip_name)
         except ImportError:
             missing.append(pip_name)
+    try:
+        from gpu_swarm.portable_python import resolve_pip_python, venv_python_exe
+
+        pip_py = resolve_pip_python() or sys.executable
+        in_venv = venv_python_exe().is_file() and str(venv_python_exe()) == pip_py
+    except Exception:  # noqa: BLE001
+        pip_py = sys.executable
+        in_venv = False
+    fix = ""
+    if missing:
+        if in_venv:
+            fix = (
+                f'Click Install in the wizard (uses isolated venv):\n'
+                f'  "{pip_py}" -m pip install -r requirements.txt'
+            )
+        else:
+            fix = (
+                "Click Install in the wizard. Preferred: Bootstrap portable Python first, "
+                "then install into %LOCALAPPDATA%\\GPUPool\\venv (never global site-packages).\n"
+                f'Fallback: "{pip_py}" -m pip install -r requirements.txt'
+            )
     return {
         "ok": not missing,
         "missing": missing,
         "present": present,
         "frozen": False,
-        "fix": (
-            f"Click Install in the wizard, or run:\n"
-            f'  "{sys.executable}" -m pip install -r requirements.txt'
-            if missing
-            else ""
-        ),
+        "pip_python": pip_py,
+        "isolated_venv": in_venv,
+        "fix": fix,
     }

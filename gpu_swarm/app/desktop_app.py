@@ -103,6 +103,7 @@ class WizardFrame(ctk.CTkFrame):
         self.settings = be.load_config()
         self._gpu_info: dict[str, Any] = {}
         self._host_info: dict[str, Any] = {}
+        self._no_gpu = False
         self._join_busy = False
         self._build()
         self._render_step()
@@ -300,16 +301,40 @@ class WizardFrame(ctk.CTkFrame):
 
     def _step_deps(self) -> None:
         self._title(
-            "Python dependencies",
-            "Install/repair from requirements.txt. Skips a full reinstall when everything is already present. "
-            "CUDA PyTorch is optional and only downloads after you click the button.",
+            "Python & dependencies",
+            "Uses an isolated Python under %LOCALAPPDATA%\\GPUPool\\ (portable + venv) so broken "
+            "system Python won’t block installs. CUDA PyTorch is optional.",
         )
+        try:
+            from gpu_swarm.diagnostics import set_wizard_step
+
+            set_wizard_step("Python & Deps")
+        except Exception:  # noqa: BLE001
+            pass
         py = be.check_python()
         ctk.CTkLabel(
             self.body,
             text=py.get("message") or "",
             text_color=OK_GREEN if py.get("ok") else DANGER,
+            wraplength=860,
+            justify="left",
         ).pack(anchor="w")
+        if py.get("conflict_hint"):
+            ctk.CTkLabel(
+                self.body,
+                text=py["conflict_hint"],
+                text_color=WARN,
+                wraplength=860,
+                justify="left",
+            ).pack(anchor="w", pady=(4, 0))
+        if py.get("fix") and not py.get("ok"):
+            ctk.CTkLabel(
+                self.body,
+                text=f"Fix: {py['fix']}",
+                text_color=WARN,
+                wraplength=860,
+                justify="left",
+            ).pack(anchor="w", pady=(4, 0))
 
         status = be.check_python_deps()
         msg = (
@@ -317,6 +342,8 @@ class WizardFrame(ctk.CTkFrame):
             if status.get("ok")
             else f"Missing: {', '.join(status.get('missing') or [])}"
         )
+        if status.get("isolated_venv"):
+            msg += " (isolated venv)"
         self.deps_status_lbl = ctk.CTkLabel(
             self.body,
             text=msg,
@@ -335,8 +362,11 @@ class WizardFrame(ctk.CTkFrame):
         )
         self.torch_lbl.pack(anchor="w", pady=(0, 6))
 
-        self.deps_log = self._log_box(200)
-        self._append_log(self.deps_log, "Ready. Click Install if anything is missing.\n")
+        self.deps_log = self._log_box(180)
+        self._append_log(
+            self.deps_log,
+            "Ready. If Python looks wrong, Bootstrap portable Python first — then Install.\n",
+        )
         if status.get("fix"):
             self._append_log(self.deps_log, f"Fix if install fails:\n{status['fix']}\n")
 
@@ -344,17 +374,80 @@ class WizardFrame(ctk.CTkFrame):
         row.pack(fill="x", pady=6)
         ctk.CTkButton(
             row,
-            text="Install / repair requirements.txt",
-            command=self._install_deps,
+            text="Bootstrap portable Python",
+            command=self._bootstrap_python,
             fg_color=ACCENT,
             text_color="#0A1210",
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             row,
-            text="Install CUDA PyTorch (large download)",
+            text="Install / repair requirements",
+            command=self._install_deps,
+            fg_color="#2A3544",
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Install CUDA PyTorch (large)",
             command=self._install_torch,
             fg_color="#2A3544",
         ).pack(side="left")
+        diag_row = ctk.CTkFrame(self.body, fg_color="transparent")
+        diag_row.pack(fill="x", pady=(4, 0))
+        ctk.CTkButton(
+            diag_row,
+            text="Copy log",
+            width=110,
+            fg_color="#2A3544",
+            command=lambda: self._diag_copy("Python & Deps"),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            diag_row,
+            text="Submit diagnostics",
+            width=150,
+            fg_color="#2A3544",
+            command=lambda: self._diag_submit("Python & Deps"),
+        ).pack(side="left")
+        self.deps_diag_lbl = ctk.CTkLabel(self.body, text="", text_color=MUTED)
+        self.deps_diag_lbl.pack(anchor="w", pady=(2, 0))
+
+    def _bootstrap_python(self) -> None:
+        self.deps_log.delete("1.0", "end")
+        self._append_log(
+            self.deps_log,
+            "Bootstrapping portable Python + venv under %LOCALAPPDATA%\\GPUPool\\…\n"
+            "(skips download if a healthy Python/venv already exists)\n",
+        )
+
+        def work() -> None:
+            result = be.bootstrap_portable_python(dry_run=False, with_requirements=True)
+            self.after(0, lambda: self._bootstrap_done(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _bootstrap_done(self, result: dict[str, Any]) -> None:
+        self._append_log(self.deps_log, result.get("message") or str(result))
+        if result.get("actions"):
+            self._append_log(self.deps_log, f"actions: {', '.join(result['actions'])}\n")
+        if result.get("executable"):
+            self._append_log(self.deps_log, f"python: {result['executable']}\n")
+        if result.get("fix") and not result.get("ok"):
+            self._append_log(self.deps_log, f"\nFIX:\n{result['fix']}\n")
+            self._on_install_failure("Python & Deps", result)
+        py = be.check_python()
+        if hasattr(self, "deps_status_lbl"):
+            status = be.check_python_deps()
+            self.deps_status_lbl.configure(
+                text=(
+                    "All required packages present."
+                    if status.get("ok")
+                    else f"Missing: {', '.join(status.get('missing') or [])}"
+                ),
+                text_color=OK_GREEN if status.get("ok") else DANGER,
+            )
+        self._append_log(
+            self.deps_log,
+            f"\nPython check: {py.get('message')}\n" + ("Bootstrap OK.\n" if result.get("ok") else "Bootstrap FAILED.\n"),
+        )
 
     def _install_deps(self) -> None:
         self.deps_log.delete("1.0", "end")
@@ -382,7 +475,96 @@ class WizardFrame(ctk.CTkFrame):
         if result.get("ok"):
             self._append_log(self.deps_log, "\nDeps OK.\n")
         else:
-            self._append_log(self.deps_log, "\nDeps FAILED — see FIX above.\n")
+            self._append_log(self.deps_log, "\nDeps FAILED — see FIX above. Use Copy log / Submit diagnostics.\n")
+            self._on_install_failure("Python & Deps", result)
+
+    def _diag_copy(self, step: str) -> None:
+        result = be.copy_diagnostics_text(
+            wizard_step=step,
+            scheduler_url=self.settings.scheduler_url,
+            portal_url=self.settings.portal_url,
+            write_file=True,
+        )
+        text = result.get("text") or ""
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        path = result.get("path") or ""
+        msg = f"Copied diagnostic log" + (f" · saved {path}" if path else "")
+        if hasattr(self, "deps_diag_lbl"):
+            self.deps_diag_lbl.configure(text=msg, text_color=OK_GREEN)
+        if hasattr(self, "join_status"):
+            self.join_status.configure(text=msg, text_color=OK_GREEN)
+        if hasattr(self, "deps_log"):
+            self._append_log(self.deps_log, f"\n{msg}\n")
+
+    def _diag_submit(self, step: str) -> None:
+        written = be.write_error_log(
+            wizard_step=step,
+            scheduler_url=self.settings.scheduler_url,
+            portal_url=self.settings.portal_url,
+            reason="submit",
+        )
+
+        def work() -> None:
+            result = be.submit_diagnostics(
+                portal_url=self.settings.portal_url,
+                log_path=written.get("path") or "",
+                text=written.get("text") or "",
+                display_name=self.settings.discord_user or self.settings.worker_name,
+                invite_code=PORTAL_INVITE_CODE,
+            )
+            self.after(0, lambda: self._diag_submit_done(result, written))
+
+        if hasattr(self, "deps_diag_lbl"):
+            self.deps_diag_lbl.configure(text="Submitting diagnostics…", text_color=MUTED)
+        if hasattr(self, "join_status"):
+            self.join_status.configure(text="Submitting diagnostics…", text_color=MUTED)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _diag_submit_done(self, result: dict[str, Any], written: dict[str, Any]) -> None:
+        if result.get("ok"):
+            msg = result.get("message") or "Submitted"
+            color = OK_GREEN
+        else:
+            # Fallback: copy to clipboard so friend can paste to Drew
+            clip = result.get("clipboard") or written.get("text") or ""
+            if clip:
+                self.clipboard_clear()
+                self.clipboard_append(clip)
+            msg = (
+                (result.get("message") or "Submit failed")
+                + " — log copied to clipboard. Paste to Drew in Discord."
+            )
+            if written.get("path"):
+                msg += f" File: {written['path']}"
+            color = WARN
+        if hasattr(self, "deps_diag_lbl"):
+            self.deps_diag_lbl.configure(text=msg, text_color=color)
+        if hasattr(self, "join_status"):
+            self.join_status.configure(text=msg, text_color=color)
+        if hasattr(self, "deps_log"):
+            self._append_log(self.deps_log, f"\n{msg}\n")
+        if hasattr(self, "join_log"):
+            self._append_log(self.join_log, f"\n{msg}\n")
+
+    def _on_install_failure(self, step: str, result: dict[str, Any]) -> None:
+        try:
+            written = be.write_error_log(
+                wizard_step=step,
+                scheduler_url=self.settings.scheduler_url,
+                portal_url=self.settings.portal_url,
+                extra={"message": result.get("message"), "fix": result.get("fix")},
+                include_traceback=str(result.get("message") or ""),
+                reason="install-fail",
+            )
+            if hasattr(self, "deps_log") and written.get("path"):
+                self._append_log(
+                    self.deps_log,
+                    f"\nDiagnostic log saved: {written['path']}\n"
+                    "Use Copy log or Submit diagnostics so Drew can debug.\n",
+                )
+        except Exception:  # noqa: BLE001
+            pass
 
     def _install_torch(self) -> None:
         self._append_log(
@@ -407,8 +589,11 @@ class WizardFrame(ctk.CTkFrame):
         )
 
     def _step_hardware(self) -> None:
-        self._title("Detect hardware", "Live nvidia-smi + host CPU/RAM/disk (no mock data).")
-        self.hw_box = self._log_box(320)
+        self._title(
+            "Detect hardware",
+            "Live nvidia-smi + host CPU/RAM/disk (no mock data). No NVIDIA? Utilize-first is fine.",
+        )
+        self.hw_box = self._log_box(280)
         ctk.CTkButton(self.body, text="Refresh detection", command=self._scan_hw, fg_color="#2A3544").pack(
             anchor="e", pady=6
         )
@@ -426,8 +611,9 @@ class WizardFrame(ctk.CTkFrame):
             "total_vram_mb": total_vram,
             "free_vram_mb": free_vram,
         }
+        self._no_gpu = not bool(gpus)
         lines = [
-            f"NVIDIA: {'OK' if nv.get('ok') else 'MISSING'} — {nv.get('message')}",
+            f"NVIDIA: {'OK' if nv.get('ok') else 'NONE (optional)'} — {nv.get('message')}",
             f"Path: {nv.get('path') or 'n/a'}",
             "",
             f"GPUs: {len(gpus)}",
@@ -439,15 +625,13 @@ class WizardFrame(ctk.CTkFrame):
                 f"  [{g.get('index')}] {g.get('name')} — "
                 f"{g.get('memory_total_mb')} MiB total / {g.get('memory_free_mb')} MiB free"
             )
-        if not nv.get("ok"):
+        if self._no_gpu:
             lines += [
                 "",
-                "FIX: Install NVIDIA Game Ready / Studio drivers so nvidia-smi works,",
-                "then re-open this wizard and click Refresh detection.",
-                "CPU-only contribution still works, but GPU jobs need drivers.",
+                "No NVIDIA? You can still Utilize the pool or contribute CPU.",
+                "Next: Connect → (optional Caps for CPU) → Finish → Utilize.",
+                "Jobs run on Drew’s (or other) online GPU workers. CUDA needs a GPU worker online.",
             ]
-        elif not gpus:
-            lines += ["", "FIX: nvidia-smi is present but returned no GPUs — check Device Manager."]
         lines += [
             "",
             f"Host RAM total/avail: {self._host_info.get('total_ram_mb', 0)} / "
@@ -472,34 +656,64 @@ class WizardFrame(ctk.CTkFrame):
         self.discord_entry.insert(0, self.settings.discord_user or "")
 
     def _step_connect(self) -> None:
-        self._title("Scheduler connection", "Tailscale URL for remote members; localhost for same-machine.")
+        self._title(
+            "Scheduler connection",
+            "Auto-detects public tunnel → Tailscale → localhost. You usually do NOT hand-edit GPU_SWARM_SCHEDULER_URL.",
+        )
         ts = be.get_tailscale_ipv4()
+        pub = be.get_public_access_info()
         ctk.CTkLabel(
             self.body,
-            text=f"Detected Tailscale IPv4: {ts or 'not found'}",
+            text=(
+                f"Tailscale IPv4: {ts or 'not found'}  ·  "
+                f"Public tunnel: {'ON' if pub.get('active') else 'off'}  ·  invite {PORTAL_INVITE_CODE}"
+            ),
             text_color=MUTED,
         ).pack(anchor="w", pady=(0, 8))
-        ctk.CTkLabel(
-            self.body,
-            text=f"Portal invite code: {PORTAL_INVITE_CODE}  ·  portal {DEFAULT_LOCAL_PORTAL_URL}",
-            text_color=MUTED,
-        ).pack(anchor="w", pady=(0, 8))
-        ctk.CTkLabel(self.body, text="Scheduler URL", text_color=MUTED).pack(anchor="w")
+        ctk.CTkLabel(self.body, text="Scheduler URL (auto-filled)", text_color=MUTED).pack(anchor="w")
         self.sched_entry = ctk.CTkEntry(self.body, height=36)
         self.sched_entry.pack(fill="x", pady=(0, 8))
         default = self.settings.scheduler_url or be.get_default_scheduler_url()
-        # Prefer reachable local if saved Tailscale scheduler fails later — keep saved for now
         self.sched_entry.insert(0, default)
         row = ctk.CTkFrame(self.body, fg_color="transparent")
         row.pack(fill="x")
-        ctk.CTkButton(row, text="Use Tailscale default", fg_color="#2A3544", command=self._use_ts).pack(
-            side="left", padx=(0, 8)
-        )
-        ctk.CTkButton(row, text="Use localhost", fg_color="#2A3544", command=self._use_local).pack(side="left")
-        ctk.CTkButton(row, text="Test /status", fg_color=ACCENT, text_color="#0A1210", command=self._test_sched).pack(
-            side="right"
-        )
+        ctk.CTkButton(
+            row, text="Auto-detect best", fg_color=ACCENT, text_color="#0A1210", command=self._auto_detect_sched
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(row, text="Tailscale", fg_color="#2A3544", command=self._use_ts).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(row, text="Localhost", fg_color="#2A3544", command=self._use_local).pack(side="left")
+        ctk.CTkButton(row, text="Test /status", fg_color="#2A3544", command=self._test_sched).pack(side="right")
         self.connect_log = self._log_box(180)
+        # Kick auto-detect on first show so friends don't hand-edit env
+        self.after(100, self._auto_detect_sched)
+
+    def _auto_detect_sched(self) -> None:
+        if not hasattr(self, "connect_log") or self.connect_log is None:
+            return
+        self.connect_log.delete("1.0", "end")
+        self._append_log(self.connect_log, "Auto-detecting scheduler (public → Tailscale → localhost)…\n")
+
+        def work() -> None:
+            result = be.auto_detect_scheduler_url(probe=True, timeout=2.5)
+            self.after(0, lambda: self._auto_detect_done(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _auto_detect_done(self, result: dict[str, Any]) -> None:
+        url = str(result.get("url") or "")
+        if url and hasattr(self, "sched_entry") and self.sched_entry is not None:
+            self.sched_entry.delete(0, "end")
+            self.sched_entry.insert(0, url)
+            self.settings.scheduler_url = url
+            be.save_config(self.settings)
+        ok = bool(result.get("ok"))
+        self._append_log(
+            self.connect_log,
+            f"{'OK' if ok else 'WARN'} — {result.get('message') or url}\n"
+            f"source={result.get('source')}  (env hand-edit not required)\n",
+        )
+        if result.get("hint") and not ok:
+            self._append_log(self.connect_log, f"\n{result['hint']}\n")
 
     def _use_ts(self) -> None:
         self.sched_entry.delete(0, "end")
@@ -617,11 +831,23 @@ class WizardFrame(ctk.CTkFrame):
         on_change()
 
     def _step_join(self) -> None:
+        no_gpu = bool(getattr(self, "_no_gpu", False)) or not be.get_gpus()
         self._title(
-            "Save & Join pool",
-            "Persists caps/identity, starts the worker, and shows success or the exact fix. "
-            "You can Leave from the control panel afterward.",
+            "Utilize-first (no GPU)" if no_gpu else "Save & Join pool",
+            (
+                "No NVIDIA detected — finish setup and open Utilize. Jobs run on pool GPUs. "
+                "Optional: also Contribute CPU (gpu_available=false)."
+                if no_gpu
+                else "Persists caps/identity, starts the worker, and shows success or the exact fix. "
+                "On failure: Copy log / Submit diagnostics so Drew can debug."
+            ),
         )
+        try:
+            from gpu_swarm.diagnostics import set_wizard_step
+
+            set_wizard_step("Join")
+        except Exception:  # noqa: BLE001
+            pass
         summary = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=8)
         summary.pack(fill="x", pady=6)
         lines = [
@@ -633,6 +859,7 @@ class WizardFrame(ctk.CTkFrame):
                 f"Caps: VRAM {self.settings.max_vram_mb} MiB · CPU {self.settings.max_cpu_percent}% · "
                 f"RAM {self.settings.max_ram_mb} MiB · Disk {self.settings.max_disk_gb} GiB"
             ),
+            "Mode: Utilize-first (no NVIDIA on this machine)" if no_gpu else "Mode: Contribute GPU/CPU",
         ]
         ctk.CTkLabel(
             summary,
@@ -644,26 +871,85 @@ class WizardFrame(ctk.CTkFrame):
 
         row = ctk.CTkFrame(self.body, fg_color="transparent")
         row.pack(fill="x", pady=8)
-        self.join_now_btn = ctk.CTkButton(
-            row,
-            text="Save + Join pool",
-            height=40,
-            fg_color=ACCENT,
-            text_color="#0A1210",
-            font=ctk.CTkFont(size=15, weight="bold"),
-            command=self._join_now,
-        )
-        self.join_now_btn.pack(side="left", padx=(0, 8))
+        if no_gpu:
+            self.join_now_btn = ctk.CTkButton(
+                row,
+                text="Done → Utilize the pool",
+                height=40,
+                fg_color=ACCENT,
+                text_color="#0A1210",
+                font=ctk.CTkFont(size=15, weight="bold"),
+                command=self._finish_utilize_first,
+            )
+            self.join_now_btn.pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                row,
+                text="Also contribute CPU",
+                height=40,
+                fg_color="#2A3544",
+                command=self._join_now,
+            ).pack(side="left", padx=(0, 8))
+        else:
+            self.join_now_btn = ctk.CTkButton(
+                row,
+                text="Save + Join pool",
+                height=40,
+                fg_color=ACCENT,
+                text_color="#0A1210",
+                font=ctk.CTkFont(size=15, weight="bold"),
+                command=self._join_now,
+            )
+            self.join_now_btn.pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             row,
             text="Open portal",
             height=40,
             fg_color="#2A3544",
             command=lambda: be.open_portal_url(self.settings.portal_url),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Copy log",
+            height=40,
+            fg_color="#2A3544",
+            command=lambda: self._diag_copy("Join"),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Submit diagnostics",
+            height=40,
+            fg_color="#2A3544",
+            command=lambda: self._diag_submit("Join"),
         ).pack(side="left")
         self.join_status = ctk.CTkLabel(self.body, text="", text_color=MUTED)
         self.join_status.pack(anchor="w", pady=(4, 0))
         self.join_log = self._log_box(220)
+        if no_gpu:
+            self.join_status.configure(
+                text="Success path: Finish → Utilize → Run Probe (uses Drew’s GPUs).",
+                text_color=OK_GREEN,
+            )
+
+    def _finish_utilize_first(self) -> None:
+        """No-GPU laptop path: save settings and open main panel on Utilize (no worker required)."""
+        self._persist_partial()
+        self.settings.wizard_completed = True
+        be.save_config(self.settings)
+        # Stash preferred mode for MainFrame
+        try:
+            from gpu_swarm.paths import ROOT as _ROOT
+
+            hint = _ROOT / "data" / "prefer_mode.txt"
+            hint.parent.mkdir(parents=True, exist_ok=True)
+            hint.write_text("utilize\n", encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
+        if hasattr(self, "join_status"):
+            self.join_status.configure(
+                text="Saved — opening Utilize. No GPU needed on your laptop.",
+                text_color=OK_GREEN,
+            )
+        self.on_done()
 
     def _join_now(self) -> None:
         if self._join_busy:
@@ -700,6 +986,14 @@ class WizardFrame(ctk.CTkFrame):
             self._append_log(self.join_log, f"\n--- log ---\n{result['log_tail']}\n")
         if result.get("fix"):
             self._append_log(self.join_log, f"\nFIX:\n{result['fix']}\n")
+        diag = result.get("diagnostics") or {}
+        if not ok:
+            path = diag.get("path") or ""
+            self._append_log(
+                self.join_log,
+                "\nJoin failed — use Copy log or Submit diagnostics so Drew can debug.\n"
+                + (f"Diagnostic file: {path}\n" if path else ""),
+            )
         runtime = result.get("runtime") or {}
         if runtime:
             self._append_log(
@@ -797,11 +1091,21 @@ class MainFrame(ctk.CTkFrame):
         self.settings = be.load_config()
         self._mode = "home"
         self._last_job_id = ""
-        # Prefer a live portal URL (Tailscale :8767 when available)
+        # Prefer a live portal URL (public / Tailscale :8767 when available)
         resolved = be.resolve_portal_url()
         if resolved.get("ok") and resolved.get("url"):
             self.settings.portal_url = resolved["url"]
             be.save_config(self.settings)
+        # Laptop / no-GPU wizard finish → open Utilize
+        try:
+            from gpu_swarm.paths import ROOT as _ROOT
+
+            prefer = (_ROOT / "data" / "prefer_mode.txt").read_text(encoding="utf-8").strip()
+            if prefer in ("utilize", "contribute", "connect", "home"):
+                self._mode = prefer
+        except Exception:  # noqa: BLE001
+            if not be.get_gpus():
+                self._mode = "utilize"
         self._build()
         self._refresh_gpus()
         self._refresh_host()
@@ -897,7 +1201,7 @@ class MainFrame(ctk.CTkFrame):
         self._build_contribute(self._contribute)
         self._build_utilize(self._utilize)
         self._build_connect(self._connect)
-        self._set_mode("home")
+        self._set_mode(self._mode or "home")
 
     def _set_mode(self, mode: str) -> None:
         self._mode = mode
@@ -1225,12 +1529,47 @@ class MainFrame(ctk.CTkFrame):
         friends_box.insert("1.0", be.get_friends_connect_text())
         friends_box.configure(state="disabled")
 
+        pub = be.get_public_access_info()
+        if pub.get("active"):
+            pub_card = self._card(scroll, "Public access — no Tailscale needed")
+            ctk.CTkLabel(
+                pub_card,
+                text=(
+                    f"{pub.get('message')}\n"
+                    f"Portal:  {pub.get('portal_path')}\n"
+                    f"Pool API: {pub.get('pool_api_public_url')}\n"
+                    f"Invite:  {PORTAL_INVITE_CODE}"
+                ),
+                text_color=ACCENT,
+                wraplength=900,
+                justify="left",
+            ).pack(anchor="w")
+            prow_pub = ctk.CTkFrame(pub_card, fg_color="transparent")
+            prow_pub.pack(fill="x", pady=(8, 0))
+            ctk.CTkButton(
+                prow_pub,
+                text="Open public portal",
+                width=160,
+                fg_color=ACCENT,
+                text_color="#0A1210",
+                command=lambda u=pub.get("portal_path"): be.open_portal_url(u),
+            ).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                prow_pub,
+                text="Copy public portal",
+                width=150,
+                fg_color="#2A3544",
+                command=lambda u=pub.get("portal_path") or "": self._copy(
+                    u, "Copied public portal URL (no Tailscale)."
+                ),
+            ).pack(side="left")
+
         inner = self._card(scroll, "Connect — plug into the pool from code / tools")
         ctk.CTkLabel(
             inner,
             text=(
                 f"{be.PRIVATE_NETWORK_BLURB} "
-                "Copy the scheduler URL into your tools, open the Tailscale portal, or paste snippets. "
+                "Copy the scheduler / pool-api URL into your tools, open the portal, or paste snippets. "
                 "Env var: GPU_SWARM_SCHEDULER_URL"
             ),
             text_color=MUTED,
@@ -1275,7 +1614,12 @@ class MainFrame(ctk.CTkFrame):
         ctk.CTkLabel(row, text="Scheduler URL  (GPU_SWARM_SCHEDULER_URL)", text_color=MUTED).pack(side="left")
         self.connect_sched = ctk.CTkEntry(row, height=36)
         self.connect_sched.pack(side="left", fill="x", expand=True, padx=10)
-        self.connect_sched.insert(0, DEFAULT_SCHEDULER_URL)
+        default_sched = (
+            pub.get("pool_api_public_url")
+            if pub.get("active") and pub.get("pool_api_public_url")
+            else DEFAULT_SCHEDULER_URL
+        )
+        self.connect_sched.insert(0, default_sched)
         ctk.CTkButton(row, text="Copy", width=80, fg_color=ACCENT, text_color="#0A1210", command=self._copy_sched_url).pack(
             side="left", padx=(0, 4)
         )
@@ -1286,14 +1630,27 @@ class MainFrame(ctk.CTkFrame):
         ctk.CTkButton(
             row, text="Tailscale", width=90, fg_color="#2A3544",
             command=lambda: self._set_entry(self.connect_sched, DEFAULT_SCHEDULER_URL),
-        ).pack(side="left")
+        ).pack(side="left", padx=(0, 4))
+        if pub.get("active") and pub.get("pool_api_public_url"):
+            ctk.CTkButton(
+                row,
+                text="Public API",
+                width=100,
+                fg_color="#2A3544",
+                command=lambda u=pub.get("pool_api_public_url"): self._set_entry(self.connect_sched, u or ""),
+            ).pack(side="left")
 
         prow = ctk.CTkFrame(inner, fg_color="transparent")
         prow.pack(fill="x", pady=(4, 8))
         ctk.CTkLabel(prow, text=f"Portal URL  (invite: {PORTAL_INVITE_CODE})", text_color=MUTED).pack(side="left")
         self.connect_portal = ctk.CTkEntry(prow, height=36)
         self.connect_portal.pack(side="left", fill="x", expand=True, padx=10)
-        self.connect_portal.insert(0, DEFAULT_PORTAL_URL)
+        default_portal = (
+            pub.get("portal_path")
+            if pub.get("active") and pub.get("portal_path")
+            else DEFAULT_PORTAL_URL
+        )
+        self.connect_portal.insert(0, default_portal)
         ctk.CTkButton(
             prow, text="Open", width=80, fg_color=ACCENT, text_color="#0A1210", command=self._open_ts_portal
         ).pack(side="left", padx=(0, 6))
@@ -1589,7 +1946,10 @@ class MainFrame(ctk.CTkFrame):
         ok = bool(result.get("ok"))
         msg = result.get("message") or ("Joined" if ok else "Failed")
         if result.get("fix") and not ok:
-            msg = f"{msg} — see status / log"
+            msg = f"{msg} — Copy log / Submit diagnostics"
+        diag = result.get("diagnostics") or {}
+        if not ok and diag.get("path"):
+            msg = f"{msg} · log {diag['path']}"
         self.action_lbl.configure(text=msg, text_color=OK_GREEN if ok else DANGER)
         self._poll_status()
 

@@ -84,6 +84,12 @@ __all__ = [
     "get_utilize_helper_text",
     "get_connect_from_code_text",
     "get_friends_connect_text",
+    "get_public_access_info",
+    "auto_detect_scheduler_url",
+    "validate_scheduler_url",
+    "load_public_endpoints",
+    "connect_urls_for_ui",
+    "get_public_access_info",
     "scheduler_reachability_hint",
     "open_repo_doc",
     "discord_slash_for_job",
@@ -92,6 +98,15 @@ __all__ = [
     "LOCAL_OFFLOAD_DOC",
     "PRIVATE_NETWORK_BLURB",
     "FRIENDS_CONNECT_STEPS",
+    # Portable Python + diagnostics (friend installs)
+    "ensure_portable_python",
+    "python_runtime_report",
+    "bootstrap_portable_python",
+    "collect_diagnostics",
+    "write_error_log",
+    "submit_diagnostics",
+    "copy_diagnostics_text",
+    "zip_error_log",
 ]
 
 PID_FILE = ROOT / "data" / "joiner_worker.pid"
@@ -99,18 +114,82 @@ LOG_FILE = ROOT / "data" / "joiner_worker.log"
 JOINER_WORKER_ID_FILE = ROOT / "data" / "joiner_worker_id.txt"
 ENV_FILE = ROOT / ".env"
 
-# Member-facing copy: private by design — never sound like the pool is "broken" / WAN-public.
+# Member-facing copy — public tunnel preferred when live; Tailscale optional.
 PRIVATE_NETWORK_BLURB = (
-    "Private Tailscale/LAN pool — not exposed to the open internet. "
-    "Friends join via Tailscale, then use the scheduler/portal URLs."
+    "When Drew runs start-public-access.cmd, friends use the public HTTPS portal — "
+    "no Tailscale needed (invite code still required). Tailscale remains an optional private path."
 )
 FRIENDS_CONNECT_STEPS = (
-    "1) Install Tailscale — https://tailscale.com/download",
-    "2) Ask Drew for an invite to the Glitch Factor tailnet (login + join)",
-    f"3) Open portal {DEFAULT_PORTAL_URL} or run the GPU Pool EXE / desktop app",
+    "1) Preferred: open the public portal URL Drew DMs (no Tailscale)",
+    "2) Or install Tailscale — https://tailscale.com/download — and join the Glitch Factor tailnet",
+    f"3) Open portal (public link or {DEFAULT_PORTAL_URL}) or run the GPU Pool EXE",
     f"4) Sign in with invite code {PORTAL_INVITE_CODE} + your display name",
-    "5) Contribute (join as worker) or Utilize (run allowlisted jobs)",
+    "5) Contribute (GPU or CPU-only / VRAM=0) or Utilize (allowlisted jobs)",
 )
+
+
+def load_public_endpoints() -> dict[str, Any] | None:
+    """Prefer normalized endpoints view; fall back to raw tunnel file."""
+    try:
+        from gpu_swarm.endpoints import load_public_endpoints as _norm
+
+        return _norm()
+    except Exception:  # noqa: BLE001
+        try:
+            from gpu_swarm.public_endpoints import load_public_endpoints as _raw
+
+            return _raw()
+        except Exception:  # noqa: BLE001
+            return None
+
+
+def validate_scheduler_url(url: str) -> dict[str, Any]:
+    from gpu_swarm.endpoints import validate_scheduler_url as _v
+
+    return _v(url)
+
+
+def auto_detect_scheduler_url(
+    explicit: str | None = None,
+    *,
+    timeout: float = 2.5,
+    probe: bool = True,
+) -> dict[str, Any]:
+    """Installer first-run: public_endpoints → Tailscale → localhost."""
+    from gpu_swarm.endpoints import auto_detect_scheduler_url as _auto
+
+    saved = load_joiner_settings().scheduler_url
+    return _auto(explicit, saved=saved, timeout=timeout, probe=probe)
+
+
+def connect_urls_for_ui() -> dict[str, Any]:
+    from gpu_swarm.endpoints import connect_urls_for_ui as _urls
+
+    return _urls()
+
+
+def get_public_access_info() -> dict[str, Any]:
+    """UI-safe public tunnel endpoints (from data/public_endpoints.json)."""
+    pub = load_public_endpoints()
+    if not pub:
+        return {
+            "active": False,
+            "no_tailscale_needed": False,
+            "portal_path": "",
+            "pool_api_public_url": "",
+            "portal_public_url": "",
+            "message": "Public tunnel off — Drew: run start-public-access.cmd",
+        }
+    return {
+        "active": True,
+        "no_tailscale_needed": True,
+        "portal_path": pub.get("portal_path") or "",
+        "pool_api_public_url": pub.get("pool_api_public_url") or "",
+        "portal_public_url": pub.get("portal_public_url") or "",
+        "invite_code": PORTAL_INVITE_CODE,
+        "note": pub.get("note") or PRIVATE_NETWORK_BLURB,
+        "message": f"Public access ON — no Tailscale needed · {pub.get('portal_path')}",
+    }
 
 
 def scheduler_reachability_hint(
@@ -120,26 +199,35 @@ def scheduler_reachability_hint(
     error: str = "",
     tailscale_ipv4: str | None = None,
 ) -> str:
-    """Actionable status text when testing the Tailscale/LAN scheduler."""
+    """Actionable status text when testing the scheduler (public /pool-api, Tailscale, or LAN)."""
+    pub = get_public_access_info()
     if ok:
-        return f"Reachable on private Tailscale/LAN · {url or DEFAULT_SCHEDULER_URL}"
+        if "trycloudflare.com" in (url or "") or "/pool-api" in (url or ""):
+            return f"Reachable via public tunnel (no Tailscale) · {url}"
+        return f"Reachable on Tailscale/LAN · {url or DEFAULT_SCHEDULER_URL}"
     ts = tailscale_ipv4 if tailscale_ipv4 is not None else detect_tailscale_ipv4()
     lines = [
-        "Cannot reach the scheduler yet — usually a Tailscale step, not “pool is down”.",
+        "Cannot reach the scheduler yet.",
         "",
         PRIVATE_NETWORK_BLURB,
         "",
         "Do this:",
-        "1) Install Tailscale and sign in — https://tailscale.com/download",
-        "2) Ask Drew to invite you to the Glitch Factor tailnet",
-        f"3) Members use: {DEFAULT_SCHEDULER_URL}",
-        f"4) Same PC as Drew: {DEFAULT_LOCAL_SCHEDULER_URL}",
-        f"5) Portal: {DEFAULT_PORTAL_URL} · invite: {PORTAL_INVITE_CODE}",
     ]
-    if not ts:
-        lines.append("6) This machine has no Tailscale IPv4 yet — install/login Tailscale first.")
+    if pub.get("active"):
+        lines.append(f"1) Public portal (no Tailscale): {pub.get('portal_path')}")
+        lines.append(f"2) Public pool API: {pub.get('pool_api_public_url')}")
+        lines.append(f"3) Invite: {PORTAL_INVITE_CODE}")
+        lines.append(f"4) Same PC as Drew: {DEFAULT_LOCAL_SCHEDULER_URL}")
     else:
-        lines.append(f"6) This machine Tailscale IPv4: {ts}")
+        lines.append("1) Ask Drew for the public portal link (start-public-access.cmd), or")
+        lines.append("2) Install Tailscale and join the Glitch Factor tailnet")
+        lines.append(f"3) Members Tailscale: {DEFAULT_SCHEDULER_URL}")
+        lines.append(f"4) Same PC as Drew: {DEFAULT_LOCAL_SCHEDULER_URL}")
+        lines.append(f"5) Portal: {DEFAULT_PORTAL_URL} · invite: {PORTAL_INVITE_CODE}")
+    if not ts and not pub.get("active"):
+        lines.append("Tip: no Tailscale on this machine — use Drew’s public portal URL instead.")
+    elif ts:
+        lines.append(f"This machine Tailscale IPv4: {ts}")
     if url:
         lines.append(f"Tried: {url}")
     if error:
@@ -148,17 +236,31 @@ def scheduler_reachability_hint(
 
 
 def get_friends_connect_text() -> str:
-    """Short card text: how friends reach the private pool."""
-    return (
+    """Short card text: how friends reach the pool (public first when live)."""
+    pub = get_public_access_info()
+    steps = list(FRIENDS_CONNECT_STEPS)
+    if pub.get("active"):
+        steps = [
+            f"1) Open public portal (no Tailscale): {pub.get('portal_path')}",
+            f"2) Sign in with invite {PORTAL_INVITE_CODE} + your display name",
+            "3) Utilize (laptop/no GPU OK) or Contribute CPU with VRAM=0",
+            f"4) Optional SDK: GPU_SWARM_SCHEDULER_URL={pub.get('pool_api_public_url')}",
+            "5) Tailscale is optional while this tunnel is running",
+        ]
+    body = (
         "How friends connect\n"
         "\n"
-        + "\n".join(FRIENDS_CONNECT_STEPS)
+        + "\n".join(steps)
         + "\n\n"
-        + PRIVATE_NETWORK_BLURB
+        + (pub.get("message") if pub.get("active") else PRIVATE_NETWORK_BLURB)
         + "\n"
-        f"Scheduler: {DEFAULT_SCHEDULER_URL}\n"
-        f"Portal:    {DEFAULT_PORTAL_URL}\n"
     )
+    if pub.get("active"):
+        body += f"Public portal: {pub.get('portal_path')}\n"
+        body += f"Pool API:      {pub.get('pool_api_public_url')}\n"
+    body += f"Tailscale sched: {DEFAULT_SCHEDULER_URL}\n"
+    body += f"Tailscale portal: {DEFAULT_PORTAL_URL}\n"
+    return body
 
 # One-stop wizard helper scripts (Windows). Prefer these paths from the UI/CLI.
 SCRIPTS_DIR = BUNDLE_ROOT / "scripts"
@@ -249,6 +351,10 @@ def save_config(config: JoinerSettings | dict[str, Any] | None = None, **kwargs:
 
 
 def get_default_scheduler_url() -> str:
+    """Best-effort default without probing (public /pool-api → Tailscale → local)."""
+    pub = get_public_access_info()
+    if pub.get("active") and pub.get("pool_api_public_url"):
+        return str(pub["pool_api_public_url"]).rstrip("/")
     return default_scheduler_url_for_host() or DEFAULT_SCHEDULER_URL
 
 
@@ -272,7 +378,22 @@ def resolve_portal_url(timeout: float = 2.5) -> dict[str, Any]:
     import httpx
 
     attempts: list[dict[str, Any]] = []
-    for candidate in portal_url_candidates():
+    ordered: list[str] = []
+    pub = get_public_access_info()
+    if pub.get("active") and pub.get("portal_path"):
+        ordered.append(str(pub["portal_path"]))
+    try:
+        from gpu_swarm.endpoints import portal_url_candidates_extended
+
+        for c in portal_url_candidates_extended():
+            if c["url"] not in ordered:
+                ordered.append(c["url"])
+    except Exception:  # noqa: BLE001
+        pass
+    for legacy in portal_url_candidates():
+        if legacy not in ordered:
+            ordered.append(legacy)
+    for candidate in ordered:
         try:
             with httpx.Client(timeout=timeout, follow_redirects=True) as client:
                 r = client.get(candidate)
@@ -314,13 +435,25 @@ def resolve_portal_url(timeout: float = 2.5) -> dict[str, Any]:
 def get_portal_hints() -> dict[str, Any]:
     """UI-safe portal onboarding hints (invite code only — never pool password)."""
     resolved = resolve_portal_url()
+    pub = get_public_access_info()
+    preferred = ""
+    if pub.get("active") and pub.get("portal_path"):
+        preferred = str(pub["portal_path"])
     return {
         "invite_code": PORTAL_INVITE_CODE,
         "local_url": DEFAULT_LOCAL_PORTAL_URL,
         "tailscale_url": DEFAULT_PORTAL_URL,
-        "url": resolved.get("url") or DEFAULT_LOCAL_PORTAL_URL,
-        "reachable": bool(resolved.get("ok")),
-        "message": resolved.get("message") or "",
+        "public_url": preferred,
+        "pool_api_public_url": pub.get("pool_api_public_url") or "",
+        "no_tailscale_needed": bool(pub.get("active")),
+        "public_access": pub,
+        "url": preferred or resolved.get("url") or DEFAULT_LOCAL_PORTAL_URL,
+        "reachable": bool(resolved.get("ok") or pub.get("active")),
+        "message": (
+            pub.get("message")
+            if pub.get("active")
+            else (resolved.get("message") or "")
+        ),
         "fix": resolved.get("fix") or "",
         "auth_note": (
             f"Browser portal login: invite code `{PORTAL_INVITE_CODE}` "
@@ -440,7 +573,18 @@ def check_nvidia() -> dict[str, Any]:
     return {
         "ok": ok,
         "path": path or "",
-        "message": "nvidia-smi found" if ok else "nvidia-smi not found — install NVIDIA drivers",
+        "required": False,
+        "message": (
+            "nvidia-smi found"
+            if ok
+            else "No NVIDIA — OK. Utilize the pool or contribute CPU (gpu_available=false)."
+        ),
+        "fix": (
+            ""
+            if ok
+            else "Install NVIDIA drivers only if you want to Contribute a GPU. "
+            "Laptops without a GPU should use Utilize-first."
+        ),
     }
 
 
@@ -482,12 +626,145 @@ def get_gpus() -> list[dict[str, Any]]:
 
 
 def check_python() -> dict[str, Any]:
-    """Detect the Python runtime powering this app."""
+    """Detect the Python runtime powering this app (+ portable/venv status)."""
     return detect_python_runtime()
 
 
 def check_python_deps() -> dict[str, Any]:
     return python_deps_status()
+
+
+def python_runtime_report() -> dict[str, Any]:
+    from gpu_swarm.portable_python import python_runtime_report as _report
+
+    return _report()
+
+
+def ensure_portable_python(
+    *,
+    force_download: bool = False,
+    with_venv: bool = True,
+    with_requirements: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Bootstrap isolated CPython + venv under %LOCALAPPDATA%\\GPUPool\\."""
+    from gpu_swarm.portable_python import ensure_portable_python as _ensure
+
+    return _ensure(
+        force_download=force_download,
+        with_venv=with_venv,
+        with_requirements=with_requirements,
+        dry_run=dry_run,
+    )
+
+
+def bootstrap_portable_python(*, dry_run: bool = False, with_requirements: bool = True) -> dict[str, Any]:
+    """Wizard/EXE entry: ensure portable Python + venv (+ optional requirements)."""
+    return ensure_portable_python(
+        force_download=False,
+        with_venv=True,
+        with_requirements=with_requirements and not dry_run,
+        dry_run=dry_run,
+    )
+
+
+def collect_diagnostics(
+    *,
+    wizard_step: str | None = None,
+    scheduler_url: str = "",
+    portal_url: str = "",
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from gpu_swarm.diagnostics import collect_diagnostics as _collect
+
+    return _collect(
+        wizard_step=wizard_step,
+        scheduler_url=scheduler_url,
+        portal_url=portal_url,
+        extra=extra,
+    )
+
+
+def write_error_log(
+    *,
+    wizard_step: str | None = None,
+    scheduler_url: str = "",
+    portal_url: str = "",
+    extra: dict[str, Any] | None = None,
+    include_traceback: str | None = None,
+    reason: str = "error",
+) -> dict[str, Any]:
+    from gpu_swarm.diagnostics import write_error_log as _write
+
+    return _write(
+        wizard_step=wizard_step,
+        scheduler_url=scheduler_url,
+        portal_url=portal_url,
+        extra=extra,
+        include_traceback=include_traceback,
+        reason=reason,
+    )
+
+
+def submit_diagnostics(
+    *,
+    portal_url: str = "",
+    log_path: str = "",
+    text: str = "",
+    display_name: str = "",
+    invite_code: str = "",
+) -> dict[str, Any]:
+    from gpu_swarm.diagnostics import submit_diagnostics as _submit
+    from gpu_swarm.joiner_settings import PORTAL_INVITE_CODE as _INVITE
+
+    settings = load_joiner_settings()
+    return _submit(
+        portal_url=portal_url or settings.portal_url or DEFAULT_PORTAL_URL,
+        log_path=log_path or None,
+        text=text or None,
+        display_name=display_name or settings.discord_user or settings.worker_name,
+        invite_code=invite_code or _INVITE,
+    )
+
+
+def copy_diagnostics_text(
+    *,
+    wizard_step: str | None = None,
+    scheduler_url: str = "",
+    portal_url: str = "",
+    write_file: bool = True,
+) -> dict[str, Any]:
+    """Collect diagnostics; optionally write error-*.log; return text for clipboard."""
+    settings = load_joiner_settings()
+    if write_file:
+        written = write_error_log(
+            wizard_step=wizard_step,
+            scheduler_url=scheduler_url or settings.scheduler_url,
+            portal_url=portal_url or settings.portal_url,
+            reason="manual",
+        )
+        return {
+            "ok": bool(written.get("ok")),
+            "text": written.get("text") or "",
+            "path": written.get("path") or "",
+            "message": written.get("message") or "Diagnostics ready",
+        }
+    from gpu_swarm.diagnostics import collect_diagnostics as _collect
+    from gpu_swarm.diagnostics import format_diagnostics_text
+
+    payload = _collect(
+        wizard_step=wizard_step,
+        scheduler_url=scheduler_url or settings.scheduler_url,
+        portal_url=portal_url or settings.portal_url,
+    )
+    text = format_diagnostics_text(payload)
+    return {"ok": True, "text": text, "path": "", "message": "Diagnostics text ready"}
+
+
+def zip_error_log(log_path: str) -> dict[str, Any]:
+    from gpu_swarm.diagnostics import zip_error_log as _zip
+
+    return _zip(log_path)
 
 
 def check_torch_cuda() -> dict[str, Any]:
@@ -522,14 +799,16 @@ def check_torch_cuda() -> dict[str, Any]:
 def install_requirements(*, force: bool = False) -> dict[str, Any]:
     """
     Install from requirements.txt only when deps are missing (avoid reinstall loops).
-    Pass force=True to repair/upgrade from requirements.txt.
+    Prefers isolated venv under %LOCALAPPDATA%\\GPUPool\\venv (never global site-packages
+    when portable bootstrap is available). Pass force=True to repair/upgrade.
     """
     if is_frozen():
         return {
             "ok": True,
             "message": (
                 "GPUPool.exe already bundles the desktop + worker runtime. "
-                "Optional CUDA torch is a separate wizard step (large download)."
+                "Optional CUDA torch uses portable Python under %LOCALAPPDATA%\\GPUPool\\ "
+                "(Bootstrap portable Python, then Install CUDA PyTorch)."
             ),
             "skipped": True,
             "frozen": True,
@@ -543,17 +822,29 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
             "skipped": True,
             "missing": [],
         }
-    req = BUNDLE_ROOT / "requirements.txt"
+    req = BUNDLE_ROOT / "requirements-joiner.txt"
+    if not req.is_file():
+        req = BUNDLE_ROOT / "requirements.txt"
+    if not req.is_file():
+        req = ROOT / "requirements-joiner.txt"
     if not req.is_file():
         req = ROOT / "requirements.txt"
     if not req.is_file():
         return {
             "ok": False,
-            "message": f"Missing {req}",
-            "fix": "Restore requirements.txt in the repo root.",
+            "message": f"Missing requirements-joiner.txt / requirements.txt",
+            "fix": "Restore requirements-joiner.txt in the repo root.",
         }
     missing = status.get("missing") or []
-    cmd = [sys.executable, "-m", "pip", "install", "--user", "-r", str(req)]
+    from gpu_swarm.portable_python import resolve_pip_python, venv_python_exe
+
+    pip_py = resolve_pip_python() or sys.executable
+    use_venv = venv_python_exe().is_file() and Path(pip_py).resolve() == venv_python_exe().resolve()
+    # Isolated venv: no --user. Otherwise --user to avoid admin/global fights.
+    cmd = [pip_py, "-m", "pip", "install"]
+    if not use_venv:
+        cmd.append("--user")
+    cmd.extend(["-r", str(req)])
     try:
         proc = subprocess.run(
             cmd,
@@ -567,7 +858,10 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
         return {
             "ok": False,
             "message": str(exc),
-            "fix": f'Run manually: "{sys.executable}" -m pip install --user -r requirements.txt',
+            "fix": (
+                "Bootstrap portable Python, then retry Install. "
+                f'Manual: "{pip_py}" -m pip install -r requirements.txt'
+            ),
         }
     ok = proc.returncode == 0
     tail = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else ""))[-1200:]
@@ -578,6 +872,8 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
             "message": tail or "Installed requirements successfully.",
             "code": proc.returncode,
             "missing_before": missing,
+            "pip_python": pip_py,
+            "isolated_venv": use_venv,
         }
     still = after.get("missing") or missing
     return {
@@ -585,109 +881,67 @@ def install_requirements(*, force: bool = False) -> dict[str, Any]:
         "message": tail or "pip failed",
         "code": proc.returncode,
         "missing": still,
+        "pip_python": pip_py,
         "fix": (
             f"Still missing: {', '.join(still)}\n"
-            f'Fix: "{sys.executable}" -m pip install --user -r "{req}"'
+            "If system Python is broken, Bootstrap portable Python first.\n"
+            + (
+                f'Fix: "{pip_py}" -m pip install -r "{req}"'
+                if use_venv
+                else f'Fix: "{pip_py}" -m pip install --user -r "{req}"'
+            )
         ),
     }
 
 
 def _resolve_system_python() -> str | None:
-    """Find a non-frozen Python 3.10+ for optional pip installs (e.g. torch)."""
-    candidates: list[str] = []
-    for name in ("py", "python", "python3"):
-        found = shutil.which(name)
-        if found:
-            candidates.append(found)
-    local = Path(os.environ.get("LOCALAPPDATA", ""))
-    for ver in ("Python313", "Python312", "Python311", "Python310"):
-        candidates.append(str(local / "Programs" / "Python" / ver / "python.exe"))
-        candidates.append(f"C:\\{ver}\\python.exe")
-    for exe in candidates:
-        if not exe or not Path(exe).exists():
-            continue
-        # Skip ourselves when frozen.
-        if is_frozen() and Path(exe).resolve() == Path(sys.executable).resolve():
-            continue
-        try:
-            if Path(exe).name.lower() == "py.exe" or exe.lower().endswith("\\py.exe"):
-                proc = subprocess.run(
-                    [exe, "-3", "-c", "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 10) else 1)"],
-                    capture_output=True,
-                    timeout=8,
-                    check=False,
-                )
-                if proc.returncode == 0:
-                    # Return the real interpreter behind the launcher.
-                    show = subprocess.run(
-                        [exe, "-3", "-c", "import sys; print(sys.executable)"],
-                        capture_output=True,
-                        text=True,
-                        timeout=8,
-                        check=False,
-                    )
-                    path = (show.stdout or "").strip()
-                    if path and Path(path).exists():
-                        return path
-                continue
-            proc = subprocess.run(
-                [exe, "-c", "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 10) else 1)"],
-                capture_output=True,
-                timeout=8,
-                check=False,
-            )
-            if proc.returncode == 0:
-                return exe
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-    return None
+    """Find a non-frozen Python 3.10+ for optional pip installs (venv > portable > system)."""
+    from gpu_swarm.portable_python import resolve_pip_python
+
+    return resolve_pip_python()
 
 
 def install_torch_cuda(*, index_url: str = "https://download.pytorch.org/whl/cu124") -> dict[str, Any]:
     """
     Optional large download — only call after explicit user consent in the UI.
-    Installs torch/torchvision/torchaudio from the CUDA wheel index.
+    Installs torch/torchvision/torchaudio from the CUDA wheel index into the
+    isolated venv when available (never into the frozen EXE).
     """
-    if is_frozen():
-        # Frozen EXE cannot pip-install into itself; use system Python when available.
-        py = _resolve_system_python()
+    from gpu_swarm.portable_python import resolve_pip_python, venv_python_exe
+
+    py = resolve_pip_python()
+    if is_frozen() and not py:
+        # Auto-bootstrap portable Python so friends don't need a system install.
+        boot = ensure_portable_python(with_venv=True, with_requirements=False, dry_run=False)
+        if boot.get("ok") and not boot.get("dry_run"):
+            py = resolve_pip_python()
         if not py:
             return {
                 "ok": False,
                 "message": "CUDA torch is not bundled in GPUPool.exe (too large).",
                 "fix": (
-                    "Install Python 3.10+ from python.org, then either:\n"
-                    "  pip install torch --index-url https://download.pytorch.org/whl/cu124\n"
-                    "or clone the repo and use start-gpu-pool-app.cmd for full torch install.\n"
+                    "Click “Bootstrap portable Python” first (installs isolated CPython under "
+                    "%LOCALAPPDATA%\\GPUPool\\), then retry Install CUDA PyTorch.\n"
                     "Probe jobs and pool join work without torch; pytorch_cuda_probe needs it."
                 ),
                 "frozen": True,
+                "bootstrap": boot,
             }
-        cmd = [
-            py,
-            "-m",
-            "pip",
-            "install",
-            "--user",
+    if not py:
+        py = sys.executable
+    use_venv = venv_python_exe().is_file() and Path(py).resolve() == venv_python_exe().resolve()
+    cmd = [py, "-m", "pip", "install"]
+    if not use_venv:
+        cmd.append("--user")
+    cmd.extend(
+        [
             "torch",
             "torchvision",
             "torchaudio",
             "--index-url",
             index_url,
         ]
-    else:
-        cmd = [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--user",
-            "torch",
-            "torchvision",
-            "torchaudio",
-            "--index-url",
-            index_url,
-        ]
+    )
     try:
         proc = subprocess.run(
             cmd,
@@ -718,7 +972,8 @@ def install_torch_cuda(*, index_url: str = "https://download.pytorch.org/whl/cu1
         "message": tail or "PyTorch install failed",
         "code": proc.returncode,
         "fix": (
-            f'Retry: "{sys.executable}" -m pip install --user torch torchvision torchaudio '
+            f'Retry: "{py}" -m pip install'
+            f'{" --user" if not use_venv else ""} torch torchvision torchaudio '
             f"--index-url {index_url}"
         ),
         "torch": status,
@@ -801,7 +1056,11 @@ def check_prereqs(
     One-stop prereq probe: python, nvidia-smi, scheduler reachable, disk space.
     Prefer scripts/check_prereqs.ps1; fall back to in-process checks.
     """
-    url = (scheduler_url or load_joiner_settings().scheduler_url or DEFAULT_LOCAL_SCHEDULER_URL).rstrip("/")
+    if not scheduler_url:
+        detected = auto_detect_scheduler_url(probe=True, timeout=2.0)
+        url = (detected.get("url") or DEFAULT_LOCAL_SCHEDULER_URL).rstrip("/")
+    else:
+        url = scheduler_url.rstrip('/')
 
     if prefer_script and SCRIPT_CHECK_PREREQS.is_file():
         raw = _run_powershell(
@@ -813,6 +1072,7 @@ def check_prereqs(
         if isinstance(parsed, dict):
             parsed.setdefault("source", "scripts/check_prereqs.ps1")
             parsed.setdefault("script", script_paths())
+            parsed["nvidia_required"] = False
             return parsed
 
     # In-process fallback (same fields; real probes)
@@ -823,7 +1083,7 @@ def check_prereqs(
     host = detect_host_resources()
     free_gb = float(host.get("free_disk_gb") or 0)
     disk_ok = free_gb >= float(min_disk_gb)
-    overall = bool(py_ok and nvidia.get("ok") and sched.get("ok") and disk_ok)
+    overall = bool(py_ok and sched.get("ok") and disk_ok)  # NVIDIA optional
     gpus_raw = detect_gpus().get("gpus") or []
     gpu_names = [
         (g.get("name", str(g)) if isinstance(g, dict) else str(g)) for g in gpus_raw
@@ -946,19 +1206,34 @@ def fetch_scheduler_status(scheduler_url: str | None = None, timeout: float = 5.
 def test_scheduler(url: str | None = None, timeout: float = 5.0) -> dict[str, Any]:
     """
     Connectivity test against scheduler /status.
-    Tries: explicit url → saved config → Tailscale default → 127.0.0.1:8766.
+    Tries: explicit → env → public_endpoints (/pool-api) → saved → Tailscale → localhost.
     """
-    candidates: list[str] = []
+    from gpu_swarm.endpoints import scheduler_url_candidates
+
     if url:
-        candidates.append(url.rstrip("/"))
+        v = validate_scheduler_url(url)
+        if not v.get("ok"):
+            ts = get_tailscale_ipv4()
+            return {
+                "ok": False,
+                "url": url,
+                "error": v.get("error") or "Incorrect Scheduler URL Environment Variable",
+                "data": None,
+                "attempts": [{"url": url, "ok": False, "error": v.get("error") or ""}],
+                "tailscale_ipv4": ts,
+                "suggested": v.get("suggested") or "",
+                "hint": v.get("hint")
+                or scheduler_reachability_hint(ok=False, url=url, tailscale_ipv4=ts),
+            }
+
     settings = load_joiner_settings()
-    if settings.scheduler_url:
-        candidates.append(settings.scheduler_url.rstrip("/"))
-    candidates.append(get_default_scheduler_url().rstrip("/"))
-    if DEFAULT_SCHEDULER_URL.rstrip("/") not in candidates:
-        candidates.append(DEFAULT_SCHEDULER_URL.rstrip("/"))
-    if DEFAULT_LOCAL_SCHEDULER_URL.rstrip("/") not in candidates:
-        candidates.append(DEFAULT_LOCAL_SCHEDULER_URL.rstrip("/"))
+    candidates = [
+        c["url"]
+        for c in scheduler_url_candidates(url, include_saved=settings.scheduler_url or None)
+    ]
+    pub = get_public_access_info()
+    if pub.get("active") and pub.get("pool_api_public_url"):
+        candidates.insert(0, str(pub["pool_api_public_url"]).rstrip("/"))
 
     seen: set[str] = set()
     attempts: list[dict[str, Any]] = []
@@ -976,6 +1251,12 @@ def test_scheduler(url: str | None = None, timeout: float = 5.0) -> dict[str, An
         )
         if result.get("ok"):
             ts = get_tailscale_ipv4()
+            if candidate != (settings.scheduler_url or "").rstrip("/"):
+                try:
+                    settings.scheduler_url = candidate
+                    save_joiner_settings(settings)
+                except Exception:  # noqa: BLE001
+                    pass
             return {
                 "ok": True,
                 "url": candidate,
@@ -1021,6 +1302,32 @@ def is_worker_running() -> bool:
     return False
 
 
+def _diagnostics_for_join_failure(
+    *,
+    message: str,
+    settings: JoinerSettings,
+    fix: str = "",
+    wizard_step: str = "Join",
+    log_tail: str = "",
+    exc: BaseException | None = None,
+) -> dict[str, Any]:
+    """Write submitable error-*.log when join/install fails."""
+    try:
+        from gpu_swarm.diagnostics import record_failure_and_write
+
+        return record_failure_and_write(
+            message=message,
+            wizard_step=wizard_step,
+            scheduler_url=settings.scheduler_url,
+            portal_url=settings.portal_url,
+            fix=fix,
+            log_tail=log_tail,
+            exc=exc,
+        )
+    except Exception as diag_exc:  # noqa: BLE001
+        return {"ok": False, "message": f"diagnostics unavailable: {diag_exc}"}
+
+
 def start_worker(
     settings: JoinerSettings | None = None,
     *,
@@ -1045,12 +1352,19 @@ def start_worker(
             error=str(sched.get("error") or ""),
             tailscale_ipv4=sched.get("tailscale_ipv4"),
         )
+        diag = _diagnostics_for_join_failure(
+            message="scheduler unreachable",
+            settings=settings,
+            fix=hint,
+            wizard_step="Join",
+        )
         return {
             "ok": False,
             "message": "Cannot reach Tailscale/LAN scheduler yet (install/login Tailscale + join Drew’s tailnet).",
             "pid": None,
             "fix": hint,
             "scheduler": sched,
+            "diagnostics": diag,
         }
 
     env = dict(os.environ)
@@ -1135,11 +1449,23 @@ def start_worker(
         )
     except OSError as exc:
         _worker_proc = None
+        fix = (
+            f"Could not spawn worker. Check Python: {sys.executable}. "
+            "If system Python is broken, Bootstrap portable Python in the wizard."
+        )
+        diag = _diagnostics_for_join_failure(
+            message=str(exc),
+            settings=settings,
+            fix=fix,
+            wizard_step="Join",
+            exc=exc,
+        )
         return {
             "ok": False,
             "message": str(exc),
             "pid": None,
-            "fix": f"Could not spawn worker. Check Python: {sys.executable}",
+            "fix": fix,
+            "diagnostics": diag,
         }
 
     _write_pid_file(_worker_proc.pid)
@@ -1149,13 +1475,22 @@ def start_worker(
         _worker_proc = None
         _clear_pid_file()
         log_tail = _tail_log(40)
+        fix = f"Open {LOG_FILE} for the exact traceback, then fix and Join again."
+        diag = _diagnostics_for_join_failure(
+            message=f"Worker exited immediately (code={code})",
+            settings=settings,
+            fix=fix,
+            wizard_step="Join",
+            log_tail=log_tail,
+        )
         return {
             "ok": False,
             "message": f"Worker exited immediately (code={code}). See {LOG_FILE}",
             "pid": None,
             "log": str(LOG_FILE),
             "log_tail": log_tail,
-            "fix": f"Open {LOG_FILE} for the exact traceback, then fix and Join again.",
+            "fix": fix,
+            "diagnostics": diag,
         }
 
     online = wait_for_worker_online(settings, timeout_sec=wait_online_sec)
@@ -1601,12 +1936,28 @@ def open_repo_doc(path: str | Path) -> dict[str, Any]:
 def get_connect_from_code_text(scheduler_url: str | None = None) -> str:
     """Snippets pointing at CONNECTING.md + examples/coding_agent_pool.py."""
     settings = load_joiner_settings()
-    base = (scheduler_url or settings.scheduler_url or DEFAULT_SCHEDULER_URL).rstrip("/")
     hints = get_portal_hints()
-    portal = hints.get("tailscale_url") or DEFAULT_PORTAL_URL
+    pub = get_public_access_info()
+    if scheduler_url:
+        base = scheduler_url.rstrip("/")
+    elif pub.get("active") and pub.get("pool_api_public_url"):
+        base = str(pub["pool_api_public_url"]).rstrip("/")
+    else:
+        base = (settings.scheduler_url or DEFAULT_SCHEDULER_URL).rstrip("/")
+    portal = (
+        hints.get("public_url")
+        or hints.get("tailscale_url")
+        or DEFAULT_PORTAL_URL
+    )
     doc = CONNECTING_DOC
     example = CODING_AGENT_EXAMPLE
     offload = LOCAL_OFFLOAD_DOC
+    public_line = ""
+    if pub.get("active"):
+        public_line = (
+            f"Portal (public, no Tailscale): {portal}\n"
+            f"Pool API (public /pool-api): {pub.get('pool_api_public_url')}\n"
+        )
     return (
         "# Connect from code — verified paths\n"
         "\n"
@@ -1615,7 +1966,8 @@ def get_connect_from_code_text(scheduler_url: str | None = None) -> str:
         f"Local LLMs: {offload}  (Ollama/LM Studio stay local; pool = allowlisted jobs)\n"
         "\n"
         f"GPU_SWARM_SCHEDULER_URL={base}\n"
-        f"Portal (Tailscale): {portal}\n"
+        f"{public_line}"
+        f"Portal (Tailscale): {DEFAULT_PORTAL_URL}\n"
         f"Invite: {PORTAL_INVITE_CODE}\n"
         "\n"
         "# 1) Python SDK (same HTTP: POST /jobs, GET /status)\n"

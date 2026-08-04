@@ -10,17 +10,27 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
 
 function Find-Python {
+    $gpuHome = Join-Path $env:LOCALAPPDATA 'GPUPool'
+    $venvPy = Join-Path $gpuHome 'venv\Scripts\python.exe'
+    $portablePy = Join-Path $gpuHome 'python\python.exe'
     if ($env:GPU_SWARM_PYTHON -and (Test-Path $env:GPU_SWARM_PYTHON)) {
         $ver = & $env:GPU_SWARM_PYTHON -c 'import sys; print(sys.version.split()[0])' 2>$null
         if ($LASTEXITCODE -eq 0 -and $ver) {
-            return @{ ok = $true; exe = $env:GPU_SWARM_PYTHON; version = "$ver"; path = $env:GPU_SWARM_PYTHON }
+            return @{ ok = $true; exe = $env:GPU_SWARM_PYTHON; version = "$ver"; path = $env:GPU_SWARM_PYTHON; source = 'GPU_SWARM_PYTHON' }
+        }
+    }
+    foreach ($cand in @($venvPy, $portablePy)) {
+        if (-not (Test-Path $cand)) { continue }
+        $ver = & $cand -c 'import sys; print(sys.version.split()[0])' 2>$null
+        if ($LASTEXITCODE -eq 0 -and $ver) {
+            return @{ ok = $true; exe = $cand; version = "$ver"; path = $cand; source = 'GPUPool-isolated' }
         }
     }
     $py = Get-Command py -ErrorAction SilentlyContinue
     if ($py) {
         $ver = & py -3 -c 'import sys; print(sys.version.split()[0])' 2>$null
         if ($LASTEXITCODE -eq 0 -and $ver) {
-            return @{ ok = $true; exe = 'py -3'; version = "$ver"; path = $py.Source }
+            return @{ ok = $true; exe = 'py -3'; version = "$ver"; path = $py.Source; source = 'py-launcher' }
         }
     }
     foreach ($name in @('python','python3')) {
@@ -28,10 +38,10 @@ function Find-Python {
         if (-not $w) { continue }
         $ver = & $w.Source -c 'import sys; print(sys.version.split()[0])' 2>$null
         if ($LASTEXITCODE -eq 0 -and $ver) {
-            return @{ ok = $true; exe = $w.Source; version = "$ver"; path = $w.Source }
+            return @{ ok = $true; exe = $w.Source; version = "$ver"; path = $w.Source; source = 'PATH' }
         }
     }
-    return @{ ok = $false; exe = ''; version = ''; path = ''; message = 'Python 3 not found on PATH' }
+    return @{ ok = $false; exe = ''; version = ''; path = ''; message = 'Python 3.10+ not found — bootstrap portable Python or use GPUPool.exe' }
 }
 
 function Test-NvidiaSmi {
@@ -107,14 +117,29 @@ $python = Find-Python
 $nvidia = Test-NvidiaSmi
 $scheduler = Test-Scheduler $SchedulerUrl
 $disk = Get-DiskInfo
-$overall = [bool]($python.ok -and $nvidia.ok -and $scheduler.ok -and $disk.ok)
-$result = [ordered]@{ ok = $overall; repo_root = $RepoRoot; python = $python; nvidia_smi = $nvidia; scheduler = $scheduler; disk = $disk; checked_at = (Get-Date).ToString('o'); script = 'scripts/check_prereqs.ps1' }
+# NVIDIA optional — laptops may Utilize or contribute CPU-only without nvidia-smi
+$overall = [bool]($python.ok -and $scheduler.ok -and $disk.ok)
+$result = [ordered]@{
+    ok = $overall
+    repo_root = $RepoRoot
+    python = $python
+    nvidia_smi = $nvidia
+    nvidia_required = $false
+    cpu_only_ok = -not [bool]$nvidia.ok
+    scheduler = $scheduler
+    disk = $disk
+    checked_at = (Get-Date).ToString('o')
+    script = 'scripts/check_prereqs.ps1'
+    note = 'No NVIDIA? Utilize the pool or contribute CPU — overall does not require nvidia-smi.'
+}
 
 if ($Text -and -not $Json) {
     function Format-Pass([bool]$b) { if ($b) { 'OK' } else { 'FAIL' } }
     Write-Output ("overall:      {0}" -f (Format-Pass $overall))
     Write-Output ("python:       {0}  {1} ({2})" -f (Format-Pass $python.ok), $python.version, $python.exe)
-    Write-Output ("nvidia-smi:   {0}  {1}" -f (Format-Pass $nvidia.ok), $nvidia.message)
+    function Format-Opt([bool]$b) { if ($b) { 'OK' } else { 'SKIP (optional)' } }
+    Write-Output ("nvidia-smi:   {0}  {1}" -f (Format-Opt $nvidia.ok), $nvidia.message)
+    if (-not $nvidia.ok) { Write-Output "note:         No NVIDIA — Utilize or CPU contribute still OK" }
     Write-Output ("scheduler:    {0}  {1}" -f (Format-Pass $scheduler.ok), $scheduler.message)
     Write-Output ("disk:         {0}  {1}" -f (Format-Pass $disk.ok), $disk.message)
     if (-not $overall) { exit 1 }

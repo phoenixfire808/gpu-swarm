@@ -26,10 +26,20 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1 -Clean
 |----------|--------------|
 | Contribute wizard + Utilize + Connect UI | Discord bot token / `.env` |
 | Worker start path (`GPUPool.exe --worker`) | Full torch / CUDA wheels (too large) |
-| Default Tailscale scheduler/portal URLs | Scheduler / portal server processes |
-| httpx, customtkinter, psutil, etc. | Discord.py |
+| Portable Python bootstrap hooks (`portable_python`, first-run) | Pre-downloaded CPython zip (fetched on demand) |
+| Diagnostics collect/submit (Copy log / Submit) | Scheduler / portal server processes |
+| Default Tailscale scheduler/portal URLs | Discord.py |
+| httpx, customtkinter, psutil, etc. | |
 
-Settings / logs write to `%LOCALAPPDATA%\GPUPool\` (not into the EXE).
+Settings / logs / portable Python / venv write to `%LOCALAPPDATA%\GPUPool\` (not into the EXE):
+
+| Path | Purpose |
+|------|---------|
+| `%LOCALAPPDATA%\GPUPool\python\` | Portable CPython 3.12 (NuGet) when system Python is bad |
+| `%LOCALAPPDATA%\GPUPool\venv\` | Isolated deps (never global site-packages) |
+| `%LOCALAPPDATA%\GPUPool\logs\error-*.log` | Submitable friend diagnostics |
+
+Packaging Worker: rebuild from this source so EXE includes `gpu_swarm.portable_python` + `gpu_swarm.diagnostics` (see `gpu_pool.spec` hiddenimports).
 
 ## Publish GitHub Release
 

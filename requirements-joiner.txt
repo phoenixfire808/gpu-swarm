@@ -1,0 +1,12 @@
+# GPU Pool — joiner / Contribute / Utilize (Windows Python 3.10–3.12)
+# No torch. Prefer: scripts\install_joiner_deps.ps1 (uses %LOCALAPPDATA%\GPUPool\venv)
+# Python 3.13: optional/experimental — some wheels lag; use 3.12 when possible.
+
+httpx>=0.28.1,<0.29
+python-dotenv>=1.0.1,<1.2
+fastapi>=0.115.0,<0.116
+uvicorn>=0.34.0,<0.35
+customtkinter>=5.2.2,<6
+psutil>=5.9.8,<7
+pydantic>=2.10.0,<2.12
+aiosqlite>=0.20.0,<0.22

@@ -1,4 +1,4 @@
-"""Real GPU inventory via nvidia-smi (no mocks)."""
+"""Real GPU inventory via nvidia-smi (no mocks). CPU-only hosts return empty inventory."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ def nvidia_smi_available() -> bool:
 
 
 def query_gpus() -> list[dict[str, Any]]:
-    """Return live GPU inventory from nvidia-smi. Empty list if unavailable."""
+    """Return live GPU inventory from nvidia-smi. Empty list if unavailable (CPU-only OK)."""
     if not nvidia_smi_available():
         return []
     query = (
@@ -31,10 +31,10 @@ def query_gpus() -> list[dict[str, Any]]:
             timeout=30,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(f"nvidia-smi failed: {exc}") from exc
+    except (OSError, subprocess.TimeoutExpired):
+        return []
     if proc.returncode != 0:
-        raise RuntimeError(f"nvidia-smi error: {proc.stderr.strip() or proc.stdout.strip()}")
+        return []
     gpus: list[dict[str, Any]] = []
     for line in proc.stdout.strip().splitlines():
         parts = [p.strip() for p in line.split(",")]
@@ -58,14 +58,20 @@ def query_gpus() -> list[dict[str, Any]]:
 
 
 def inventory_summary() -> dict[str, Any]:
+    """Advertise GPUs when present; otherwise cpu-only with gpu_available=false."""
+    smi = nvidia_smi_available()
     gpus = query_gpus()
+    gpu_count = len(gpus)
     return {
         "gpus": gpus,
-        "gpu_count": len(gpus),
+        "gpu_count": gpu_count,
         "free_vram_mb": sum(g["memory_free_mb"] for g in gpus),
         "total_vram_mb": sum(g["memory_total_mb"] for g in gpus),
         "names": [g["name"] for g in gpus],
-        "nvidia_smi": nvidia_smi_available(),
+        "nvidia_smi": smi,
+        "gpu_available": gpu_count > 0,
+        "has_gpu": gpu_count > 0,
+        "mode": "gpu" if gpu_count > 0 else "cpu-only",
     }
 
 

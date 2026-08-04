@@ -18,6 +18,18 @@ def bundle_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def gpu_pool_home() -> Path:
+    """
+    Always %LOCALAPPDATA%\\GPUPool (or ~/GPUPool fallback).
+
+    Portable Python, isolated venv, and submitable error logs live here so
+    friend installs never fight global site-packages or a broken system Python.
+    """
+    base = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "GPUPool"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
 def app_root() -> Path:
     """
     Writable root for settings, logs, pid files, optional user .env.
@@ -26,14 +38,31 @@ def app_root() -> Path:
     one-file extract dir and never bake secrets into the EXE.
     """
     if is_frozen():
-        base = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "GPUPool"
-        base.mkdir(parents=True, exist_ok=True)
+        base = gpu_pool_home()
         (base / "data").mkdir(parents=True, exist_ok=True)
         return base
     return Path(__file__).resolve().parent.parent
+
+
+def portable_python_dir() -> Path:
+    return gpu_pool_home() / "python"
+
+
+def venv_dir() -> Path:
+    return gpu_pool_home() / "venv"
+
+
+def logs_dir() -> Path:
+    d = gpu_pool_home() / "logs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 BUNDLE_ROOT = bundle_root()
 APP_ROOT = app_root()
 # Back-compat alias used across the package: writable project/data root.
 ROOT = APP_ROOT
+GPU_POOL_HOME = gpu_pool_home()
+PORTABLE_PYTHON_DIR = portable_python_dir()
+VENV_DIR = venv_dir()
+LOGS_DIR = logs_dir()

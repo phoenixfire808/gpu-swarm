@@ -80,7 +80,9 @@ Write-Host "OK: $exe"
 Write-Host ("Size: {0:N1} MB" -f ($size / 1MB))
 Write-Host "Notes:"
 Write-Host "  - No .env / secrets are bundled"
-Write-Host "  - Torch/CUDA not shipped (optional first-run / system Python)"
+Write-Host "  - Torch/CUDA not shipped (optional; uses portable Python under %LOCALAPPDATA%\GPUPool\)"
+Write-Host "  - First-run bootstrap: gpu_pool_entry wires portable Python + venv (background if needed)"
+Write-Host "  - Diagnostics: error logs in %LOCALAPPDATA%\GPUPool\logs\ + portal POST /api/diagnostics"
 Write-Host "  - Contributors still need NVIDIA drivers + Tailscale"
 Write-Host "  - Publish: gh release create v0.1.0 dist/GPUPool.exe --title ... --notes-file ..."
 exit 0

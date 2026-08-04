@@ -87,11 +87,14 @@ class Worker:
         if dedicated_cpu <= 0 and host["cpu_cores"] > 0 and self.cfg.max_cpu_percent > 0:
             dedicated_cpu = round(host["cpu_cores"] * (self.cfg.max_cpu_percent / 100.0), 2)
 
+        gpu_available = bool(inv.get("gpu_available", inv["gpu_count"] > 0))
         return {
             "gpus": inv["gpus"],
             "free_vram_mb": free_vram,
             "total_vram_mb": inv["total_vram_mb"],
-            "has_gpu": inv["gpu_count"] > 0,
+            "has_gpu": gpu_available,
+            "gpu_available": gpu_available,
+            "mode": inv.get("mode") or ("gpu" if gpu_available else "cpu-only"),
             "max_vram_mb": self.cfg.max_vram_mb,
             "cpu_cores": host["cpu_cores"],
             "max_cpu_percent": self.cfg.max_cpu_percent,
@@ -213,8 +216,13 @@ class Worker:
             f"[worker] registered id={self.worker_id} name={self.cfg.worker_name}",
             flush=True,
         )
+        mode = caps.get("mode") or ("gpu" if caps.get("has_gpu") else "cpu-only")
         print(
-            f"[worker] GPUs ({len(names)}): {', '.join(names) or 'none detected'}",
+            f"[worker] mode={mode} gpu_available={caps.get('gpu_available', caps.get('has_gpu'))}",
+            flush=True,
+        )
+        print(
+            f"[worker] GPUs ({len(names)}): {', '.join(names) or 'none (CPU-only OK)'}",
             flush=True,
         )
         print(

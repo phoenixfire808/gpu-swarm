@@ -6,8 +6,8 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from gpu_swarm import ALLOWED_JOB_TYPES
@@ -20,6 +20,7 @@ from gpu_swarm.joiner_settings import (
     PORTAL_INVITE_CODE,
 )
 from gpu_swarm.portal_store import PortalStore
+from gpu_swarm.public_endpoints import load_public_endpoints
 
 store: PortalStore | None = None
 cfg: PortalConfig = portal_config()
@@ -85,16 +86,20 @@ class MachineBody(BaseModel):
 class JobSubmitBody(BaseModel):
     job_type: str = Field(min_length=1, max_length=64)
     payload: dict[str, Any] = Field(default_factory=dict)
-    min_vram_mb: int = 0
-    require_gpu: bool | None = None
-
-
-class JobSubmitBody(BaseModel):
-    job_type: str = Field(min_length=1, max_length=64)
-    payload: dict[str, Any] = Field(default_factory=dict)
     require_gpu: bool | None = None
     min_vram_mb: int = 0
     matrix_size: int | None = Field(default=None, ge=16, le=4096)
+
+
+class DiagnosticsBody(BaseModel):
+    display_name: str = Field(default="", max_length=64)
+    invite_code: str = Field(default="", max_length=64)
+    pool_password: str = Field(default="", max_length=128)
+    hostname: str = Field(default="", max_length=128)
+    wizard_step: str = Field(default="", max_length=120)
+    log_text: str = Field(default="", max_length=250_000)
+    log_path: str = Field(default="", max_length=512)
+    client_time: float | None = None
 
 
 def _auth_ok(password: str, invite: str) -> tuple[bool, str]:
@@ -165,13 +170,45 @@ async def root() -> RedirectResponse:
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
+    pub = load_public_endpoints()
     return {
         "status": "ok",
         "service": "portal",
         "scheduler_url": cfg.scheduler_url,
         "auth": "pool_password_or_invite",
         "oauth": "later",
+        "public_access": bool(pub),
+        "portal_public_url": (pub or {}).get("portal_public_url") or "",
     }
+
+
+@app.api_route("/pool-api", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@app.api_route("/pool-api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def pool_api_proxy(request: Request, path: str = "") -> Response:
+    """Proxy scheduler under one public hostname. Allowlisted jobs only on scheduler."""
+    suffix = path.lstrip("/")
+    target = f"{cfg.scheduler_url.rstrip('/')}/{suffix}" if suffix else cfg.scheduler_url.rstrip("/")
+    if request.url.query:
+        target = f"{target}?{request.url.query}"
+    body = await request.body()
+    headers = {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ("host", "content-length", "transfer-encoding", "connection")
+    }
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.request(request.method, target, content=body, headers=headers)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"scheduler unreachable via /pool-api: {exc}") from exc
+    excluded = {"content-encoding", "transfer-encoding", "connection"}
+    out_headers = {k: v for k, v in r.headers.items() if k.lower() not in excluded}
+    return Response(
+        content=r.content,
+        status_code=r.status_code,
+        headers=out_headers,
+        media_type=r.headers.get("content-type"),
+    )
 
 
 @app.get("/portal", response_class=HTMLResponse)
@@ -181,16 +218,23 @@ async def portal_page() -> HTMLResponse:
 
 @app.get("/api/config")
 async def api_config(request: Request) -> dict[str, Any]:
+    from gpu_swarm.endpoints import connect_urls_for_ui, load_public_endpoints
+
     portal_base = _public_base(request)
     portal_path = f"{portal_base}/portal"
-    # Member-facing Tailscale URLs (safe to show; never include pool password / tokens)
     sched_tailscale = DEFAULT_SCHEDULER_URL.rstrip("/")
     portal_tailscale = DEFAULT_PORTAL_URL.rstrip("/")
     if not portal_tailscale.endswith("/portal"):
         portal_tailscale = f"{portal_tailscale}/portal"
+    urls = connect_urls_for_ui()
+    pub = load_public_endpoints()
+    sched_public = (urls.get("scheduler_public") or urls.get("pool_api_public") or "").rstrip("/")
+    portal_public = (urls.get("portal_public") or "").rstrip("/")
+    env_sched = sched_public or sched_tailscale
     return {
         "scheduler_url": cfg.scheduler_url,
         "portal_url": portal_base,
+        "public_access": bool(urls.get("no_tailscale_needed")),
         "auth_modes": {
             "pool_password": bool(cfg.pool_password),
             "invite_codes": bool(cfg.invite_codes),
@@ -201,29 +245,34 @@ async def api_config(request: Request) -> dict[str, Any]:
             "v1 contributes compute to JOBS (GPU/CPU). RAM/SSD values are capacity "
             "advertisements + future job constraints — not a literal distributed filesystem yet."
         ),
+        "laptop_note": (
+            "No NVIDIA? You can still Utilize the pool or contribute CPU. "
+            "Jobs run on online GPU workers (e.g. Drew-Home)."
+        ),
         "allowed_job_types": sorted(UTILIZE_JOB_TYPES),
         "utilize_note": (
-            "v1 Utilize can only submit allowlisted jobs: probe and pytorch_cuda_probe. "
-            "No arbitrary shell or custom code."
+            "No GPU on your laptop? Fine. v1 allowlisted jobs only: probe and pytorch_cuda_probe. "
+            "They run on pool workers. No arbitrary shell."
         ),
         "invite_code_hint": PORTAL_INVITE_CODE,
+        "public_endpoints": pub,
         "connect": {
             "scheduler_local": DEFAULT_LOCAL_SCHEDULER_URL.rstrip("/"),
             "scheduler_tailscale": sched_tailscale,
+            "scheduler_public": sched_public,
+            "pool_api_public": sched_public,
             "portal_local": DEFAULT_LOCAL_PORTAL_URL,
             "portal_tailscale": portal_tailscale,
+            "portal_public": portal_public,
             "portal_this": portal_path,
+            "no_tailscale_needed": bool(urls.get("no_tailscale_needed")),
             "discord_primary": "Glitch Factor",
             "discord_bot": "GPU Pool",
             "discord_commands": [
-                "/pool",
-                "/workers",
-                "/contribute",
-                "/submit_probe",
-                "/submit_compute",
-                "/job_status",
+                "/pool", "/workers", "/contribute",
+                "/submit_probe", "/submit_compute", "/job_status",
             ],
-            "docs": "CONNECTING.md",
+            "docs": "CONNECTING.md · FRIEND_LAPTOP.md",
             "cli": [
                 "python -m gpu_swarm utilize status",
                 "python -m gpu_swarm utilize probe --wait",
@@ -233,29 +282,36 @@ async def api_config(request: Request) -> dict[str, Any]:
             ],
             "python_sdk": (
                 "from gpu_swarm.client import GPUPool\n"
-                "pool = GPUPool()  # or GPUPool(\"http://100.85.165.84:8766\")\n"
-                "print(pool.status()[\"workers_online\"])\n"
-                "print(pool.submit_probe(wait=True)[\"status\"])\n"
+                f'pool = GPUPool()  # or GPUPool("{env_sched}")\n'
+                'print(pool.status()["workers_online"])\n'
+                'print(pool.submit_probe(wait=True)["status"])\n'
             ),
             "http": [
                 "GET  /status",
                 "POST /jobs   {\"job_type\":\"probe\"}",
                 "GET  /jobs/{id}",
             ],
-            "env_example": f"set GPU_SWARM_SCHEDULER_URL={sched_tailscale}",
+            "env_example": f"set GPU_SWARM_SCHEDULER_URL={env_sched}",
+            "env_note": urls.get("env_note") or (
+                "EXE/portal auto-detects the scheduler — hand-editing "
+                "GPU_SWARM_SCHEDULER_URL is optional. If you set it, include port 8766 "
+                "or use the public …/pool-api URL."
+            ),
             "private_network": (
-                "Private Tailscale/LAN pool — not exposed to the open internet. "
-                "Friends join via Tailscale, then use the scheduler/portal URLs below."
+                "Private by default (Tailscale/LAN). When Drew publishes a public tunnel, "
+                "use the Public URLs — no Tailscale needed."
             ),
             "friends_connect": [
-                "Install Tailscale — https://tailscale.com/download",
-                "Ask Drew for an invite to the Glitch Factor tailnet (login + join)",
-                f"Open portal {portal_tailscale} or run the GPU Pool EXE / desktop app",
+                "Run the GPU Pool EXE (auto-detects scheduler) OR open the portal URL Drew shares",
+                "Public HTTPS if tunnel is up; else Tailscale → :8767/portal",
                 f"Sign in with invite code {PORTAL_INVITE_CODE} + your display name",
-                "Contribute (join as worker) or Utilize (run allowlisted jobs)",
+                "No NVIDIA? Utilize first (or Contribute CPU-only)",
+                f"Coding env (optional): set GPU_SWARM_SCHEDULER_URL={env_sched}",
             ],
             "rules": [
-                "Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use these URLs.",
+                "Prefer EXE auto-detect or portal — do not hand-edit env unless coding from CLI.",
+                "Scheduler port is 8766 (not portal 8767). Bare IP without port is wrong.",
+                "Public friends use …/pool-api as GPU_SWARM_SCHEDULER_URL when tunnel is on.",
                 "Allowlisted jobs only — no remote shell on contributors.",
                 "Never share .env or Discord bot tokens.",
             ],
@@ -450,6 +506,122 @@ async def api_worker_bootstrap(token: str) -> dict[str, Any]:
     }
 
 
+_DIAGNOSTICS_MAX_BYTES = 200_000
+_DIAGNOSTICS_KEEP = 200
+
+
+def _diagnostics_dir() -> Any:
+    from pathlib import Path
+
+    from gpu_swarm.paths import ROOT
+
+    d = Path(ROOT) / "data" / "diagnostics"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _redact_diag_text(text: str) -> str:
+    try:
+        from gpu_swarm.diagnostics import redact_secrets
+
+        return redact_secrets(text or "")
+    except Exception:  # noqa: BLE001
+        return text or ""
+
+
+@app.post("/api/diagnostics")
+async def api_diagnostics_submit(body: DiagnosticsBody, request: Request) -> dict[str, Any]:
+    """
+    Accept friend install/join diagnostic logs (size-capped, secrets redacted).
+    Auth: existing portal session cookie OR invite_code / pool_password (same as login).
+    """
+    import re
+    import time
+    import uuid
+    from pathlib import Path
+
+    user = await _current_user(request)
+    auth_method = "session" if user else ""
+    if not user:
+        ok, method = _auth_ok(body.pool_password, body.invite_code)
+        if not ok:
+            raise HTTPException(401, "login or invite_code required to submit diagnostics")
+        auth_method = method
+        name = (body.display_name or body.hostname or "anonymous").strip()[:64]
+        if name:
+            user = await _store().upsert_user(name, f"diagnostics:{method}")
+        else:
+            user = {"id": "", "display_name": "anonymous"}
+
+    raw = body.log_text or ""
+    if not raw.strip():
+        raise HTTPException(400, "log_text required")
+    text = _redact_diag_text(raw)
+    encoded = text.encode("utf-8")
+    if len(encoded) > _DIAGNOSTICS_MAX_BYTES:
+        text = encoded[:_DIAGNOSTICS_MAX_BYTES].decode("utf-8", errors="ignore") + "\n\n[truncated]\n"
+
+    diag_dir = _diagnostics_dir()
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    safe_host = re.sub(r"[^a-zA-Z0-9_.-]+", "-", (body.hostname or "host"))[:48].strip("-") or "host"
+    diag_id = uuid.uuid4().hex[:12]
+    path = Path(diag_dir) / f"{stamp}-{safe_host}-{diag_id}.log"
+    meta = {
+        "id": diag_id,
+        "created_at": time.time(),
+        "user_id": (user or {}).get("id") or "",
+        "display_name": (user or {}).get("display_name") or body.display_name or "",
+        "hostname": body.hostname or "",
+        "wizard_step": body.wizard_step or "",
+        "client_log_path": body.log_path or "",
+        "auth_method": auth_method,
+        "bytes": len(text.encode("utf-8")),
+        "client_time": body.client_time,
+    }
+    path.write_text(text, encoding="utf-8")
+    path.with_suffix(".json").write_text(
+        __import__("json").dumps(meta, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    # Cap retention: keep newest N log files.
+    logs = sorted(Path(diag_dir).glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in logs[_DIAGNOSTICS_KEEP:]:
+        try:
+            old.unlink(missing_ok=True)
+            old.with_suffix(".json").unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    return {
+        "ok": True,
+        "id": diag_id,
+        "message": f"Diagnostics stored ({meta['bytes']} bytes). Drew can review in data/diagnostics/.",
+        "bytes": meta["bytes"],
+    }
+
+
+@app.get("/api/diagnostics")
+async def api_diagnostics_list(request: Request, limit: int = 50) -> dict[str, Any]:
+    """Simple admin list of uploaded diagnostics (requires portal session)."""
+    import json
+    from pathlib import Path
+
+    await _require_user(request)
+    diag_dir = Path(_diagnostics_dir())
+    items: list[dict[str, Any]] = []
+    for meta_path in sorted(diag_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if len(items) >= max(1, min(limit, 200)):
+            break
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            meta = {"id": meta_path.stem, "error": "unreadable"}
+        meta["file"] = str(meta_path.with_suffix(".log").name)
+        items.append(meta)
+    return {"ok": True, "count": len(items), "items": items}
+
+
 def _worker_instructions(machine: dict[str, Any], portal_base: str) -> dict[str, Any]:
     token = machine["start_token"]
     sched = machine["scheduler_url"]
@@ -516,7 +688,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>GPU Pool — Contribute · Utilize · Connect</title>
 <style>
-  @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
+  /* No external @import — Google Fonts blocked/slow caused blank/black portal for some friends */
   :root {
     --bg0: #0f1412;
     --bg1: #17201c;
@@ -527,8 +699,8 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     --accent: #d4a24c;
     --accent2: #3d9b7a;
     --ok: #6fbf8a;
-    --font: "IBM Plex Sans", "Segoe UI", sans-serif;
-    --mono: "IBM Plex Mono", Consolas, monospace;
+    --font: "Segoe UI", "Helvetica Neue", ui-sans-serif, sans-serif;
+    --mono: Consolas, "Cascadia Mono", ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
   body {
@@ -742,13 +914,14 @@ PORTAL_HTML = r"""<!DOCTYPE html>
   <header>
     <h1 class="brand">GPU <span>Pool</span></h1>
     <p class="lede">Private Tailscale/LAN co-op — pick <strong>Contribute</strong>, <strong>Utilize</strong>, or <strong>Connect</strong> (how friends reach the pool from Discord / code / CLI).</p>
+    <p class="note" id="laptopNote">No NVIDIA? You can still <strong>Utilize</strong> the pool or contribute <strong>CPU</strong>.</p>
     <p class="note" id="capacityNote">v1 contributes compute to JOBS (GPU/CPU). RAM/SSD figures are capacity advertisements — not a distributed filesystem yet.</p>
     <p class="note" id="networkNote" style="border-left-color:var(--accent2);background:rgba(61,155,122,0.08);color:#b8dcc9">Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then open this portal.</p>
   </header>
 
   <section id="loginPanel" class="panel">
     <h2>Sign in</h2>
-    <p class="lede" style="margin-bottom:0.5rem">On Tailscale first, then MVP auth: invite code <code>glitch-factor</code> (or pool password) + display name. Real OAuth comes later.</p>
+    <p class="lede" style="margin-bottom:0.5rem">MVP auth: invite code <code>glitch-factor</code> (or pool password) + display name. Public link or Tailscale both work. Real OAuth comes later.</p>
     <label for="displayName">Display name</label>
     <input id="displayName" type="text" placeholder="YourDiscordName" autocomplete="nickname" />
     <div class="row">
@@ -800,7 +973,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
           <button type="button" class="choice" data-go="connect" id="cardConnect">
             <span class="eyebrow">Path 3</span>
             <p class="title">Connect</p>
-            <p class="blurb">How-to: Tailscale URLs, Discord slash commands, Python / CLI snippets for friends.</p>
+            <p class="blurb">How-to: public HTTPS (no Tailscale) or Tailscale URLs, Discord, Python / CLI.</p>
             <span class="go">See how to connect →</span>
           </button>
         </div>
@@ -808,7 +981,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
 
       <div class="panel" id="friendsHomeCard">
         <h2>How friends connect</h2>
-        <p class="lede" id="friendsHomeLede">Private Tailscale/LAN pool — not exposed to the open internet.</p>
+        <p class="lede" id="friendsHomeLede">Public HTTPS when the tunnel is on — no Tailscale needed. Invite still required.</p>
         <ol id="friendsHomeSteps" style="margin:0.5rem 0 0; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
         <div class="actions">
           <button type="button" data-go="connect">Full Connect guide →</button>
@@ -925,13 +1098,19 @@ PORTAL_HTML = r"""<!DOCTYPE html>
     <div id="viewConnect" class="hidden">
       <div class="panel">
         <h2>Connect — how to reach the pool</h2>
-        <p class="lede" id="connectLede">Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use these URLs.</p>
+        <p class="lede" id="connectLede">Public HTTPS when the tunnel is on — no Tailscale needed. Invite code still required.</p>
+
+        <div id="publicBanner" class="note hidden" style="border-left-color:var(--accent);background:rgba(232,168,74,0.12);color:#f0d9a8;margin-bottom:0.85rem">
+          <strong>No Tailscale needed</strong> — public access is live. Share the portal URL + invite <code>glitch-factor</code>.
+        </div>
 
         <h3>How friends connect</h3>
         <ol id="friendsConnectSteps" style="margin:0.4rem 0 0.85rem; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
 
         <h3>URLs</h3>
         <div class="url-grid">
+          <div class="url-card" id="cardPortalPublic"><span>Portal (public — no Tailscale)</span><code id="urlPortalPublic">—</code></div>
+          <div class="url-card" id="cardPoolApiPublic"><span>Pool API (public /pool-api proxy)</span><code id="urlPoolApiPublic">—</code></div>
           <div class="url-card"><span>Scheduler (Tailscale)</span><code id="urlSchedTs">—</code></div>
           <div class="url-card"><span>Scheduler (localhost on host)</span><code id="urlSchedLocal">—</code></div>
           <div class="url-card"><span>Portal (Tailscale)</span><code id="urlPortalTs">—</code></div>
@@ -941,7 +1120,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
         <h3>Discord · <span id="discordGuild">Glitch Factor</span> · bot <span id="discordBot">GPU Pool</span></h3>
         <div class="cmd-list" id="discordCmds"></div>
 
-        <h3>Env (members on Tailscale)</h3>
+        <h3>Env (public /pool-api or Tailscale)</h3>
         <pre id="connectEnv">—</pre>
 
         <h3>CLI</h3>
@@ -970,6 +1149,7 @@ PORTAL_HTML = r"""<!DOCTYPE html>
 const $ = (id) => document.getElementById(id);
 const bindSlider = (id, valId, fmt) => {
   const el = $(id), out = $(valId);
+  if (!el || !out) return;
   const paint = () => { out.textContent = fmt(el.value); };
   el.addEventListener("input", paint); paint();
 };
@@ -1032,8 +1212,14 @@ function syncCudaOpts() {
 function paintConnect(c) {
   const conn = (c && c.connect) || {};
   const friends = conn.friends_connect || [];
+  const publicOn = !!(c.public_access || conn.no_tailscale_needed || conn.portal_public);
   const privateNet = conn.private_network
-    || "Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then use these URLs.";
+    || (publicOn
+      ? "Public HTTPS access is ON — no Tailscale needed. Invite code still required."
+      : "When Drew runs start-public-access.cmd, a public HTTPS portal appears (no Tailscale). Tailscale remains optional.");
+  if ($("urlPortalPublic")) $("urlPortalPublic").textContent = conn.portal_public || "(tunnel off — Drew: start-public-access.cmd)";
+  if ($("urlPoolApiPublic")) $("urlPoolApiPublic").textContent = conn.pool_api_public || "—";
+  if ($("publicBanner")) $("publicBanner").classList.toggle("hidden", !publicOn);
   $("urlSchedTs").textContent = conn.scheduler_tailscale || "—";
   $("urlSchedLocal").textContent = conn.scheduler_local || "—";
   $("urlPortalTs").textContent = conn.portal_tailscale || "—";
@@ -1052,8 +1238,8 @@ function paintConnect(c) {
   if ($("networkNote")) $("networkNote").textContent = privateNet;
   if ($("friendsHomeLede")) $("friendsHomeLede").textContent = privateNet;
   const stepsHtml = friends.map(s => `<li>${escapeHtml(s)}</li>`).join("");
-  if ($("friendsConnectSteps")) $("friendsConnectSteps").innerHTML = stepsHtml || "<li>Install Tailscale → join Drew’s network → open portal / EXE → Contribute or Utilize</li>";
-  if ($("friendsHomeSteps")) $("friendsHomeSteps").innerHTML = stepsHtml || "<li>Install Tailscale → join Drew’s network → open portal / EXE → Contribute or Utilize</li>";
+  if ($("friendsConnectSteps")) $("friendsConnectSteps").innerHTML = stepsHtml || "<li>Open public portal URL (or Tailscale) → invite → Contribute or Utilize</li>";
+  if ($("friendsHomeSteps")) $("friendsHomeSteps").innerHTML = stepsHtml || "<li>Open public portal URL (or Tailscale) → invite → Contribute or Utilize</li>";
 }
 
 async function loadConfig() {
@@ -1066,6 +1252,7 @@ async function loadConfig() {
     : (c.scheduler_url || conn.scheduler_tailscale || "");
   $("schedulerUrl").value = sched || "";
   if (c.capacity_note) $("capacityNote").textContent = c.capacity_note;
+  if (c.laptop_note && $("laptopNote")) $("laptopNote").textContent = c.laptop_note;
   if (c.utilize_note) $("utilizeNote").textContent = c.utilize_note;
   paintConnect(c);
 }
@@ -1087,10 +1274,10 @@ async function refreshDash() {
     const d = await api("/api/dashboard");
     const s = d.summary || {};
     $("stats").innerHTML = [
-      ["Online", s.workers_online ?? 0],
+      ["Online", (s.workers_online != null ? s.workers_online : 0)],
       ["Free VRAM", fmtMb(s.free_vram_mb)],
       ["Total VRAM", fmtMb(s.total_vram_mb)],
-      ["CPU cores", s.cpu_cores ?? 0],
+      ["CPU cores", (s.cpu_cores != null ? s.cpu_cores : 0)],
       ["RAM avail (ad)", fmtMb(s.ram_available_mb)],
       ["Disk free (ad)", fmtMb(s.disk_free_mb)],
       ["Jobs queued", (s.jobs&&s.jobs.queued)||0],
@@ -1107,9 +1294,9 @@ async function refreshDash() {
       const pill = w.online ? '<span class="pill on">online</span>' : '<span class="pill off">offline</span>';
       return `<tr>
         <td><strong>${escapeHtml(w.name||"?")}</strong><br><span style="color:var(--muted);font-size:0.8rem">${escapeHtml(w.host||"")}</span></td>
-        <td>${pill}<br><span style="color:var(--muted);font-size:0.78rem">${escapeHtml(w.status||"")} · ${w.heartbeat_age_sec??"?"}s</span></td>
+        <td>${pill}<br><span style="color:var(--muted);font-size:0.78rem">${escapeHtml(w.status||"")} · ${(w.heartbeat_age_sec != null ? w.heartbeat_age_sec : "?")}s</span></td>
         <td>${escapeHtml(gpus)}<br>${vram}</td>
-        <td>${w.cpu_cores??0} cores · ${w.max_cpu_percent??"—"}%</td>
+        <td>${(w.cpu_cores != null ? w.cpu_cores : 0)} cores · ${(w.max_cpu_percent != null ? w.max_cpu_percent : "—")}%</td>
         <td>${fmtMb(w.ram_available_mb)} avail<br>cap ${fmtMb(w.max_ram_mb)}</td>
         <td>${fmtMb(w.disk_free_mb)} free<br>cap ${fmtMb(w.max_disk_mb)}</td>
       </tr>`;

@@ -10,6 +10,8 @@ __pycache__/
 .venv/
 venv/
 data/
+tools/cloudflared.exe
+tools/cloudflared*
 *.log
 .pytest_cache/
 .mypy_cache/
@@ -28,3 +30,5 @@ DISCORD_BOT_TOKEN_PASTE.txt
 *.pem
 *.key
 tokens/
+*.credentials.json
+.cloudflared/
