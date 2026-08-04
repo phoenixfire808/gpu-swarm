@@ -1475,7 +1475,9 @@ def get_discord_helper_text() -> str:
         f"  Tailscale: {hints['tailscale_url']}\n"
         f"  Invite:    {hints['invite_code']}  (pool password stays in .env — not shown)\n"
         "\n"
-        "CLI: python -m gpu_swarm submit probe|pytorch_cuda_probe --wait\n"
+        "CLI: python -m gpu_swarm utilize status|probe|cuda --wait\n"
+        "SDK: from gpu_swarm.client import GPUPool\n"
+        "Docs: CONNECTING.md · examples/coding_agent_pool.py\n"
         "Do not expose the scheduler to the public internet."
     )
 

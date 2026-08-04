@@ -1,281 +1,152 @@
-# CURRENT_PROGRESS — gpu-swarm
+# CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
-Private Discord GPU/CPU co-op swarm for Drew's Discord members.
+Living scorecard for Drew’s private Discord GPU/CPU co-op.  
+**Updated:** 2026-08-04 · Utilizer SDK/CLI e2e verified on live `:8766`.
 
-Updated: 2026-08-04 (desktop Contribute + Utilize + Connect)
+| Service | Local | Tailscale |
+|---------|-------|-----------|
+| Scheduler | `http://127.0.0.1:8766` | `http://100.85.165.84:8766` |
+| Portal | `http://127.0.0.1:8767/portal` | `http://100.85.165.84:8767/portal` |
+| Robinhood CC | `127.0.0.1:8765` | **do not steal** |
 
-## Desktop Contribute + Utilize + Connect (2026-08-04)
+**Discord:** App **GPU Pool** · Primary guild **Glitch Factor** · Invite code `glitch-factor`  
+**v1 jobs only:** `probe`, `pytorch_cuda_probe` · Auth MVP: invite/password (OAuth later)  
+**Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files
 
-- [x] Main panel modes: **Contribute** · **Utilize** · **Connect from code**
-- [x] Contribute: wizard + Join/Leave + caps (`install_joiner_deps` / prereqs / NVIDIA / optional torch)
-- [x] Utilize: live `pool_status`, submit `probe` + `pytorch_cuda_probe`, wait/poll JSON, Discord slash copy
-- [x] Connect panel → **`CONNECTING.md`** + **`examples/coding_agent_pool.py`** (+ `ollama_or_local_offload.md`)
-- [x] Backend APIs: `submit_job` / `get_job` / `wait_for_job` / `pool_status` / `get_connect_from_code_text` / `open_repo_doc`
-- [x] README: Contribute vs Utilize vs Connect table
-- [x] **E2E (live scheduler)** PASS — probe `4980a624-…` completed; cuda `66fd3853-…` on `cuda:0`; `coding_agent_pool.py` probe `3d13845f-…` completed; UI import OK
-- [x] Portal Tailscale already verified separately (`0.0.0.0:8767`); Discord bot untouched; no Docker; no secrets committed
+---
 
-### How users Contribute vs Utilize (desktop app)
-
-| Mode | Action |
-|------|--------|
-| **Contribute** | Wizard → caps → **Join pool** / **Leave** |
-| **Utilize** | Utilize tab → Refresh → **Submit probe** / **Submit CUDA matmul** → results |
-| **Connect** | Open CONNECTING.md / coding_agent_pool.py · copy `GPU_SWARM_SCHEDULER_URL` · Tailscale portal |
-
-```bat
-start-gpu-pool-app.cmd
-set GPU_SWARM_SCHEDULER_URL=http://100.85.165.84:8766
-python examples\coding_agent_pool.py --job probe
-```
-
-## Portal Utilize panel (2026-08-04)
-
-- [x] Portal bind `0.0.0.0:8767` — Tailscale `http://100.85.165.84:8767/portal` works
-- [x] After login: **Dashboard** (scheduler `/status` capacity) · **Utilize** · **Contribute**
-- [x] Utilize: submit allowlisted `probe` / `pytorch_cuda_probe` via `POST /api/jobs` → scheduler; poll `GET /api/jobs/{id}`
-- [x] Honest copy: v1 allowlisted jobs only (shell rejected with 400)
-- [x] Contribute/register machine flow kept
-- [x] Verified over Tailscale: login `glitch-factor` → probe completed → cuda probe completed on `cuda:0` (5060 Ti)
-- [x] Discord bot left running (PID 5972); no Docker; no secret leaks
-
-**HTTP smoke (Tailscale):**
-```bat
-curl http://100.85.165.84:8767/health
-REM login with invite, then:
-curl -b cookies -c cookies -X POST http://100.85.165.84:8767/api/jobs -H "Content-Type: application/json" -d "{\"job_type\":\"probe\"}"
-curl -b cookies http://100.85.165.84:8767/api/jobs/<id>
-```
-
-## Local-model / coding-agent bridge (2026-08-04)
-
-- [x] `CONNECTING.md` — Contribute vs Utilize vs Connect from code/Discord/portal/app
-- [x] `examples/ollama_or_local_offload.md` — honest v1 (no Ollama proxy); path to whisper/LLM job types; how to add allowlisted runners
-- [x] `examples/coding_agent_pool.py` — stdlib script: submit probe / pytorch_cuda_probe → print JSON
-- [x] `DISCORD_MEMBER_QUICKSTART.md` — coding / local-model users blurb
-- [x] README links to CONNECTING + examples
-- [x] Verified live vs `http://127.0.0.1:8766`: status OK; probe completed; pytorch_cuda_probe completed on `cuda:0` (5060 Ti)
-- [x] Did **not** add shell/pip_list/echo jobs; no Whisper runner yet (no hooks in repo — documented for later)
-- [x] Did **not** touch Discord token / Docker / restart scheduler/bot
-
-**Agent invoke:**
-```bat
-python examples\coding_agent_pool.py --job probe
-python examples\coding_agent_pool.py --job pytorch_cuda_probe --matrix-size 1024
-```
-
-## Live verification scorecard (2026-08-04 (live stream verify))
+## Live scorecard (spot-check 2026-08-04)
 
 | # | Check | Result |
 |---|--------|--------|
-| 1 | Scheduler :8766 `/status` workers + GPU/CPU/RAM/disk | **PASS** (bind `0.0.0.0`) |
-| 2 | Worker online real GPUs | **PASS** (`Drew-Home`: 5060 Ti + 2070 SUPER) |
-| 3 | Job e2e probe + pytorch_cuda_probe | **PASS** (completed on cuda:0) |
-| 4 | Portal :8767 login `glitch-factor` + dashboard workers | **PASS** localhost + Tailscale (`0.0.0.0:8767`) |
-| 5 | Desktop app import / smoke / prereqs | **PASS** |
-| 6 | Discord bot GPU Pool process + guild slash cmds | **PASS** (token last4 `...NsrI`; 6 cmds in Glitch Factor) |
-| 7 | agent-vms `agent-vm status` | **PASS** (`agent-ubuntu` running; Hermes intact) |
-| 8 | GitHub remote/push ready | **FAIL/GAP** — local commits exist; **no remote**; **gh not authed**; dirty working tree |
+| 1 | Scheduler `:8766` `/status` + workers + GPU/CPU/RAM/disk | **PASS** (live JSON; bind `0.0.0.0`) |
+| 2 | Worker online with real GPUs | **PASS** (`Drew-Home`: 5060 Ti + 2070 SUPER) |
+| 3 | Job e2e `probe` + `pytorch_cuda_probe` | **PASS** (completed earlier today; jobs.completed ≥ 17) |
+| 4 | Portal `:8767` Contribute/Utilize + Tailscale | **PASS** (HTTP 200 localhost + Tailscale) |
+| 5 | Desktop wizard / prereqs / join helpers | **PASS** (code + prior smoke) |
+| 6 | Discord GPU Pool bot + guild slash cmds | **PASS** (6 cmds; process left running in prior session) |
+| 7 | Coding client / `CONNECTING.md` / examples | **PASS** — `GPUPool` + `utilize` CLI + examples e2e |
+| 8 | GitHub remote + push | **FAIL** — no `origin`; `gh` not logged in; dirty tree |
 
-### Honest gaps vs vision
-- RAM/SSD = capacity ads for scheduling, **not** DFS / pooled memory (see `capacity_note` + VISION.md)
-- Portal now binds `0.0.0.0:8767` (same pattern as scheduler); Tailscale `:8767` and `:8766` OK
-- Invite/password MVP auth — Discord OAuth later
-- `gh auth login` + add `origin` still needed to publish
+Honest v1: GPU/CPU run jobs; RAM/SSD are **capacity ads** for scheduling, not pooled memory/DFS.
 
-## One-stop install helpers (Support Worker — 2026-08-04)
+---
 
-- [x] `scripts/check_prereqs.ps1` (+ `.cmd`) — real probes: Python, nvidia-smi, scheduler `/status`, disk free; JSON (default) or `-Text`
-- [x] `scripts/install_joiner_deps.ps1` (+ `.cmd`) — idempotent `requirements.txt` install; optional `-WithTorchCuda` (skips if CUDA torch already present)
-- [x] `app_backend.script_paths()` / `check_prereqs()` / `install_joiner_deps()` wired to those scripts
-- [x] Verified live on Drew-Home: prereqs OK (2 GPUs, scheduler :8766, ~28 GiB free); deps skip when satisfied; torch CUDA skip when present
-- [x] Did **not** touch Discord token / Docker / restart scheduler
+## Done (with dates)
 
-**Invoke from wizard/backend:**
-- `be.check_prereqs()` → `scripts/check_prereqs.ps1`
-- `be.install_joiner_deps(with_torch_cuda=False|True)` → `scripts/install_joiner_deps.ps1`
-- CLI: `scripts\check_prereqs.cmd --text` · `scripts\install_joiner_deps.cmd [--with-torch-cuda]`
+### Core pool (2026-08-04)
+- [x] Project scaffold at `C:\Users\Drew\Projects\gpu-swarm`
+- [x] **Scheduler** (FastAPI + SQLite): register, heartbeat, lease, complete/fail, submit, `/status`, `/v1/pool/*` wrappers
+- [x] **Workers**: real `nvidia-smi`, lease/run/report, soft caps (`max_vram/cpu/ram/disk`)
+- [x] **Resource heartbeats**: CPU/RAM/disk + GPU on register/heartbeat; `/status` aggregates
+- [x] Job runners: `probe`, `pytorch_cuda_probe` (allowlisted only)
+- [x] CLI: `scheduler`, `worker`, `submit`, `status`, `bot`, `job`, `utilize …`
+- [x] Start scripts: `start-scheduler-lan.cmd`, `start-portal.cmd`, `start-bot.cmd`, `start-gpu-pool-app.cmd`, etc.
+- [x] `.env.example`, `.gitignore` (blocks `.env`, `*TOKEN*PASTE*`, `data/`, `logs/`, keys)
 
+### Discord GPU Pool bot (2026-08-04)
+- [x] Bot wired as **GPU Pool** (not Jarvis); token in local `.env` only
+- [x] Hybrid + guild slash sync → Glitch Factor: `/pool` `/workers` `/contribute` `/submit_probe` `/submit_compute` `/job_status`
+- [x] Message Content Intent ON; invited to Glitch Factor (+ Jarvis HQ non-primary)
+- [x] Docs: primary server = Glitch Factor
 
-## Checklist
+### Portal Contribute / Utilize (2026-08-04)
+- [x] Web portal at `/portal` — Contribute (register/caps/join) + Utilize (allowlisted submit)
+- [x] MVP auth: pool password **or** invite `glitch-factor` + display name
+- [x] Bound `0.0.0.0:8767` — Tailscale portal works remotely
+- [x] Proxy submit to scheduler; OAuth explicitly deferred (`oauth: later`)
 
-- [x] Create project at `C:\Users\Drew\Projects\gpu-swarm`
-- [x] Scheduler API (FastAPI + SQLite): register, heartbeat, lease, complete/fail, submit, status
-- [x] Worker: real `nvidia-smi` GPU detect, heartbeat, lease/run/report
-- [x] Job `probe` — live GPU inventory
-- [x] Job `pytorch_cuda_probe` — real CUDA matmul via existing torch
-- [x] CLI: `scheduler`, `worker`, `submit`, `status`, `bot`, `job`
-- [x] Discord bot wired (hybrid + guild slash sync via `DISCORD_GUILD_ID`)
-- [x] `.env` / `.env.example`, README, `.gitignore` (secrets never committed)
-- [x] Windows start scripts + `set-discord-token.cmd` + `make-invite-url.cmd`
-- [x] End-to-end verify on Drew's machine (probe + CUDA)
-- [x] Hermes skill stub at `shared-skills/gpu-swarm/SKILL.md`
-- [x] Scheduler LAN/Tailscale bind prepared (`0.0.0.0:8766`); Tailscale IP documented
-- [x] **Discord Application = GPU Pool** (existing app; not a new "GPU Swarm" app; not Jarvis)
-- [x] Bot token in `.env` as `DISCORD_BOT_TOKEN` (paste file scrubbed after write)
-- [x] Message Content Intent enabled on GPU Pool (verified ON in Developer Portal)
-- [x] Bot invited / present in **Glitch Factor** (primary) and Jarvis HQ
-- [x] Bot online as `GPU pool#1686`; guild slash sync OK to Glitch Factor
-- [x] Docs updated: primary server is Glitch Factor (README / QUICKSTART / CURRENT_PROGRESS)
-- [x] **Host metrics advertise** — worker register/heartbeat include real CPU/RAM/disk + GPU
-- [x] Scheduler DB migration + `/status` aggregates for `cpu_cores`, `ram_*`, `disk_free_mb`
-- [x] Soft caps honored: `max_vram_mb`, `max_cpu_percent`, `max_ram_mb`, `max_disk_mb` (+ portal `dedicated_*` aliases)
-- [x] Smoke: restarted scheduler+worker; `/status` shows non-zero live RAM/CPU/disk/GPU (no mocks)
-- [x] Discord bot left running (PID preserved); `/pool` + `/workers` show new fields when next invoked
-- [x] **Web portal LIVE** at `http://127.0.0.1:8767/portal` (auth: pool password from `.env` **or** invite `glitch-factor`)
-- [x] **Desktop one-stop** — wizard + modes **Contribute** / **Utilize** / **Connect from code** (CONNECTING.md + coding_agent_pool.py)
-- [x] `start-gpu-pool-app.cmd` Explorer-safe (cd to repo, `py`/`python` discovery, auto-deps if missing)
-- [ ] Optional: smoke `/pool` in Glitch Factor Discord channel (manual)
-- [x] Portal bound to `0.0.0.0:8767` so Tailscale `http://100.85.165.84:8767/portal` works remotely
-- [ ] Optional Whisper job later (reuse DrewLocalVoice/faster-whisper without breaking it) — see `examples/ollama_or_local_offload.md` checklist
+### Desktop one-stop wizard (2026-08-04)
+- [x] 7-step wizard → **Save + Join**; Leave; Re-run wizard
+- [x] Main panel modes: Contribute · Utilize · Connect-from-code helpers
+- [x] Caps → `data/joiner_settings.json` + safe `.env` keys
+- [x] `scripts/check_prereqs.ps1` + `install_joiner_deps.ps1` (+ `.cmd`); backend wired
+- [x] Explorer-safe `start-gpu-pool-app.cmd` (`py`/`python` discovery)
 
-## One-stop desktop joiner (2026-08-04)
+### Coding / connect surface (2026-08-04)
+- [x] `CONNECTING.md` — Contribute vs Utilize vs Connect from code (links SDK + examples)
+- [x] `gpu_swarm/client.py` — `GPUPool` SDK (`status` / `submit` / `wait` / probe helpers) → `POST /jobs` + `GET /status` (aligned with `coding_agent_pool.py`)
+- [x] CLI `python -m gpu_swarm utilize status|probe|cuda`
+- [x] Examples: `coding_agent_pool.py`, `use_pool_from_script.py`, `ollama_or_local_offload.md`, `hermes_pool_skill.md`
+- [x] Hermes skill stub `shared-skills/gpu-swarm/SKILL.md`
+- [x] Local-model honesty doc: no Ollama proxy in v1; path sketched for Whisper/LLM later
+- [x] **E2E (this pass):** SDK probe+cuda (`cuda:0`); CLI utilize probe+cuda; `use_pool_from_script.py` probe — all completed on live scheduler
+- [ ] Scheduler process restart needed before live `/v1/pool/*` + chat shim (code in `scheduler.py`; SDK/CLI already use classic `/jobs`)
 
-### What was broken
+### Git hygiene (partial, 2026-08-04)
+- [x] Local commits exist on `master` (public-ready baseline + publish checklist commits)
+- [x] Secrets scrubbed from docs for public-safe share (token last4 removed)
+- [ ] Remote + push — see **Blocked**
 
-- Wizard finished without **Save + Join** (Join lived only on the main panel)
-- No Python detect / missing-Python guidance in-wizard or in the `.cmd`
-- Deps step skipped `psutil` in the check list; no optional **CUDA PyTorch** consent button
-- Failures were often silent / without a concrete FIX line
-- Portal deep-link preferred Tailscale `100.85.165.84:8767` even when that port refused (portal was only live on `127.0.0.1:8767`)
-- Invite code not surfaced in UI; Open Portal could open a dead URL
-- `start-gpu-pool-app.cmd` hardcoded `C:\Python313\python.exe` (broke double-click for other layouts)
+---
 
-### What was fixed
+## In progress
 
-- 7-step wizard: Welcome → Python & Deps → Hardware → Identity → Connect → Caps → **Save + Join**
-- Progress/log panels on deps, connect test, and join with exact FIX text on failure
-- Live host + scheduler metrics in UI (`cpu_cores`, `ram_*`, `disk_*`, `dedicated_*`, VRAM)
-- Caps persist to `data/joiner_settings.json` + safe `.env` keys; worker CLI gets `--max-vram/cpu/ram/disk`
-- Portal resolve prefers live URL; shows invite **`glitch-factor`** (never prints pool password)
-- Join waits for scheduler registration; Leave stops the joiner-managed worker cleanly
-- Launcher: `cd /d %~dp0`, `py -3` → `python` → common paths, installs requirements if UI deps missing
+- [ ] Working tree has **uncommitted** safe product work (client, CONNECTING, examples, portal/desktop/CLI/docs). Needs a clean commit before publish — prefer GitHub worker to commit; this progress pass only stages docs.
+- [ ] Confirm Discord `/pool` smoke in a Glitch Factor channel (manual; optional but good for stream).
+- [ ] Keep scorecard/TODO in sync as features land (this file + `TODO.md`).
 
-### Verified on Drew's machine
+---
 
-- Portal `http://127.0.0.1:8767/portal` → 200; Tailscale `http://100.85.165.84:8767/portal` → 200 (bind `0.0.0.0`)
-- Scheduler `http://127.0.0.1:8766/status` → OK
-- Join as `Wizard-OneStop` → online with caps `vram=2048`, `cpu=30%`, `ram=8192`, `disk=20480 MiB`
-- Leave → process stopped
-- Deps already satisfied → install skipped (no redundant full reinstall)
-- Torch CUDA present (`2.11.0+cu128`)
+## Next (prioritized)
 
-## How Drew launches the one-stop app
+1. **Stage/commit safe tree** — include product + docs; **exclude** `.env`, `DISCORD_BOT_TOKEN_PASTE.txt`, `data/`, `logs/`. Coordinate with GitHub worker.
+2. **`gh auth login`** on Drew’s machine (currently: *not logged into any GitHub hosts*).
+3. **`gh repo create` + `git remote add origin` + push** — first public/private share URL.
+4. **Stream-friendly verify** — wizard Join → portal Contribute/Utilize → Discord `/pool` → `coding_agent_pool.py --job probe`.
+5. **Member onboarding paste** — ship `DISCORD_MEMBER_QUICKSTART.md` blurb in Glitch Factor once repo URL exists.
+6. **Future job types** — design then implement `whisper_transcribe` / bounded `llm_generate` (see `examples/ollama_or_local_offload.md`); no shell jobs.
+7. **Discord OAuth** for portal (replace invite/password MVP).
+8. Optional: DFS / pooled memory — out of v1 scope (VISION.md).
 
-Double-click or run:
+### Next 5 Drew should care about right now
 
-```bat
-C:\Users\Drew\Projects\gpu-swarm\start-gpu-pool-app.cmd
-```
+1. Commit the dirty safe files (no secrets).
+2. Authenticate GitHub CLI (`gh auth login`).
+3. Create remote + push (`gh repo create` / `git push -u origin master`).
+4. Quick live smoke: portal Utilize + Discord `/pool`.
+5. Only after publish: plan Whisper/LLM allowlisted runners (do not rush into OAuth/DFS).
 
-Or:
+---
 
-```bat
-cd C:\Users\Drew\Projects\gpu-swarm
-py -3 -m gpu_swarm.app
-```
+## Blocked
 
-Wizard opens when `wizard_completed` is false (currently reset to false so next launch walks the full flow). Use **Re-run wizard** from the main panel anytime.
+| Blocker | Why | Unblock |
+|---------|-----|---------|
+| **GitHub publish** | No `git remote`; `gh auth status` → not logged in | `gh auth login` → `gh repo create` → push |
+| **Whisper / LLM jobs** | No runners in `jobs.py`; only sketches in docs | Design narrow contract → `ALLOWED_JOB_TYPES` + runner + UI surfaces |
+| **Portal OAuth** | MVP invite/password only by design | Implement OAuth when publish + auth story is ready |
+| **Public internet expose** | Intentionally LAN/Tailscale only | Keep private; do not open `:8766`/`:8767` to WAN |
 
-Browser portal (easiest remote path):
+---
 
-- Local: http://127.0.0.1:8767/portal
-- Tailscale (when portal bound for LAN): http://100.85.165.84:8767/portal
-- Invite: `glitch-factor` (pool password stays in `.env`)
-
-## Host metrics — stable JSON field names (portal / desktop / Discord)
-
-Measured (from `nvidia-smi` + `psutil` via `gpu_swarm/host.py`):
-
-| Field | Meaning |
-|-------|---------|
-| `cpu_cores` | Logical CPU cores |
-| `ram_total_mb` | Total system RAM (MiB) |
-| `ram_available_mb` | Available RAM after soft cap |
-| `disk_free_mb` | Free space on work-dir drive after soft cap |
-| `disk_total_mb` | Drive capacity (MiB) |
-| `disk_path` | Path used for disk measurement |
-| `gpus` / `free_vram_mb` / `total_vram_mb` | Existing GPU inventory |
-
-Caps / portal aliases:
-
-| Field | Meaning |
-|-------|---------|
-| `max_vram_mb` | Soft VRAM advertise cap (`0` = uncapped free VRAM) |
-| `max_cpu_percent` | CPU % contribution cap |
-| `max_ram_mb` / `dedicated_ram_mb` | RAM soft cap / dedication ad |
-| `max_disk_mb` / `dedicated_disk_mb` | Disk soft cap / dedication ad |
-| `dedicated_cpu_cores` | Core-equivalent ad (`cpu_cores * max_cpu_percent/100` if unset) |
-
-Env: `GPU_SWARM_MAX_VRAM_MB`, `GPU_SWARM_MAX_CPU_PERCENT`, `GPU_SWARM_MAX_RAM_MB`, `GPU_SWARM_MAX_DISK_MB` (or `GPU_SWARM_MAX_DISK_GB` / `GPU_SWARM_DEDICATED_*`).
-
-## Port / networking (important)
-
-| Service | Address | Notes |
-|---------|---------|--------|
-| Robinhood Command Center | `127.0.0.1:8765` | **Do not steal** — already bound |
-| gpu-swarm scheduler | `:8766` (running) | Local: `http://127.0.0.1:8766` |
-| Tailscale (Drew host) | `100.85.165.84` | Members: `http://100.85.165.84:8766` |
-| Web portal | `:8767` | **Live on `0.0.0.0`** — localhost + Tailscale |
-
-## Discord bot — GPU Pool (2026-08-04)
-
-| Item | Value |
-|------|-------|
-| App name | **GPU Pool** (Developer Portal; username `GPU pool#1686`) |
-| Client ID | `1534226262510403654` |
-| **Primary guild** | **Glitch Factor** `1532614467974856724` |
-| Also in | Jarvis HQ `1532553474577924156` (not primary for slash sync) |
-| Bot online | **yes** — left running during metrics smoke (not restarted) |
-| Slash sync | **yes** — synced **6** guild slash command(s) to Glitch Factor |
-| Token source | Opera Developer Portal (Copy after MFA); paste file was empty then scrubbed |
-| Token last4 | *(redacted for public repo)* |
-| Message Content Intent | **ON** |
-| Invite URL | `https://discord.com/oauth2/authorize?client_id=1534226262510403654&permissions=84992&scope=bot%20applications.commands` |
-| Jarvis reused? | **no** |
-| Hermes wiped? | **no** |
-
-### Next step for Drew (smoke test)
-
-1. Double-click `start-gpu-pool-app.cmd`
-2. Walk wizard → **Save + Join pool**
-3. Confirm status shows connected + live CPU/RAM/disk/VRAM
-4. Optional: Open portal → invite `glitch-factor`
-5. In Discord Glitch Factor: `/pool`
-
-## How Drew starts host services next time
+## How to relaunch host services
 
 ```bat
 cd C:\Users\Drew\Projects\gpu-swarm
 start-scheduler-lan.cmd
 start-portal.cmd
 start-bot.cmd
-REM members / Drew: start-gpu-pool-app.cmd  (one-stop joiner)
+start-gpu-pool-app.cmd
 ```
 
-## Notes
+Coding smoke:
 
-- Discord application name is **GPU Pool** (project folder/package remains `gpu-swarm`)
-- Primary co-op Discord = **Glitch Factor** (not Jarvis HQ)
-- No Docker / no mock GPU or host data
-- Did not wipe Hermes durable MEMORY/USER/SOUL/credentials/vault
-- Did not stop Robinhood on 8765
-- Did **not** use Jarvis bot token
-- Did **not** commit `.env`
-- Pool password never shown in desktop UI (invite code `glitch-factor` is OK to show)
+```bat
+set GPU_SWARM_SCHEDULER_URL=http://127.0.0.1:8766
+python -m gpu_swarm utilize status
+python -m gpu_swarm utilize probe --wait
+python -m gpu_swarm utilize cuda --wait
+python examples\coding_agent_pool.py --job probe
+python examples\use_pool_from_script.py --cuda
+```
 
+---
 
-## Worker 4 — GitHub publish readiness (2026-08-04)
+## Do not
 
-- [x] Audited `.gitignore`: blocks `.env`, `DISCORD_BOT_TOKEN_PASTE.txt` / `*TOKEN*PASTE*`, `data/`, `logs/`, `smoke_results/`, `venv/` / `.venv/`, `__pycache__/`, `*.pyc` / `*.py[cod]`, `tokens/`, `*.pem` / `*.key`
-- [x] Scrubbed token last4 from this progress file for public-safe commit
-- [x] Confirmed `.env` and paste file are not staged
-- [x] Local commit of safe project files (desktop app, backend, docs, bot/scheduler/worker)
-- [ ] `gh repo create` + push — requires GitHub CLI install/auth on Drew's machine if not present
-- GitHub URL: *(pending `gh repo create`)*
-
-## Portal LAN bind fix (2026-08-04)
-- Changed defaults: `start-portal.cmd`, `PortalConfig` / `GPU_SWARM_PORTAL_HOST`, CLI help → `0.0.0.0:8767`
-- Restarted portal cleanly; listen confirmed `0.0.0.0:8767`
-- Verified HTTP 200: `http://127.0.0.1:8767/portal` and `http://100.85.165.84:8767/portal`
-- Scheduler `:8766` and Discord bot left running (untouched)
+- Commit `.env`, `DISCORD_BOT_TOKEN_PASTE.txt`, tokens, or `data/`
+- Use Docker for this stack
+- Steal port `8765` (Robinhood)
+- Wipe Hermes durable memory / reuse Jarvis bot token
+- Invent green checks — re-probe `/status` + portal when updating this file
