@@ -65,6 +65,9 @@ __all__ = [
     "get_tailscale_ipv4",
     "install_requirements",
     "install_torch_cuda",
+    "install_joiner_deps",
+    "check_prereqs",
+    "script_paths",
     "is_worker_running",
     "load_joiner_settings",
     "open_portal_url",
@@ -72,12 +75,35 @@ __all__ = [
     "save_joiner_settings",
     "wait_for_worker_online",
     "worker_runtime_status",
+    # Utilize (consume) pool
+    "list_allowed_jobs",
+    "submit_job",
+    "get_job",
+    "wait_for_job",
+    "pool_status",
+    "get_utilize_helper_text",
+    "get_connect_from_code_text",
+    "open_repo_doc",
+    "discord_slash_for_job",
+    "CONNECTING_DOC",
+    "CODING_AGENT_EXAMPLE",
+    "LOCAL_OFFLOAD_DOC",
 ]
 
 PID_FILE = ROOT / "data" / "joiner_worker.pid"
 LOG_FILE = ROOT / "data" / "joiner_worker.log"
 JOINER_WORKER_ID_FILE = ROOT / "data" / "joiner_worker_id.txt"
 ENV_FILE = ROOT / ".env"
+
+# One-stop wizard helper scripts (Windows). Prefer these paths from the UI/CLI.
+SCRIPTS_DIR = ROOT / "scripts"
+SCRIPT_CHECK_PREREQS = SCRIPTS_DIR / "check_prereqs.ps1"
+SCRIPT_INSTALL_JOINER_DEPS = SCRIPTS_DIR / "install_joiner_deps.ps1"
+SCRIPT_CHECK_PREREQS_CMD = SCRIPTS_DIR / "check_prereqs.cmd"
+SCRIPT_INSTALL_JOINER_DEPS_CMD = SCRIPTS_DIR / "install_joiner_deps.cmd"
+CONNECTING_DOC = ROOT / "CONNECTING.md"
+CODING_AGENT_EXAMPLE = ROOT / "examples" / "coding_agent_pool.py"
+LOCAL_OFFLOAD_DOC = ROOT / "examples" / "ollama_or_local_offload.md"
 
 # Keys we may sync into .env — never touch Discord/bot secrets.
 _SAFE_ENV_KEYS = (
@@ -542,6 +568,207 @@ def install_torch_cuda(*, index_url: str = "https://download.pytorch.org/whl/cu1
     }
 
 
+def script_paths() -> dict[str, str]:
+    """Documented paths the wizard / operators can invoke on Windows."""
+    return {
+        "scripts_dir": str(SCRIPTS_DIR),
+        "check_prereqs_ps1": str(SCRIPT_CHECK_PREREQS),
+        "check_prereqs_cmd": str(SCRIPT_CHECK_PREREQS_CMD),
+        "install_joiner_deps_ps1": str(SCRIPT_INSTALL_JOINER_DEPS),
+        "install_joiner_deps_cmd": str(SCRIPT_INSTALL_JOINER_DEPS_CMD),
+    }
+
+
+def _run_powershell(script: Path, args: list[str] | None = None, timeout: float = 600.0) -> dict[str, Any]:
+    """Run a repo PowerShell helper; return ok/code/stdout/stderr (never touches Discord)."""
+    if not script.is_file():
+        return {
+            "ok": False,
+            "code": 127,
+            "stdout": "",
+            "stderr": f"Missing script: {script}",
+            "script": str(script),
+        }
+    cmd = [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(script),
+    ]
+    if args:
+        cmd.extend(args)
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            cwd=str(ROOT),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "code": -1, "stdout": "", "stderr": str(exc), "script": str(script)}
+    return {
+        "ok": proc.returncode == 0,
+        "code": proc.returncode,
+        "stdout": proc.stdout or "",
+        "stderr": proc.stderr or "",
+        "script": str(script),
+    }
+
+
+def _parse_json_tail(text: str) -> Any | None:
+    blob = (text or "").strip()
+    if not blob:
+        return None
+    # Scripts may print progress lines before the JSON object.
+    start = blob.find("{")
+    end = blob.rfind("}")
+    if start < 0 or end < start:
+        return None
+    try:
+        return json.loads(blob[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+
+
+def check_prereqs(
+    scheduler_url: str | None = None,
+    *,
+    min_disk_gb: float = 5.0,
+    prefer_script: bool = True,
+) -> dict[str, Any]:
+    """
+    One-stop prereq probe: python, nvidia-smi, scheduler reachable, disk space.
+    Prefer scripts/check_prereqs.ps1; fall back to in-process checks.
+    """
+    url = (scheduler_url or load_joiner_settings().scheduler_url or DEFAULT_LOCAL_SCHEDULER_URL).rstrip("/")
+
+    if prefer_script and SCRIPT_CHECK_PREREQS.is_file():
+        raw = _run_powershell(
+            SCRIPT_CHECK_PREREQS,
+            args=["-SchedulerUrl", url, "-MinDiskGb", str(min_disk_gb), "-Json"],
+            timeout=60.0,
+        )
+        parsed = _parse_json_tail(raw.get("stdout") or "")
+        if isinstance(parsed, dict):
+            parsed.setdefault("source", "scripts/check_prereqs.ps1")
+            parsed.setdefault("script", script_paths())
+            return parsed
+
+    # In-process fallback (same fields; real probes)
+    py_ok = True
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    nvidia = check_nvidia()
+    sched = fetch_scheduler_status(url, timeout=5.0)
+    host = detect_host_resources()
+    free_gb = float(host.get("free_disk_gb") or 0)
+    disk_ok = free_gb >= float(min_disk_gb)
+    overall = bool(py_ok and nvidia.get("ok") and sched.get("ok") and disk_ok)
+    gpus_raw = detect_gpus().get("gpus") or []
+    gpu_names = [
+        (g.get("name", str(g)) if isinstance(g, dict) else str(g)) for g in gpus_raw
+    ]
+    return {
+        "ok": overall,
+        "repo_root": str(ROOT),
+        "python": {"ok": py_ok, "exe": sys.executable, "version": py_ver, "path": sys.executable},
+        "nvidia_smi": {
+            "ok": bool(nvidia.get("ok")),
+            "path": nvidia.get("path") or "",
+            "message": nvidia.get("message") or "",
+            "gpus": gpu_names,
+        },
+        "scheduler": {
+            "ok": bool(sched.get("ok")),
+            "url": sched.get("url") or url,
+            "message": "Scheduler reachable" if sched.get("ok") else (sched.get("error") or "unreachable"),
+        },
+        "disk": {
+            "ok": disk_ok,
+            "free_gb": free_gb,
+            "total_gb": float(host.get("total_disk_gb") or 0),
+            "min_disk_gb": min_disk_gb,
+            "message": f"Disk {'OK' if disk_ok else 'LOW'}: {free_gb} GiB free",
+        },
+        "source": "app_backend.check_prereqs",
+        "script": script_paths(),
+    }
+
+
+def install_joiner_deps(
+    *,
+    with_torch_cuda: bool = False,
+    force: bool = False,
+    prefer_script: bool = True,
+    timeout: float = 900.0,
+) -> dict[str, Any]:
+    """
+    Idempotent joiner dependency install.
+    Prefer scripts/install_joiner_deps.ps1; fall back to install_requirements().
+    Optional torch CUDA is only installed when with_torch_cuda=True.
+    """
+    if prefer_script and SCRIPT_INSTALL_JOINER_DEPS.is_file():
+        args: list[str] = []
+        if with_torch_cuda:
+            args.append("-WithTorchCuda")
+        if force:
+            args.append("-Force")
+        raw = _run_powershell(SCRIPT_INSTALL_JOINER_DEPS, args=args, timeout=timeout)
+        parsed = _parse_json_tail(raw.get("stdout") or "")
+        if isinstance(parsed, dict):
+            parsed.setdefault("source", "scripts/install_joiner_deps.ps1")
+            parsed.setdefault("script", script_paths())
+            parsed["raw_code"] = raw.get("code")
+            return parsed
+        if raw.get("ok"):
+            return {
+                "ok": True,
+                "message": (raw.get("stdout") or "")[-800:] or "install script OK",
+                "source": "scripts/install_joiner_deps.ps1",
+                "script": script_paths(),
+            }
+        return {
+            "ok": False,
+            "message": (raw.get("stderr") or raw.get("stdout") or "install script failed")[-800:],
+            "code": raw.get("code"),
+            "source": "scripts/install_joiner_deps.ps1",
+            "script": script_paths(),
+        }
+
+    base = install_requirements()
+    result: dict[str, Any] = {
+        "ok": bool(base.get("ok")),
+        "message": base.get("message"),
+        "skipped": base.get("skipped"),
+        "actions": ["install_requirements_fallback"],
+        "with_torch_cuda": with_torch_cuda,
+        "source": "app_backend.install_requirements",
+        "script": script_paths(),
+    }
+    if with_torch_cuda:
+        try:
+            import torch  # type: ignore
+
+            cuda_ok = bool(torch.cuda.is_available())
+            result["torch"] = {"ok": cuda_ok, "message": f"torch {torch.__version__} cuda={cuda_ok}"}
+            if not cuda_ok:
+                result["ok"] = False
+                result["message"] = (
+                    (result.get("message") or "")
+                    + " | torch present but CUDA unavailable — re-run scripts/install_joiner_deps.ps1 -WithTorchCuda"
+                )
+        except ImportError:
+            result["ok"] = False
+            result["torch"] = {"ok": False, "message": "torch not installed"}
+            result["message"] = (
+                (result.get("message") or "")
+                + " | torch missing — run scripts/install_joiner_deps.ps1 -WithTorchCuda"
+            )
+    return result
+
 def fetch_scheduler_status(scheduler_url: str | None = None, timeout: float = 5.0) -> dict[str, Any]:
     """GET /status from scheduler. Real HTTP — no mocks."""
     import httpx
@@ -944,25 +1171,311 @@ def get_status() -> dict[str, Any]:
     }
 
 
+def list_allowed_jobs() -> list[dict[str, Any]]:
+    """Safe allowlisted job catalog for Utilize UI (no arbitrary shell)."""
+    from gpu_swarm import ALLOWED_JOB_TYPES
+
+    catalog = [
+        {
+            "job_type": "probe",
+            "title": "GPU probe",
+            "summary": "Live nvidia-smi inventory from an online worker. Proves network + lease path.",
+            "require_gpu": False,
+            "discord": "/submit_probe",
+            "safe": True,
+        },
+        {
+            "job_type": "pytorch_cuda_probe",
+            "title": "CUDA matmul probe",
+            "summary": "Small real PyTorch CUDA matmul on a worker GPU (falls back to CPU note if no CUDA).",
+            "require_gpu": True,
+            "discord": "/submit_compute",
+            "safe": True,
+            "payload_defaults": {"matrix_size": 1024},
+        },
+    ]
+    return [j for j in catalog if j["job_type"] in ALLOWED_JOB_TYPES]
+
+
+def pool_status(scheduler_url: str | None = None, timeout: float = 5.0) -> dict[str, Any]:
+    """Utilize view: workers online, GPUs, CPU/RAM/disk ads, job counts."""
+    fetched = fetch_scheduler_status(scheduler_url, timeout=timeout)
+    data = fetched.get("data") or {}
+    workers = data.get("workers") or []
+    online = [w for w in workers if w.get("online") or str(w.get("status", "")).lower() in ("online", "busy")]
+    return {
+        "ok": bool(fetched.get("ok")),
+        "url": fetched.get("url") or "",
+        "error": fetched.get("error") or "",
+        "workers_online": int(data.get("workers_online") or len(online)),
+        "workers_total": int(data.get("workers_total") or len(workers)),
+        "free_vram_mb": int(data.get("free_vram_mb") or 0),
+        "total_vram_mb": int(data.get("total_vram_mb") or 0),
+        "cpu_cores": int(data.get("cpu_cores") or 0),
+        "ram_available_mb": int(data.get("ram_available_mb") or 0),
+        "ram_total_mb": int(data.get("ram_total_mb") or 0),
+        "disk_free_mb": int(data.get("disk_free_mb") or 0),
+        "dedicated_ram_mb": int(data.get("dedicated_ram_mb") or 0),
+        "dedicated_disk_mb": int(data.get("dedicated_disk_mb") or 0),
+        "gpus": list(data.get("gpus") or []),
+        "jobs": dict(data.get("jobs") or {}),
+        "workers": workers,
+        "capacity_note": data.get("capacity_note")
+        or (
+            "v1 contributes compute to JOBS (GPU/CPU). RAM/SSD figures are capacity "
+            "advertisements — not a literal distributed filesystem yet."
+        ),
+        "allowed_jobs": list_allowed_jobs(),
+    }
+
+
+def submit_job(
+    job_type: str,
+    *,
+    scheduler_url: str | None = None,
+    payload: dict[str, Any] | None = None,
+    submitted_by: str | None = None,
+    min_vram_mb: int = 0,
+    require_gpu: bool | None = None,
+    timeout: float = 30.0,
+) -> dict[str, Any]:
+    """POST allowlisted job to live scheduler. Real HTTP — no mocks."""
+    import httpx
+    from gpu_swarm import ALLOWED_JOB_TYPES
+
+    jt = (job_type or "").strip()
+    if jt not in ALLOWED_JOB_TYPES:
+        return {
+            "ok": False,
+            "error": f"job_type not allowlisted. Allowed: {sorted(ALLOWED_JOB_TYPES)}",
+            "job": None,
+        }
+
+    settings = load_joiner_settings()
+    base = (scheduler_url or settings.scheduler_url or DEFAULT_LOCAL_SCHEDULER_URL).rstrip("/")
+    body_payload = dict(payload or {})
+    if jt == "pytorch_cuda_probe" and "matrix_size" not in body_payload:
+        body_payload["matrix_size"] = 1024
+    gpu_required = bool(require_gpu) if require_gpu is not None else (jt == "pytorch_cuda_probe")
+    by = (submitted_by or settings.discord_user or settings.worker_name or "desktop-app").strip()
+    body = {
+        "job_type": jt,
+        "payload": body_payload,
+        "require_gpu": gpu_required,
+        "min_vram_mb": int(min_vram_mb or 0),
+        "submitted_by": by,
+    }
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            r = client.post(f"{base}/jobs", json=body)
+            if r.status_code >= 400:
+                detail = ""
+                try:
+                    detail = str(r.json().get("detail") or r.text)
+                except Exception:  # noqa: BLE001
+                    detail = r.text
+                return {
+                    "ok": False,
+                    "error": detail or f"HTTP {r.status_code}",
+                    "job": None,
+                    "url": base,
+                }
+            job = r.json()
+        return {
+            "ok": True,
+            "error": "",
+            "job": job,
+            "job_id": job.get("id"),
+            "url": base,
+            "message": f"Queued {jt} job {job.get('id')}",
+            "discord": discord_slash_for_job(jt, job.get("id")),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc), "job": None, "url": base}
+
+
+def get_job(job_id: str, *, scheduler_url: str | None = None, timeout: float = 15.0) -> dict[str, Any]:
+    """GET job status/result from live scheduler."""
+    import httpx
+
+    jid = (job_id or "").strip()
+    if not jid:
+        return {"ok": False, "error": "job_id required", "job": None}
+    settings = load_joiner_settings()
+    base = (scheduler_url or settings.scheduler_url or DEFAULT_LOCAL_SCHEDULER_URL).rstrip("/")
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            r = client.get(f"{base}/jobs/{jid}")
+            if r.status_code == 404:
+                return {"ok": False, "error": "job not found", "job": None, "url": base}
+            r.raise_for_status()
+            job = r.json()
+        return {
+            "ok": True,
+            "error": "",
+            "job": job,
+            "job_id": job.get("id") or jid,
+            "status": job.get("status"),
+            "url": base,
+            "discord": discord_slash_for_job(str(job.get("job_type") or ""), jid),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc), "job": None, "url": base}
+
+
+def wait_for_job(
+    job_id: str,
+    *,
+    scheduler_url: str | None = None,
+    timeout_sec: float = 90.0,
+    poll_sec: float = 1.0,
+) -> dict[str, Any]:
+    """Poll get_job until completed/failed or timeout."""
+    deadline = time.time() + max(1.0, timeout_sec)
+    last: dict[str, Any] = {}
+    while time.time() < deadline:
+        last = get_job(job_id, scheduler_url=scheduler_url)
+        if not last.get("ok"):
+            return last
+        st = str((last.get("job") or {}).get("status") or "")
+        if st in ("completed", "failed"):
+            last["finished"] = True
+            last["ok"] = st == "completed"
+            if st == "failed":
+                last["error"] = (last.get("job") or {}).get("error") or "job failed"
+            return last
+        time.sleep(max(0.2, poll_sec))
+    last = last or get_job(job_id, scheduler_url=scheduler_url)
+    last["finished"] = False
+    last["ok"] = False
+    last["error"] = last.get("error") or f"timeout waiting for job {job_id}"
+    return last
+
+
+def discord_slash_for_job(job_type: str, job_id: str | None = None) -> str:
+    jt = (job_type or "").strip()
+    if jt == "probe":
+        submit = "/submit_probe"
+    elif jt == "pytorch_cuda_probe":
+        submit = "/submit_compute"
+    else:
+        submit = f"(allowlisted: {jt or 'n/a'})"
+    lines = [submit]
+    if job_id:
+        lines.append(f"/job_status {job_id}")
+    return "\n".join(lines)
+
+
+def get_utilize_helper_text() -> str:
+    jobs = list_allowed_jobs()
+    lines = [
+        "What can I run on the pool?",
+        "",
+        "Only allowlisted jobs — no arbitrary shell from the app, Discord, or portal.",
+        "",
+    ]
+    for j in jobs:
+        lines.append(f"• {j['title']} (`{j['job_type']}`)")
+        lines.append(f"  {j['summary']}")
+        lines.append(f"  Discord: {j.get('discord')}")
+        lines.append("")
+    lines += [
+        "Pool status Discord: /pool  ·  /workers",
+        "Job check: /job_status <id>",
+        "",
+        "RAM/SSD numbers are capacity ads for scheduling — not a shared drive/memory pool.",
+    ]
+    return "\n".join(lines)
+
+
+def open_repo_doc(path: str | Path) -> dict[str, Any]:
+    """Open a repo doc/example in the OS default app (editor / notepad / browser)."""
+    import webbrowser
+
+    p = Path(path)
+    if not p.is_file():
+        return {"ok": False, "path": str(p), "message": f"Missing file: {p}"}
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(p))  # type: ignore[attr-defined]
+        else:
+            webbrowser.open(p.as_uri())
+        return {"ok": True, "path": str(p), "message": f"Opened {p.name}"}
+    except OSError as exc:
+        return {"ok": False, "path": str(p), "message": str(exc)}
+
+
+def get_connect_from_code_text(scheduler_url: str | None = None) -> str:
+    """Snippets pointing at CONNECTING.md + examples/coding_agent_pool.py."""
+    settings = load_joiner_settings()
+    base = (scheduler_url or settings.scheduler_url or DEFAULT_SCHEDULER_URL).rstrip("/")
+    hints = get_portal_hints()
+    portal = hints.get("tailscale_url") or DEFAULT_PORTAL_URL
+    doc = CONNECTING_DOC
+    example = CODING_AGENT_EXAMPLE
+    offload = LOCAL_OFFLOAD_DOC
+    return (
+        "# Connect from code — verified paths\n"
+        "\n"
+        f"Docs:     {doc}\n"
+        f"Example:  {example}\n"
+        f"Local LLMs: {offload}  (Ollama/LM Studio stay local; pool = allowlisted jobs)\n"
+        "\n"
+        f"GPU_SWARM_SCHEDULER_URL={base}\n"
+        f"Portal (Tailscale): {portal}\n"
+        f"Invite: {PORTAL_INVITE_CODE}\n"
+        "\n"
+        "# 1) Python SDK (same HTTP: POST /jobs, GET /status)\n"
+        "from gpu_swarm.client import GPUPool\n"
+        f'pool = GPUPool("{base}")\n'
+        "print(pool.status()[\"workers_online\"])\n"
+        "print(pool.submit_probe(wait=True)[\"status\"])\n"
+        "\n"
+        "# 2) Coding-agent helper (stdlib only)\n"
+        "cd /d C:\\Users\\Drew\\Projects\\gpu-swarm\n"
+        f"set GPU_SWARM_SCHEDULER_URL={base}\n"
+        "python examples\\coding_agent_pool.py --status-only\n"
+        "python examples\\coding_agent_pool.py --job probe\n"
+        "python examples\\use_pool_from_script.py --cuda\n"
+        "\n"
+        "# 3) CLI utilize\n"
+        "python -m gpu_swarm utilize status\n"
+        "python -m gpu_swarm utilize probe --wait\n"
+        "python -m gpu_swarm utilize cuda --wait\n"
+        "\n"
+        "# 4) HTTP (any language)\n"
+        f"GET  {base}/status\n"
+        f"POST {base}/jobs   body: {{\"job_type\":\"probe\",\"payload\":{{}},\"submitted_by\":\"my-tool\"}}\n"
+        f"GET  {base}/jobs/<id>\n"
+        "\n"
+        "# Read the full Contribute / Utilize / Connect map:\n"
+        "  CONNECTING.md\n"
+        "# Do not expose the scheduler to the public internet. No Docker. No arbitrary shell.\n"
+    )
+
+
 def get_discord_helper_text() -> str:
     hints = get_portal_hints()
     return (
         "Glitch Factor — GPU Pool Discord commands\n"
         "\n"
+        "Contribute (join the pool):\n"
+        "  /contribute   How to contribute / soft caps\n"
+        "\n"
+        "Utilize (send work to the pool):\n"
         "  /pool         Pool overview (workers + VRAM + host metrics)\n"
         "  /workers      List workers\n"
-        "  /contribute   How to contribute / soft caps\n"
         "  /submit_probe Submit a live GPU probe job\n"
         "  /submit_compute  CUDA matmul probe\n"
         "  /job_status   Check a job by id\n"
         "\n"
-        "Easiest remote path: open the web portal in a browser.\n"
+        "Desktop app modes: Contribute (Join/Leave) · Utilize (submit jobs)\n"
+        "Browser portal: login → Live pool + Utilize section\n"
         f"  Local:     {hints['local_url']}\n"
         f"  Tailscale: {hints['tailscale_url']}\n"
         f"  Invite:    {hints['invite_code']}  (pool password stays in .env — not shown)\n"
         "\n"
-        "This desktop app is the power-user native joiner (local caps + Join/Leave).\n"
-        "CLI path: see DISCORD_MEMBER_QUICKSTART.md\n"
+        "CLI: python -m gpu_swarm submit probe|pytorch_cuda_probe --wait\n"
         "Do not expose the scheduler to the public internet."
     )
 

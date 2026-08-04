@@ -1,8 +1,9 @@
 @echo off
 setlocal
-REM GPU Pool — idempotent joiner deps installer (wrapper for PowerShell)
-REM Usage: install_joiner_deps.cmd [--with-torch-cuda] [--force] [--quiet]
-cd /d "%~dp0.."
+REM GPU Pool idempotent joiner deps installer
+REM Usage: scripts\install_joiner_deps.cmd [--with-torch-cuda] [--force] [--quiet]
+set "SCRIPT_DIR=%~dp0"
+cd /d "%SCRIPT_DIR%.."
 set "ARGS="
 :parse
 if "%~1"=="" goto run
@@ -13,5 +14,5 @@ if /I "%~1"=="--quiet" set "ARGS=%ARGS% -Quiet" & shift & goto parse
 echo Unknown arg: %~1
 exit /b 2
 :run
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install_joiner_deps.ps1" %ARGS%
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%install_joiner_deps.ps1" %ARGS%
 exit /b %ERRORLEVEL%

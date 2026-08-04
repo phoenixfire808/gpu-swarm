@@ -1,8 +1,8 @@
 """
-GPU Pool desktop joiner — customtkinter UI (Worker 1).
+GPU Pool desktop joiner — customtkinter UI.
 
-Calls only gpu_swarm.app_backend stable APIs.
-Browser portal = easiest remote path; this app = power-user native joiner.
+One-stop setup wizard + main Join/Leave control.
+Calls only gpu_swarm.app_backend stable APIs (no mocks).
 """
 
 from __future__ import annotations
@@ -14,6 +14,13 @@ from typing import Any, Callable
 import customtkinter as ctk
 
 from gpu_swarm import app_backend as be
+from gpu_swarm.joiner_settings import (
+    DEFAULT_LOCAL_PORTAL_URL,
+    DEFAULT_LOCAL_SCHEDULER_URL,
+    DEFAULT_PORTAL_URL,
+    DEFAULT_SCHEDULER_URL,
+    PORTAL_INVITE_CODE,
+)
 
 APP_TITLE = "GPU Pool"
 ACCENT = "#2DD4A8"
@@ -36,9 +43,9 @@ def run_app() -> int:
 class GpuPoolApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
-        self.title(f"{APP_TITLE} — Native Joiner")
-        self.geometry("980x720")
-        self.minsize(860, 640)
+        self.title(f"{APP_TITLE} — Contribute & Utilize")
+        self.geometry("1080x780")
+        self.minsize(920, 700)
         self.configure(fg_color=BG)
 
         self.settings = be.load_config()
@@ -54,8 +61,6 @@ class GpuPoolApp(ctk.CTk):
             self._show_main()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-
-    # --- navigation ------------------------------------------------------------
 
     def _clear(self) -> None:
         for child in self._container.winfo_children():
@@ -83,12 +88,12 @@ class GpuPoolApp(ctk.CTk):
 
 
 # =============================================================================
-# Setup wizard
+# Setup wizard — one-stop installer / onboarding
 # =============================================================================
 
 
 class WizardFrame(ctk.CTkFrame):
-    STEPS = ("Welcome", "Hardware", "Deps", "Identity", "Connect", "Caps")
+    STEPS = ("Welcome", "Python & Deps", "Hardware", "Identity", "Connect", "Caps", "Join")
 
     def __init__(self, master: Any, app: GpuPoolApp, on_done: Callable[[], None]) -> None:
         super().__init__(master, fg_color=BG)
@@ -98,6 +103,7 @@ class WizardFrame(ctk.CTkFrame):
         self.settings = be.load_config()
         self._gpu_info: dict[str, Any] = {}
         self._host_info: dict[str, Any] = {}
+        self._join_busy = False
         self._build()
         self._render_step()
 
@@ -123,7 +129,7 @@ class WizardFrame(ctk.CTkFrame):
         self.back_btn = ctk.CTkButton(nav, text="Back", width=110, command=self._back, fg_color="#2A3544")
         self.back_btn.pack(side="left", padx=24, pady=14)
         self.next_btn = ctk.CTkButton(
-            nav, text="Next", width=140, command=self._next, fg_color=ACCENT, text_color="#0A1210"
+            nav, text="Next", width=160, command=self._next, fg_color=ACCENT, text_color="#0A1210"
         )
         self.next_btn.pack(side="right", padx=24, pady=14)
 
@@ -133,71 +139,275 @@ class WizardFrame(ctk.CTkFrame):
         name = self.STEPS[self.step]
         self.step_label.configure(text=f"Step {self.step + 1} / {len(self.STEPS)} — {name}")
         self.back_btn.configure(state="normal" if self.step > 0 else "disabled")
-        self.next_btn.configure(text="Finish" if self.step == len(self.STEPS) - 1 else "Next")
+        last = self.step == len(self.STEPS) - 1
+        self.next_btn.configure(text="Open control panel" if last else "Next")
+        if last:
+            # Join step owns its primary action; Next just exits wizard after save.
+            self.next_btn.configure(text="Done → control panel")
 
         {
             0: self._step_welcome,
-            1: self._step_hardware,
-            2: self._step_deps,
+            1: self._step_deps,
+            2: self._step_hardware,
             3: self._step_identity,
             4: self._step_connect,
             5: self._step_caps,
+            6: self._step_join,
         }[self.step]()
 
     def _title(self, text: str, sub: str = "") -> None:
         ctk.CTkLabel(self.body, text=text, font=ctk.CTkFont(size=20, weight="bold")).pack(anchor="w")
         if sub:
-            ctk.CTkLabel(self.body, text=sub, text_color=MUTED, wraplength=820, justify="left").pack(
+            ctk.CTkLabel(self.body, text=sub, text_color=MUTED, wraplength=860, justify="left").pack(
                 anchor="w", pady=(6, 14)
             )
+
+    def _log_box(self, height: int = 160) -> ctk.CTkTextbox:
+        box = ctk.CTkTextbox(self.body, height=height, fg_color=PANEL)
+        box.pack(fill="both", expand=True, pady=8)
+        return box
+
+    def _append_log(self, box: ctk.CTkTextbox, text: str) -> None:
+        box.insert("end", text if text.endswith("\n") else text + "\n")
+        box.see("end")
+
+    # --- steps ----------------------------------------------------------------
 
     def _step_welcome(self) -> None:
         self._title(
             "Welcome to GPU Pool",
-            "Plug spare GPUs, RAM, CPU, and disk into Drew's private co-op pool.",
+            "One-stop setup for both modes: Contribute (join with your GPU) and Utilize (send jobs to the pool).",
         )
+        modes = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
+        modes.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(
+            modes,
+            text="Two modes after setup",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=ACCENT,
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+        ctk.CTkLabel(
+            modes,
+            text=(
+                "• Contribute — install deps, set caps, Join/Leave as a worker\n"
+                "• Utilize — view pool status and submit allowlisted jobs (probe, CUDA matmul)"
+            ),
+            text_color=MUTED,
+            justify="left",
+            wraplength=820,
+        ).pack(anchor="w", padx=16, pady=(0, 14))
+
+        hints = be.get_portal_hints()
         banner = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
         banner.pack(fill="x", pady=8)
         ctk.CTkLabel(
             banner,
-            text="Easiest remote path: the web portal (browser login + dynamic machines).",
+            text="Easiest remote path: the browser portal",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=ACCENT,
-            wraplength=800,
-            justify="left",
         ).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(
             banner,
             text=(
-                "This desktop app is the power-user native joiner: local nvidia-smi detection, "
-                "fine-grained dedication sliders, and one-click Join/Leave for a host worker."
+                f"Live portal: {hints.get('url')}\n"
+                f"Local: {hints.get('local_url')}   ·   Tailscale: {hints.get('tailscale_url')}\n"
+                f"Invite code: {PORTAL_INVITE_CODE}  (pool password is in .env — not shown here)"
             ),
             text_color=MUTED,
-            wraplength=800,
             justify="left",
+            wraplength=820,
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+        reach = "reachable" if hints.get("reachable") else "not reachable yet — start-portal.cmd"
+        ctk.CTkLabel(
+            banner,
+            text=f"Portal status: {reach}",
+            text_color=OK_GREEN if hints.get("reachable") else WARN,
         ).pack(anchor="w", padx=16, pady=(0, 14))
 
-        portal = be.get_portal_url(self.settings)
+        # Prefer live resolved URL in the entry
+        portal = hints.get("url") or DEFAULT_LOCAL_PORTAL_URL
+        self.settings.portal_url = portal
+
         row = ctk.CTkFrame(self.body, fg_color="transparent")
-        row.pack(fill="x", pady=12)
-        ctk.CTkLabel(row, text=f"Portal: {portal}", text_color=MUTED).pack(side="left")
+        row.pack(fill="x", pady=8)
         ctk.CTkButton(
             row,
             text="Open portal",
-            width=130,
+            width=140,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=self._open_portal_wizard,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Use local portal",
+            width=140,
             fg_color="#2A3544",
-            command=lambda: be.open_portal_url(self.portal_entry.get() if hasattr(self, "portal_entry") else portal),
-        ).pack(side="right")
+            command=lambda: self._set_portal(DEFAULT_LOCAL_PORTAL_URL),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Use Tailscale portal",
+            width=160,
+            fg_color="#2A3544",
+            command=lambda: self._set_portal(DEFAULT_PORTAL_URL),
+        ).pack(side="left")
 
         ctk.CTkLabel(self.body, text="Portal URL (editable)", text_color=MUTED).pack(anchor="w", pady=(8, 2))
         self.portal_entry = ctk.CTkEntry(self.body, height=36)
         self.portal_entry.pack(fill="x")
         self.portal_entry.insert(0, portal)
 
+        py = be.check_python()
+        py_frame = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=8)
+        py_frame.pack(fill="x", pady=14)
+        ctk.CTkLabel(
+            py_frame,
+            text=f"Python: {'OK' if py.get('ok') else 'NEEDS FIX'} — {py.get('message')}",
+            text_color=OK_GREEN if py.get("ok") else DANGER,
+            wraplength=820,
+            justify="left",
+        ).pack(anchor="w", padx=14, pady=12)
+        if py.get("fix"):
+            ctk.CTkLabel(
+                py_frame,
+                text=f"Fix: {py['fix']}",
+                text_color=WARN,
+                wraplength=820,
+                justify="left",
+            ).pack(anchor="w", padx=14, pady=(0, 12))
+
+    def _set_portal(self, url: str) -> None:
+        if hasattr(self, "portal_entry"):
+            self.portal_entry.delete(0, "end")
+            self.portal_entry.insert(0, url)
+
+    def _open_portal_wizard(self) -> None:
+        url = self.portal_entry.get().strip() if hasattr(self, "portal_entry") else ""
+        if not url:
+            url = be.resolve_portal_url().get("url") or DEFAULT_LOCAL_PORTAL_URL
+        result = be.open_portal_url(url)
+        # Surface result in a transient label if present
+        msg = result.get("message") or ""
+        if hasattr(self, "portal_entry"):
+            # keep entry synced to what we opened
+            opened = result.get("url") or url
+            self.portal_entry.delete(0, "end")
+            self.portal_entry.insert(0, opened)
+        self.settings.portal_url = (result.get("url") or url).strip()
+        be.save_config(self.settings)
+
+    def _step_deps(self) -> None:
+        self._title(
+            "Python dependencies",
+            "Install/repair from requirements.txt. Skips a full reinstall when everything is already present. "
+            "CUDA PyTorch is optional and only downloads after you click the button.",
+        )
+        py = be.check_python()
+        ctk.CTkLabel(
+            self.body,
+            text=py.get("message") or "",
+            text_color=OK_GREEN if py.get("ok") else DANGER,
+        ).pack(anchor="w")
+
+        status = be.check_python_deps()
+        msg = (
+            "All required packages present."
+            if status.get("ok")
+            else f"Missing: {', '.join(status.get('missing') or [])}"
+        )
+        self.deps_status_lbl = ctk.CTkLabel(
+            self.body,
+            text=msg,
+            text_color=OK_GREEN if status.get("ok") else WARN,
+            font=ctk.CTkFont(size=14),
+        )
+        self.deps_status_lbl.pack(anchor="w", pady=8)
+
+        torch = be.check_torch_cuda()
+        self.torch_lbl = ctk.CTkLabel(
+            self.body,
+            text=f"PyTorch (optional): {torch.get('message')}",
+            text_color=OK_GREEN if torch.get("cuda") else MUTED,
+            wraplength=860,
+            justify="left",
+        )
+        self.torch_lbl.pack(anchor="w", pady=(0, 6))
+
+        self.deps_log = self._log_box(200)
+        self._append_log(self.deps_log, "Ready. Click Install if anything is missing.\n")
+        if status.get("fix"):
+            self._append_log(self.deps_log, f"Fix if install fails:\n{status['fix']}\n")
+
+        row = ctk.CTkFrame(self.body, fg_color="transparent")
+        row.pack(fill="x", pady=6)
+        ctk.CTkButton(
+            row,
+            text="Install / repair requirements.txt",
+            command=self._install_deps,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Install CUDA PyTorch (large download)",
+            command=self._install_torch,
+            fg_color="#2A3544",
+        ).pack(side="left")
+
+    def _install_deps(self) -> None:
+        self.deps_log.delete("1.0", "end")
+        self._append_log(self.deps_log, "Checking deps / installing missing packages…\n")
+
+        def work() -> None:
+            result = be.install_requirements()
+            self.after(0, lambda: self._deps_done(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _deps_done(self, result: dict[str, Any]) -> None:
+        self._append_log(self.deps_log, result.get("message") or str(result))
+        if result.get("fix"):
+            self._append_log(self.deps_log, f"\nFIX:\n{result['fix']}\n")
+        status = be.check_python_deps()
+        self.deps_status_lbl.configure(
+            text=(
+                "All required packages present."
+                if status.get("ok")
+                else f"Missing: {', '.join(status.get('missing') or [])}"
+            ),
+            text_color=OK_GREEN if status.get("ok") else DANGER,
+        )
+        if result.get("ok"):
+            self._append_log(self.deps_log, "\nDeps OK.\n")
+        else:
+            self._append_log(self.deps_log, "\nDeps FAILED — see FIX above.\n")
+
+    def _install_torch(self) -> None:
+        self._append_log(
+            self.deps_log,
+            "\n--- CUDA PyTorch install (optional, large download) — starting… ---\n",
+        )
+
+        def work() -> None:
+            result = be.install_torch_cuda()
+            self.after(0, lambda: self._torch_done(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _torch_done(self, result: dict[str, Any]) -> None:
+        self._append_log(self.deps_log, result.get("message") or str(result))
+        if result.get("fix"):
+            self._append_log(self.deps_log, f"\nFIX:\n{result['fix']}\n")
+        torch = be.check_torch_cuda()
+        self.torch_lbl.configure(
+            text=f"PyTorch (optional): {torch.get('message')}",
+            text_color=OK_GREEN if torch.get("cuda") else MUTED,
+        )
+
     def _step_hardware(self) -> None:
-        self._title("Detect hardware", "Live nvidia-smi + host RAM/disk (no mock data).")
-        self.hw_box = ctk.CTkTextbox(self.body, height=280, fg_color=PANEL)
-        self.hw_box.pack(fill="both", expand=True, pady=8)
+        self._title("Detect hardware", "Live nvidia-smi + host CPU/RAM/disk (no mock data).")
+        self.hw_box = self._log_box(320)
         ctk.CTkButton(self.body, text="Refresh detection", command=self._scan_hw, fg_color="#2A3544").pack(
             anchor="e", pady=6
         )
@@ -228,54 +438,26 @@ class WizardFrame(ctk.CTkFrame):
                 f"  [{g.get('index')}] {g.get('name')} — "
                 f"{g.get('memory_total_mb')} MiB total / {g.get('memory_free_mb')} MiB free"
             )
-        if not gpus and not nv.get("ok"):
-            lines.append("GPU error: nvidia-smi unavailable (via app_backend.get_gpus)")
+        if not nv.get("ok"):
+            lines += [
+                "",
+                "FIX: Install NVIDIA Game Ready / Studio drivers so nvidia-smi works,",
+                "then re-open this wizard and click Refresh detection.",
+                "CPU-only contribution still works, but GPU jobs need drivers.",
+            ]
+        elif not gpus:
+            lines += ["", "FIX: nvidia-smi is present but returned no GPUs — check Device Manager."]
         lines += [
             "",
-            f"RAM total/avail: {self._host_info.get('total_ram_mb', 0)} / "
+            f"Host RAM total/avail: {self._host_info.get('total_ram_mb', 0)} / "
             f"{self._host_info.get('avail_ram_mb', 0)} MiB",
-            f"Disk total/free: {self._host_info.get('total_disk_gb', 0)} / "
+            f"Host Disk total/free: {self._host_info.get('total_disk_gb', 0)} / "
             f"{self._host_info.get('free_disk_gb', 0)} GiB",
         ]
         if self._host_info.get("error"):
             lines.append(f"Host note: {self._host_info['error']}")
         self.hw_box.delete("1.0", "end")
         self.hw_box.insert("1.0", "\n".join(lines))
-
-    def _step_deps(self) -> None:
-        self._title("Python dependencies", "Uses existing installs when possible.")
-        status = be.check_python_deps()
-        msg = "All required packages present." if status.get("ok") else f"Missing: {', '.join(status.get('missing') or [])}"
-        ctk.CTkLabel(
-            self.body,
-            text=msg,
-            text_color=OK_GREEN if status.get("ok") else WARN,
-            font=ctk.CTkFont(size=14),
-        ).pack(anchor="w", pady=8)
-        self.deps_log = ctk.CTkTextbox(self.body, height=180, fg_color=PANEL)
-        self.deps_log.pack(fill="x", pady=8)
-        ctk.CTkButton(
-            self.body,
-            text="Install from requirements.txt",
-            command=self._install_deps,
-            fg_color="#2A3544",
-        ).pack(anchor="e")
-
-    def _install_deps(self) -> None:
-        self.deps_log.delete("1.0", "end")
-        self.deps_log.insert("1.0", "Installing (may take a minute)…\n")
-
-        def work() -> None:
-            result = be.install_requirements()
-            self.after(0, lambda: self._deps_done(result))
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _deps_done(self, result: dict[str, Any]) -> None:
-        self.deps_log.insert("end", result.get("message") or str(result))
-        status = be.check_python_deps()
-        if status.get("ok"):
-            self.deps_log.insert("end", "\n\nDeps OK.")
 
     def _step_identity(self) -> None:
         self._title("Worker identity", "Name shown in the pool + optional Discord username.")
@@ -289,17 +471,23 @@ class WizardFrame(ctk.CTkFrame):
         self.discord_entry.insert(0, self.settings.discord_user or "")
 
     def _step_connect(self) -> None:
-        self._title("Scheduler connection", "Tailscale URL for remote; localhost for same-machine demos.")
+        self._title("Scheduler connection", "Tailscale URL for remote members; localhost for same-machine.")
         ts = be.get_tailscale_ipv4()
         ctk.CTkLabel(
             self.body,
             text=f"Detected Tailscale IPv4: {ts or 'not found'}",
             text_color=MUTED,
         ).pack(anchor="w", pady=(0, 8))
+        ctk.CTkLabel(
+            self.body,
+            text=f"Portal invite code: {PORTAL_INVITE_CODE}  ·  portal {DEFAULT_LOCAL_PORTAL_URL}",
+            text_color=MUTED,
+        ).pack(anchor="w", pady=(0, 8))
         ctk.CTkLabel(self.body, text="Scheduler URL", text_color=MUTED).pack(anchor="w")
         self.sched_entry = ctk.CTkEntry(self.body, height=36)
         self.sched_entry.pack(fill="x", pady=(0, 8))
         default = self.settings.scheduler_url or be.get_default_scheduler_url()
+        # Prefer reachable local if saved Tailscale scheduler fails later — keep saved for now
         self.sched_entry.insert(0, default)
         row = ctk.CTkFrame(self.body, fg_color="transparent")
         row.pack(fill="x")
@@ -310,21 +498,20 @@ class WizardFrame(ctk.CTkFrame):
         ctk.CTkButton(row, text="Test /status", fg_color=ACCENT, text_color="#0A1210", command=self._test_sched).pack(
             side="right"
         )
-        self.connect_log = ctk.CTkTextbox(self.body, height=160, fg_color=PANEL)
-        self.connect_log.pack(fill="x", pady=12)
+        self.connect_log = self._log_box(180)
 
     def _use_ts(self) -> None:
         self.sched_entry.delete(0, "end")
-        self.sched_entry.insert(0, be.get_default_scheduler_url())
+        self.sched_entry.insert(0, DEFAULT_SCHEDULER_URL)
 
     def _use_local(self) -> None:
         self.sched_entry.delete(0, "end")
-        self.sched_entry.insert(0, "http://127.0.0.1:8766")
+        self.sched_entry.insert(0, DEFAULT_LOCAL_SCHEDULER_URL)
 
     def _test_sched(self) -> None:
         url = self.sched_entry.get().strip()
         self.connect_log.delete("1.0", "end")
-        self.connect_log.insert("1.0", f"Testing {url} …\n")
+        self._append_log(self.connect_log, f"Testing {url} …\n")
 
         def work() -> None:
             result = be.test_scheduler(url)
@@ -335,21 +522,41 @@ class WizardFrame(ctk.CTkFrame):
     def _test_done(self, result: dict[str, Any]) -> None:
         if result.get("ok"):
             data = result.get("data") or {}
-            self.connect_log.insert(
-                "end",
+            self._append_log(
+                self.connect_log,
                 f"OK — {result.get('url')}\n"
                 f"Workers online: {data.get('workers_online')}  "
-                f"Free VRAM: {data.get('free_vram_mb')} MiB\n",
+                f"Free VRAM: {data.get('free_vram_mb')} MiB\n"
+                f"CPU cores: {data.get('cpu_cores')}  "
+                f"RAM avail: {data.get('ram_available_mb')} MiB  "
+                f"Disk free: {data.get('disk_free_mb')} MiB\n",
             )
+            # Prefer the URL that actually worked
+            worked = result.get("url") or ""
+            if worked and hasattr(self, "sched_entry"):
+                self.sched_entry.delete(0, "end")
+                self.sched_entry.insert(0, worked)
         else:
-            self.connect_log.insert("end", f"FAILED — {result.get('error')}\n")
+            self._append_log(self.connect_log, f"FAILED — {result.get('error')}\n")
             for a in result.get("attempts") or []:
-                self.connect_log.insert("end", f"  tried {a.get('url')}: {'ok' if a.get('ok') else a.get('error')}\n")
+                self._append_log(
+                    self.connect_log,
+                    f"  tried {a.get('url')}: {'ok' if a.get('ok') else a.get('error')}\n",
+                )
+            self._append_log(
+                self.connect_log,
+                "\nFIX:\n"
+                "1) On Drew's host run start-scheduler-lan.cmd\n"
+                f"2) Same machine: {DEFAULT_LOCAL_SCHEDULER_URL}\n"
+                f"3) Tailscale members: {DEFAULT_SCHEDULER_URL}\n"
+                "4) Confirm Tailscale is connected if using 100.x address\n",
+            )
 
     def _step_caps(self) -> None:
         self._title(
             "Resource dedication",
-            "Soft caps for what this machine contributes. 0 VRAM/RAM/Disk = no extra soft cap.",
+            "Soft caps for what this machine contributes. Persisted into joiner config + worker env. "
+            "0 VRAM/RAM/Disk = no extra soft cap (advertise detected free).",
         )
         gpus = be.get_gpus()
         host = be.detect_host_resources()
@@ -357,31 +564,29 @@ class WizardFrame(ctk.CTkFrame):
         total_ram = max(int(host.get("total_ram_mb") or 0), 1024)
         total_disk = max(float(host.get("total_disk_gb") or 0), 10.0)
 
+        live = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=8)
+        live.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(
+            live,
+            text=(
+                f"Live host: {host.get('avail_ram_mb', 0)}/{host.get('total_ram_mb', 0)} MiB RAM avail  ·  "
+                f"{host.get('free_disk_gb', 0)}/{host.get('total_disk_gb', 0)} GiB disk free  ·  "
+                f"{len(gpus)} GPU(s), {sum(int(g.get('memory_free_mb') or 0) for g in gpus)} MiB VRAM free"
+            ),
+            text_color=MUTED,
+            wraplength=860,
+            justify="left",
+        ).pack(anchor="w", padx=12, pady=10)
+
         self.vram_var = ctk.IntVar(value=int(self.settings.max_vram_mb or 0))
         self.cpu_var = ctk.DoubleVar(value=float(self.settings.max_cpu_percent or 50))
         self.ram_var = ctk.IntVar(value=int(self.settings.max_ram_mb or 0))
         self.disk_var = ctk.DoubleVar(value=float(self.settings.max_disk_gb or 0))
 
         self._slider_row(self.body, "Max VRAM (MiB)", self.vram_var, 0, total_vram, f"Detected total {total_vram} MiB")
-        self._slider_row(self.body, "Max CPU (%)", self.cpu_var, 5, 100, "Soft advertise cap")
+        self._slider_row(self.body, "Max CPU (%)", self.cpu_var, 5, 100, "Soft advertise cap → dedicated_cpu_cores")
         self._slider_row(self.body, "Max RAM (MiB)", self.ram_var, 0, total_ram, f"Host total {total_ram} MiB")
         self._slider_row(self.body, "Max Disk (GiB)", self.disk_var, 0, total_disk, f"Host total {total_disk} GiB")
-
-        vm = be.get_agent_vms_info(self.settings.agent_vms_path)
-        note = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=8)
-        note.pack(fill="x", pady=12)
-        ctk.CTkLabel(
-            note,
-            text="Advanced: agent-vms (optional) — Linux desktop workspaces, not GPU passthrough.",
-            text_color=MUTED,
-            wraplength=820,
-            justify="left",
-        ).pack(anchor="w", padx=12, pady=10)
-        ctk.CTkLabel(
-            note,
-            text=f"Detected: {'yes' if vm.get('ready') else 'no'} @ {vm.get('path')}",
-            text_color=MUTED,
-        ).pack(anchor="w", padx=12, pady=(0, 10))
 
     def _slider_row(
         self,
@@ -411,41 +616,177 @@ class WizardFrame(ctk.CTkFrame):
         ctk.CTkLabel(frame, text=hint, text_color=MUTED, font=ctk.CTkFont(size=11)).pack(anchor="w")
         on_change()
 
-    def _persist_partial(self) -> None:
-        if hasattr(self, "portal_entry"):
-            self.settings.portal_url = self.portal_entry.get().strip() or self.settings.portal_url
-        if hasattr(self, "name_entry"):
-            self.settings.worker_name = self.name_entry.get().strip() or self.settings.worker_name
-        if hasattr(self, "discord_entry"):
-            self.settings.discord_user = self.discord_entry.get().strip()
-        if hasattr(self, "sched_entry"):
-            self.settings.scheduler_url = self.sched_entry.get().strip() or self.settings.scheduler_url
-        if hasattr(self, "vram_var"):
-            self.settings.max_vram_mb = int(self.vram_var.get())
-            self.settings.max_cpu_percent = float(self.cpu_var.get())
-            self.settings.max_ram_mb = int(self.ram_var.get())
-            self.settings.max_disk_gb = float(self.disk_var.get())
+    def _step_join(self) -> None:
+        self._title(
+            "Save & Join pool",
+            "Persists caps/identity, starts the worker, and shows success or the exact fix. "
+            "You can Leave from the control panel afterward.",
+        )
+        summary = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=8)
+        summary.pack(fill="x", pady=6)
+        lines = [
+            f"Worker: {self.settings.worker_name}",
+            f"Discord: {self.settings.discord_user or '(none)'}",
+            f"Scheduler: {self.settings.scheduler_url}",
+            f"Portal: {self.settings.portal_url}  ·  invite {PORTAL_INVITE_CODE}",
+            (
+                f"Caps: VRAM {self.settings.max_vram_mb} MiB · CPU {self.settings.max_cpu_percent}% · "
+                f"RAM {self.settings.max_ram_mb} MiB · Disk {self.settings.max_disk_gb} GiB"
+            ),
+        ]
+        ctk.CTkLabel(
+            summary,
+            text="\n".join(lines),
+            justify="left",
+            text_color=MUTED,
+            wraplength=860,
+        ).pack(anchor="w", padx=14, pady=12)
+
+        row = ctk.CTkFrame(self.body, fg_color="transparent")
+        row.pack(fill="x", pady=8)
+        self.join_now_btn = ctk.CTkButton(
+            row,
+            text="Save + Join pool",
+            height=40,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            command=self._join_now,
+        )
+        self.join_now_btn.pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Open portal",
+            height=40,
+            fg_color="#2A3544",
+            command=lambda: be.open_portal_url(self.settings.portal_url),
+        ).pack(side="left")
+        self.join_status = ctk.CTkLabel(self.body, text="", text_color=MUTED)
+        self.join_status.pack(anchor="w", pady=(4, 0))
+        self.join_log = self._log_box(220)
+
+    def _join_now(self) -> None:
+        if self._join_busy:
+            return
+        self._join_busy = True
+        self._persist_partial()
+        self.settings.wizard_completed = True
         be.save_config(self.settings)
+        self.join_now_btn.configure(state="disabled")
+        self.join_status.configure(text="Starting worker…", text_color=MUTED)
+        self.join_log.delete("1.0", "end")
+        self._append_log(self.join_log, "Saving config and starting worker…\n")
+
+        settings = be.load_config()
+
+        def work() -> None:
+            result = be.start_worker(settings, wait_online_sec=10.0)
+            self.after(0, lambda: self._join_now_done(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _join_now_done(self, result: dict[str, Any]) -> None:
+        self._join_busy = False
+        self.join_now_btn.configure(state="normal")
+        ok = bool(result.get("ok"))
+        msg = result.get("message") or ("Joined" if ok else "Failed")
+        self.join_status.configure(text=msg, text_color=OK_GREEN if ok else DANGER)
+        self._append_log(self.join_log, msg + "\n")
+        if result.get("pid"):
+            self._append_log(self.join_log, f"pid={result['pid']}\n")
+        if result.get("warning"):
+            self._append_log(self.join_log, f"Note: {result['warning']}\n")
+        if result.get("log_tail"):
+            self._append_log(self.join_log, f"\n--- log ---\n{result['log_tail']}\n")
+        if result.get("fix"):
+            self._append_log(self.join_log, f"\nFIX:\n{result['fix']}\n")
+        runtime = result.get("runtime") or {}
+        if runtime:
+            self._append_log(
+                self.join_log,
+                "\nLive advertised:\n"
+                f"  connected={runtime.get('connected')}  status={runtime.get('detail')}\n"
+                f"  cpu_cores={runtime.get('cpu_cores')}  "
+                f"ram_available_mb={runtime.get('ram_available_mb')}  "
+                f"disk_free_mb={runtime.get('disk_free_mb')}\n"
+                f"  free_vram_mb={runtime.get('free_vram_mb')} / "
+                f"total_vram_mb={runtime.get('total_vram_mb')}\n"
+                f"  gpus={', '.join(runtime.get('gpus_advertised') or [])}\n",
+            )
+
+    def _alive(self, name: str) -> Any | None:
+        """Return widget if attribute exists and Tk widget is still alive."""
+        widget = getattr(self, name, None)
+        if widget is None:
+            return None
+        try:
+            if bool(widget.winfo_exists()):
+                return widget
+        except Exception:  # noqa: BLE001
+            pass
+        setattr(self, name, None)
+        return None
+
+    def _entry_text(self, name: str) -> str | None:
+        widget = self._alive(name)
+        if widget is None:
+            return None
+        try:
+            return widget.get().strip()
+        except Exception:  # noqa: BLE001
+            setattr(self, name, None)
+            return None
+
+    def _persist_partial(self) -> None:
+        portal = self._entry_text("portal_entry")
+        if portal:
+            self.settings.portal_url = portal
+        name = self._entry_text("name_entry")
+        if name:
+            self.settings.worker_name = name
+        discord = self._entry_text("discord_entry")
+        if discord is not None:
+            self.settings.discord_user = discord
+        sched = self._entry_text("sched_entry")
+        if sched:
+            self.settings.scheduler_url = sched
+        # Vars survive step rebuild; only read if present
+        if getattr(self, "vram_var", None) is not None:
+            try:
+                self.settings.max_vram_mb = int(self.vram_var.get())
+                self.settings.max_cpu_percent = float(self.cpu_var.get())
+                self.settings.max_ram_mb = int(self.ram_var.get())
+                self.settings.max_disk_gb = float(self.disk_var.get())
+            except Exception:  # noqa: BLE001
+                pass
+        be.save_config(self.settings)
+
+    def _clear_step_widgets(self) -> None:
+        for name in ("portal_entry", "name_entry", "discord_entry", "sched_entry", "hw_box", "deps_log", "connect_log"):
+            setattr(self, name, None)
 
     def _back(self) -> None:
         self._persist_partial()
         if self.step > 0:
             self.step -= 1
+            self._clear_step_widgets()
             self._render_step()
 
     def _next(self) -> None:
         self._persist_partial()
         if self.step < len(self.STEPS) - 1:
             self.step += 1
+            self._clear_step_widgets()
             self._render_step()
             return
+        # Finish → main control panel (Join may already have run)
         self.settings.wizard_completed = True
         be.save_config(self.settings)
         self.on_done()
 
 
 # =============================================================================
-# Main control panel
+# Main control panel — Contribute | Utilize | Connect from code
 # =============================================================================
 
 
@@ -454,17 +795,21 @@ class MainFrame(ctk.CTkFrame):
         super().__init__(master, fg_color=BG)
         self.app = app
         self.settings = be.load_config()
-        # Prefer Tailscale portal URL for sharing / Twitch demos
-        if "127.0.0.1" in (self.settings.portal_url or ""):
-            self.settings.portal_url = "http://100.85.165.84:8767/portal"
+        self._mode = "contribute"
+        self._last_job_id = ""
+        # Prefer a live portal URL (Tailscale :8767 when available)
+        resolved = be.resolve_portal_url()
+        if resolved.get("ok") and resolved.get("url"):
+            self.settings.portal_url = resolved["url"]
             be.save_config(self.settings)
         self._build()
         self._refresh_gpus()
         self._refresh_host()
+        self._refresh_pool_utilize()
+        self._refresh_connect_snippets()
         self._schedule_poll()
 
     def _build(self) -> None:
-        # Header
         header = ctk.CTkFrame(self, fg_color=PANEL, corner_radius=0, height=70)
         header.pack(fill="x")
         header.pack_propagate(False)
@@ -478,7 +823,7 @@ class MainFrame(ctk.CTkFrame):
         ).pack(anchor="w")
         ctk.CTkLabel(
             left,
-            text="Power-user native joiner  ·  easiest remote path is the web portal",
+            text=f"Contribute · Utilize · Connect  ·  invite: {PORTAL_INVITE_CODE}",
             text_color=MUTED,
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w")
@@ -497,34 +842,237 @@ class MainFrame(ctk.CTkFrame):
             side="left", padx=6
         )
 
-        # Portal banner
         portal_bar = ctk.CTkFrame(self, fg_color="#13261F", corner_radius=0)
         portal_bar.pack(fill="x")
         self.portal_entry = ctk.CTkEntry(portal_bar, height=32)
         self.portal_entry.pack(side="left", fill="x", expand=True, padx=(16, 8), pady=8)
-        self.portal_entry.insert(0, be.get_portal_url(self.settings))
+        self.portal_entry.insert(0, be.get_portal_url(self.settings) or DEFAULT_PORTAL_URL)
+        ctk.CTkLabel(
+            portal_bar,
+            text=f"invite: {PORTAL_INVITE_CODE}",
+            text_color=ACCENT,
+            font=ctk.CTkFont(size=12),
+        ).pack(side="right", padx=(0, 8))
         ctk.CTkButton(portal_bar, text="Open", width=80, fg_color="#2A3544", command=self._open_portal).pack(
             side="right", padx=(0, 16), pady=8
         )
 
-        # Body grid
-        body = ctk.CTkFrame(self, fg_color=BG)
-        body.pack(fill="both", expand=True, padx=16, pady=12)
-        body.grid_columnconfigure(0, weight=3)
-        body.grid_columnconfigure(1, weight=2)
-        body.grid_rowconfigure(0, weight=1)
+        mode_bar = ctk.CTkFrame(self, fg_color="#0C1218", corner_radius=0)
+        mode_bar.pack(fill="x")
+        self._mode_btns: dict[str, ctk.CTkButton] = {}
+        for key, label in (
+            ("contribute", "Contribute — join the pool"),
+            ("utilize", "Utilize — send jobs"),
+            ("connect", "Connect from code"),
+        ):
+            btn = ctk.CTkButton(
+                mode_bar,
+                text=label,
+                height=34,
+                fg_color=ACCENT if key == "contribute" else "#2A3544",
+                text_color="#0A1210" if key == "contribute" else "#E8EEF4",
+                command=lambda k=key: self._set_mode(k),
+            )
+            btn.pack(side="left", padx=(12 if key == "contribute" else 6, 0), pady=8)
+            self._mode_btns[key] = btn
 
-        left_col = ctk.CTkFrame(body, fg_color="transparent")
+        self._mode_host = ctk.CTkFrame(self, fg_color=BG)
+        self._mode_host.pack(fill="both", expand=True, padx=16, pady=12)
+
+        self._contribute = ctk.CTkFrame(self._mode_host, fg_color=BG)
+        self._utilize = ctk.CTkFrame(self._mode_host, fg_color=BG)
+        self._connect = ctk.CTkFrame(self._mode_host, fg_color=BG)
+        self._build_contribute(self._contribute)
+        self._build_utilize(self._utilize)
+        self._build_connect(self._connect)
+        self._set_mode("contribute")
+
+    def _set_mode(self, mode: str) -> None:
+        self._mode = mode
+        for frame in (self._contribute, self._utilize, self._connect):
+            frame.pack_forget()
+        {"contribute": self._contribute, "utilize": self._utilize, "connect": self._connect}[mode].pack(
+            fill="both", expand=True
+        )
+        for key, btn in self._mode_btns.items():
+            on = key == mode
+            btn.configure(fg_color=ACCENT if on else "#2A3544", text_color="#0A1210" if on else "#E8EEF4")
+        if mode == "utilize":
+            self._refresh_pool_utilize()
+        elif mode == "connect":
+            self._refresh_connect_snippets()
+
+    def _build_contribute(self, parent: Any) -> None:
+        parent.grid_columnconfigure(0, weight=3)
+        parent.grid_columnconfigure(1, weight=2)
+        parent.grid_rowconfigure(0, weight=1)
+        left_col = ctk.CTkFrame(parent, fg_color="transparent")
         left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
-        right_col = ctk.CTkFrame(body, fg_color="transparent")
+        right_col = ctk.CTkFrame(parent, fg_color="transparent")
         right_col.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
-
         self._build_identity(left_col)
         self._build_gpus(left_col)
         self._build_caps(left_col)
         self._build_actions(left_col)
         self._build_status(right_col)
         self._build_discord(right_col)
+
+    def _build_utilize(self, parent: Any) -> None:
+        parent.grid_columnconfigure(0, weight=3)
+        parent.grid_columnconfigure(1, weight=2)
+        parent.grid_rowconfigure(0, weight=1)
+        left = ctk.CTkFrame(parent, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        right = ctk.CTkFrame(parent, fg_color="transparent")
+        right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+
+        pool = self._card(left, "Pool status (live)")
+        self.pool_box = ctk.CTkTextbox(pool, height=180, fg_color="#121A24")
+        self.pool_box.pack(fill="x")
+        prow = ctk.CTkFrame(pool, fg_color="transparent")
+        prow.pack(fill="x", pady=(8, 0))
+        ctk.CTkButton(prow, text="Refresh pool", fg_color="#2A3544", command=self._refresh_pool_utilize).pack(
+            side="left"
+        )
+        self.pool_lbl = ctk.CTkLabel(prow, text="", text_color=MUTED)
+        self.pool_lbl.pack(side="left", padx=10)
+
+        jobs = self._card(left, "Submit job — utilize the pool")
+        ctk.CTkLabel(
+            jobs,
+            text="Allowlisted only (no arbitrary shell). Needs at least one online worker.",
+            text_color=MUTED,
+            wraplength=520,
+            justify="left",
+        ).pack(anchor="w")
+        brow = ctk.CTkFrame(jobs, fg_color="transparent")
+        brow.pack(fill="x", pady=(10, 0))
+        ctk.CTkButton(
+            brow,
+            text="Submit probe",
+            height=38,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: self._submit_utilize("probe"),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            brow,
+            text="Submit CUDA matmul",
+            height=38,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: self._submit_utilize("pytorch_cuda_probe"),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(brow, text="Poll last job", fg_color="#2A3544", command=self._poll_last_job).pack(side="left")
+        self.utilize_lbl = ctk.CTkLabel(jobs, text="", text_color=MUTED)
+        self.utilize_lbl.pack(anchor="w", pady=(8, 0))
+
+        result = self._card(left, "Job result")
+        self.job_box = ctk.CTkTextbox(result, height=200, fg_color="#121A24")
+        self.job_box.pack(fill="both", expand=True)
+
+        help_card = self._card(right, "What can I run?")
+        self.utilize_help = ctk.CTkTextbox(help_card, height=220, fg_color="#121A24")
+        self.utilize_help.pack(fill="x")
+        self.utilize_help.insert("1.0", be.get_utilize_helper_text())
+        self.utilize_help.configure(state="disabled")
+        ctk.CTkButton(
+            help_card,
+            text="Copy Discord equivalents",
+            fg_color="#2A3544",
+            command=lambda: self._copy(be.get_discord_helper_text(), "Copied Discord slash helpers."),
+        ).pack(anchor="e", pady=(8, 0))
+
+        disc = self._card(right, "Discord slash (utilize)")
+        box = ctk.CTkTextbox(disc, height=140, fg_color="#121A24")
+        box.pack(fill="x")
+        box.insert(
+            "1.0",
+            "/pool\n/workers\n/submit_probe\n/submit_compute\n/job_status <id>\n",
+        )
+        box.configure(state="disabled")
+
+    def _build_connect(self, parent: Any) -> None:
+        inner = self._card(parent, "Connect from code — CONNECTING.md + coding_agent_pool.py")
+        ctk.CTkLabel(
+            inner,
+            text=(
+                "Verified plug-in for coding agents / local models. "
+                "Read CONNECTING.md · run examples/coding_agent_pool.py · Tailscale portal for friends."
+            ),
+            text_color=MUTED,
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w")
+
+        docs = ctk.CTkFrame(inner, fg_color="transparent")
+        docs.pack(fill="x", pady=(10, 4))
+        ctk.CTkButton(
+            docs,
+            text="Open CONNECTING.md",
+            width=170,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: self._open_doc(be.CONNECTING_DOC),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            docs,
+            text="Open coding_agent_pool.py",
+            width=200,
+            fg_color="#2A3544",
+            command=lambda: self._open_doc(be.CODING_AGENT_EXAMPLE),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            docs,
+            text="Local LLM notes",
+            width=130,
+            fg_color="#2A3544",
+            command=lambda: self._open_doc(be.LOCAL_OFFLOAD_DOC),
+        ).pack(side="left")
+
+        row = ctk.CTkFrame(inner, fg_color="transparent")
+        row.pack(fill="x", pady=(10, 4))
+        ctk.CTkLabel(row, text="GPU_SWARM_SCHEDULER_URL", text_color=MUTED).pack(side="left")
+        self.connect_sched = ctk.CTkEntry(row, height=34)
+        self.connect_sched.pack(side="left", fill="x", expand=True, padx=10)
+        self.connect_sched.insert(0, self.settings.scheduler_url or DEFAULT_SCHEDULER_URL)
+        ctk.CTkButton(row, text="Copy URL", width=90, fg_color="#2A3544", command=self._copy_sched_url).pack(
+            side="left"
+        )
+
+        prow = ctk.CTkFrame(inner, fg_color="transparent")
+        prow.pack(fill="x", pady=(4, 8))
+        ctk.CTkLabel(prow, text="Portal (Tailscale)", text_color=MUTED).pack(side="left")
+        self.connect_portal = ctk.CTkEntry(prow, height=34)
+        self.connect_portal.pack(side="left", fill="x", expand=True, padx=10)
+        self.connect_portal.insert(0, DEFAULT_PORTAL_URL)
+        ctk.CTkButton(
+            prow, text="Open portal", width=110, fg_color=ACCENT, text_color="#0A1210", command=self._open_ts_portal
+        ).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(prow, text="Copy", width=70, fg_color="#2A3544", command=self._copy_portal_url).pack(side="left")
+
+        self.connect_box = ctk.CTkTextbox(inner, height=380, fg_color="#121A24")
+        self.connect_box.pack(fill="both", expand=True, pady=(8, 0))
+        crow = ctk.CTkFrame(inner, fg_color="transparent")
+        crow.pack(fill="x", pady=(8, 0))
+        ctk.CTkButton(crow, text="Refresh snippets", fg_color="#2A3544", command=self._refresh_connect_snippets).pack(
+            side="left"
+        )
+        ctk.CTkButton(
+            crow,
+            text="Copy all snippets",
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: self._copy(self.connect_box.get("1.0", "end").strip(), "Copied connect-from-code snippets."),
+        ).pack(side="left", padx=8)
+        ctk.CTkButton(
+            crow,
+            text="Copy agent command",
+            fg_color="#2A3544",
+            command=self._copy_agent_cmd,
+        ).pack(side="left")
+        self.connect_lbl = ctk.CTkLabel(crow, text="", text_color=MUTED)
+        self.connect_lbl.pack(side="left", padx=8)
 
     def _card(self, parent: Any, title: str) -> ctk.CTkFrame:
         card = ctk.CTkFrame(parent, fg_color=PANEL, corner_radius=10)
@@ -565,8 +1113,8 @@ class MainFrame(ctk.CTkFrame):
         self.discord_entry.insert(0, self.settings.discord_user or "")
 
     def _build_gpus(self, parent: Any) -> None:
-        inner = self._card(parent, "Detected GPUs (nvidia-smi)")
-        self.gpu_box = ctk.CTkTextbox(inner, height=100, fg_color="#121A24")
+        inner = self._card(parent, "Detected GPUs + live host metrics")
+        self.gpu_box = ctk.CTkTextbox(inner, height=110, fg_color="#121A24")
         self.gpu_box.pack(fill="x")
         self.host_lbl = ctk.CTkLabel(inner, text="", text_color=MUTED, font=ctk.CTkFont(size=11))
         self.host_lbl.pack(anchor="w", pady=(6, 0))
@@ -634,8 +1182,8 @@ class MainFrame(ctk.CTkFrame):
         self.action_lbl.pack(anchor="w", pady=(8, 0))
 
     def _build_status(self, parent: Any) -> None:
-        inner = self._card(parent, "Status")
-        self.status_box = ctk.CTkTextbox(inner, height=220, fg_color="#121A24")
+        inner = self._card(parent, "Status (live metrics)")
+        self.status_box = ctk.CTkTextbox(inner, height=260, fg_color="#121A24")
         self.status_box.pack(fill="both", expand=True)
         ctk.CTkButton(inner, text="Refresh now", fg_color="#2A3544", command=self._poll_status).pack(
             anchor="e", pady=(8, 0)
@@ -643,7 +1191,7 @@ class MainFrame(ctk.CTkFrame):
 
     def _build_discord(self, parent: Any) -> None:
         inner = self._card(parent, "Discord helper (Glitch Factor)")
-        box = ctk.CTkTextbox(inner, height=180, fg_color="#121A24")
+        box = ctk.CTkTextbox(inner, height=160, fg_color="#121A24")
         box.pack(fill="x")
         box.insert("1.0", be.get_discord_helper_text())
         box.configure(state="disabled")
@@ -651,10 +1199,8 @@ class MainFrame(ctk.CTkFrame):
             inner,
             text="Copy commands",
             fg_color="#2A3544",
-            command=lambda: self._copy(be.get_discord_helper_text()),
+            command=lambda: self._copy(be.get_discord_helper_text(), "Copied Discord helper text."),
         ).pack(anchor="e", pady=(8, 0))
-
-    # --- actions ---------------------------------------------------------------
 
     def _collect(self) -> be.JoinerSettings:
         s = be.load_config()
@@ -671,15 +1217,19 @@ class MainFrame(ctk.CTkFrame):
     def _save_settings(self) -> None:
         self.settings = self._collect()
         be.save_config(self.settings)
-        self.action_lbl.configure(text="Saved.", text_color=OK_GREEN)
+        self.action_lbl.configure(text="Saved caps & identity (worker will honor on next Join).", text_color=OK_GREEN)
 
     def _open_portal(self) -> None:
         url = self.portal_entry.get().strip()
-        if url:
-            s = self._collect()
-            s.portal_url = url
-            be.save_config(s)
-        result = be.open_portal_url(url or None)
+        if not url:
+            resolved = be.resolve_portal_url()
+            url = resolved.get("url") or DEFAULT_LOCAL_PORTAL_URL
+            self.portal_entry.delete(0, "end")
+            self.portal_entry.insert(0, url)
+        s = self._collect()
+        s.portal_url = url
+        be.save_config(s)
+        result = be.open_portal_url(url)
         self.action_lbl.configure(
             text=result.get("message") or "",
             text_color=OK_GREEN if result.get("ok") else WARN,
@@ -716,7 +1266,7 @@ class MainFrame(ctk.CTkFrame):
         be.save_config(settings)
 
         def work() -> None:
-            result = be.start_worker(settings)
+            result = be.start_worker(settings, wait_online_sec=10.0)
             self.after(0, lambda: self._join_done(result))
 
         threading.Thread(target=work, daemon=True).start()
@@ -724,10 +1274,10 @@ class MainFrame(ctk.CTkFrame):
     def _join_done(self, result: dict[str, Any]) -> None:
         self.app._busy = False
         ok = bool(result.get("ok"))
-        self.action_lbl.configure(
-            text=result.get("message") or ("Joined" if ok else "Failed"),
-            text_color=OK_GREEN if ok else DANGER,
-        )
+        msg = result.get("message") or ("Joined" if ok else "Failed")
+        if result.get("fix") and not ok:
+            msg = f"{msg} — see status / log"
+        self.action_lbl.configure(text=msg, text_color=OK_GREEN if ok else DANGER)
         self._poll_status()
 
     def _leave(self) -> None:
@@ -750,10 +1300,187 @@ class MainFrame(ctk.CTkFrame):
         )
         self._poll_status()
 
-    def _copy(self, text: str) -> None:
+    def _copy(self, text: str, msg: str = "Copied.") -> None:
         self.clipboard_clear()
         self.clipboard_append(text)
-        self.action_lbl.configure(text="Copied Discord helper text.", text_color=OK_GREEN)
+        if hasattr(self, "action_lbl"):
+            self.action_lbl.configure(text=msg, text_color=OK_GREEN)
+        if hasattr(self, "utilize_lbl"):
+            self.utilize_lbl.configure(text=msg, text_color=OK_GREEN)
+        if hasattr(self, "connect_lbl"):
+            self.connect_lbl.configure(text=msg, text_color=OK_GREEN)
+
+    def _copy_sched_url(self) -> None:
+        url = self.connect_sched.get().strip() or DEFAULT_SCHEDULER_URL
+        self._copy(url, "Copied GPU_SWARM_SCHEDULER_URL.")
+
+    def _copy_portal_url(self) -> None:
+        url = self.connect_portal.get().strip() or DEFAULT_PORTAL_URL
+        self._copy(url, "Copied portal URL.")
+
+    def _open_doc(self, path: Any) -> None:
+        result = be.open_repo_doc(path)
+        self.connect_lbl.configure(
+            text=result.get("message") or "",
+            text_color=OK_GREEN if result.get("ok") else DANGER,
+        )
+
+    def _copy_agent_cmd(self) -> None:
+        url = self.connect_sched.get().strip() if hasattr(self, "connect_sched") else ""
+        url = url or DEFAULT_SCHEDULER_URL
+        cmd = (
+            f"set GPU_SWARM_SCHEDULER_URL={url}\n"
+            "python examples\\coding_agent_pool.py --job probe\n"
+            "python examples\\coding_agent_pool.py --job pytorch_cuda_probe --matrix-size 1024\n"
+        )
+        self._copy(cmd, "Copied coding_agent_pool.py commands.")
+
+    def _open_ts_portal(self) -> None:
+        url = self.connect_portal.get().strip() or DEFAULT_PORTAL_URL
+        result = be.open_portal_url(url)
+        self.connect_lbl.configure(
+            text=result.get("message") or url,
+            text_color=OK_GREEN if result.get("ok") else WARN,
+        )
+
+    def _refresh_connect_snippets(self) -> None:
+        url = ""
+        if hasattr(self, "connect_sched"):
+            url = self.connect_sched.get().strip()
+        if not url and hasattr(self, "sched_entry"):
+            url = self.sched_entry.get().strip()
+        url = url or (self.settings.scheduler_url or DEFAULT_SCHEDULER_URL)
+        if hasattr(self, "connect_sched"):
+            self.connect_sched.delete(0, "end")
+            self.connect_sched.insert(0, url)
+        hints = be.get_portal_hints()
+        portal = hints.get("tailscale_url") or DEFAULT_PORTAL_URL
+        if hints.get("reachable") and hints.get("url"):
+            # Prefer live URL; still show Tailscale for remote friends
+            if "100.85." in str(hints.get("url")):
+                portal = hints["url"]
+        if hasattr(self, "connect_portal"):
+            self.connect_portal.delete(0, "end")
+            self.connect_portal.insert(0, portal)
+        text = be.get_connect_from_code_text(url)
+        if hasattr(self, "connect_box"):
+            self.connect_box.delete("1.0", "end")
+            self.connect_box.insert("1.0", text)
+
+    def _refresh_pool_utilize(self) -> None:
+        def work() -> None:
+            url = self.sched_entry.get().strip() if hasattr(self, "sched_entry") else None
+            st = be.pool_status(url)
+            self.after(0, lambda: self._render_pool_utilize(st))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _render_pool_utilize(self, st: dict[str, Any]) -> None:
+        if not hasattr(self, "pool_box"):
+            return
+        lines = [
+            f"Scheduler: {'OK' if st.get('ok') else 'DOWN'}  {st.get('url') or ''}",
+        ]
+        if st.get("error"):
+            lines.append(f"Error: {st['error']}")
+        lines += [
+            f"Workers online: {st.get('workers_online', 0)} / {st.get('workers_total', 0)}",
+            f"VRAM free/total: {st.get('free_vram_mb', 0)} / {st.get('total_vram_mb', 0)} MiB",
+            f"CPU cores: {st.get('cpu_cores', 0)}",
+            f"RAM avail/total: {st.get('ram_available_mb', 0)} / {st.get('ram_total_mb', 0)} MiB",
+            f"Disk free (ad): {st.get('disk_free_mb', 0)} MiB",
+            f"Jobs q/r/c/f: {((st.get('jobs') or {}).get('queued'))}/"
+            f"{((st.get('jobs') or {}).get('running'))}/"
+            f"{((st.get('jobs') or {}).get('completed'))}/"
+            f"{((st.get('jobs') or {}).get('failed'))}",
+            "",
+            "GPUs:",
+        ]
+        for g in st.get("gpus") or []:
+            lines.append(f"  • {g}")
+        lines.append("")
+        lines.append("Workers:")
+        for w in st.get("workers") or []:
+            on = "online" if w.get("online") or str(w.get("status", "")).lower() in ("online", "busy") else "off"
+            lines.append(
+                f"  [{on}] {w.get('name')}  vram={w.get('free_vram_mb')}/{w.get('total_vram_mb')}  "
+                f"cpu={w.get('cpu_cores')}c  ram={w.get('ram_available_mb')}  disk={w.get('disk_free_mb')}"
+            )
+        if st.get("capacity_note"):
+            lines += ["", st["capacity_note"]]
+        self.pool_box.delete("1.0", "end")
+        self.pool_box.insert("1.0", "\n".join(lines))
+        self.pool_lbl.configure(
+            text=f"Updated {time.strftime('%H:%M:%S')}",
+            text_color=OK_GREEN if st.get("ok") else DANGER,
+        )
+
+    def _submit_utilize(self, job_type: str) -> None:
+        if self.app._busy:
+            return
+        self.app._busy = True
+        self.utilize_lbl.configure(text=f"Submitting {job_type}…", text_color=MUTED)
+        url = self.sched_entry.get().strip() if hasattr(self, "sched_entry") else None
+        by = self.discord_entry.get().strip() if hasattr(self, "discord_entry") else ""
+        if not by and hasattr(self, "name_entry"):
+            by = self.name_entry.get().strip()
+
+        def work() -> None:
+            submitted = be.submit_job(job_type, scheduler_url=url, submitted_by=by or "desktop-utilize")
+            if not submitted.get("ok"):
+                self.after(0, lambda: self._utilize_done(submitted, None))
+                return
+            jid = submitted.get("job_id") or ""
+            waited = be.wait_for_job(jid, scheduler_url=url, timeout_sec=90.0)
+            self.after(0, lambda: self._utilize_done(submitted, waited))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _utilize_done(self, submitted: dict[str, Any], waited: dict[str, Any] | None) -> None:
+        import json
+
+        self.app._busy = False
+        if not submitted.get("ok"):
+            self.utilize_lbl.configure(text=submitted.get("error") or "Submit failed", text_color=DANGER)
+            self.job_box.delete("1.0", "end")
+            self.job_box.insert("1.0", json.dumps(submitted, indent=2, default=str))
+            return
+        self._last_job_id = str(submitted.get("job_id") or "")
+        job = (waited or {}).get("job") or submitted.get("job") or {}
+        st = job.get("status") or "?"
+        ok = st == "completed"
+        msg = f"{job.get('job_type')} → {st}  id={self._last_job_id}"
+        if submitted.get("discord"):
+            msg += f"  ·  Discord: {submitted['discord'].splitlines()[0]}"
+        self.utilize_lbl.configure(text=msg, text_color=OK_GREEN if ok else (WARN if st == "running" else DANGER))
+        self.job_box.delete("1.0", "end")
+        self.job_box.insert("1.0", json.dumps(job, indent=2, default=str))
+        self._refresh_pool_utilize()
+
+    def _poll_last_job(self) -> None:
+        import json
+
+        jid = self._last_job_id
+        if not jid:
+            self.utilize_lbl.configure(text="No job id yet — submit one first.", text_color=WARN)
+            return
+        url = self.sched_entry.get().strip() if hasattr(self, "sched_entry") else None
+
+        def work() -> None:
+            result = be.get_job(jid, scheduler_url=url)
+            self.after(
+                0,
+                lambda: (
+                    self.job_box.delete("1.0", "end"),
+                    self.job_box.insert("1.0", json.dumps(result.get("job") or result, indent=2, default=str)),
+                    self.utilize_lbl.configure(
+                        text=f"Job {jid}: {result.get('status') or result.get('error')}",
+                        text_color=OK_GREEN if result.get("status") == "completed" else MUTED,
+                    ),
+                ),
+            )
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _refresh_gpus(self) -> None:
         gpus = be.get_gpus()
@@ -794,6 +1521,7 @@ class MainFrame(ctk.CTkFrame):
         w = status.get("worker") or {}
         sch = status.get("scheduler") or {}
         ts = status.get("tailscale_ipv4") or "n/a"
+        host = status.get("host_resources") or {}
         lines = [
             f"Local worker: {'RUNNING' if w.get('running') else 'stopped'}"
             + (f"  pid={w.get('pid')}" if w.get("pid") else ""),
@@ -803,6 +1531,12 @@ class MainFrame(ctk.CTkFrame):
             f"Last heartbeat: {w.get('last_heartbeat') or '—'}",
             f"GPUs advertised: {', '.join(w.get('gpus_advertised') or []) or '—'}",
             f"VRAM free/total (worker view): {w.get('free_vram_mb', 0)} / {w.get('total_vram_mb', 0)} MiB",
+            f"CPU cores: {w.get('cpu_cores', 0)}",
+            f"RAM avail/total: {w.get('ram_available_mb', 0)} / {w.get('ram_total_mb', 0)} MiB",
+            f"Disk free: {w.get('disk_free_mb', 0)} MiB",
+            "",
+            f"Host (local): RAM {host.get('avail_ram_mb', 0)}/{host.get('total_ram_mb', 0)} MiB  ·  "
+            f"Disk {host.get('free_disk_gb', 0)}/{host.get('total_disk_gb', 0)} GiB",
             "",
             f"Scheduler: {'OK' if sch.get('ok') else 'DOWN'}  {sch.get('url') or ''}",
         ]
@@ -816,11 +1550,20 @@ class MainFrame(ctk.CTkFrame):
                 f"{((data.get('jobs') or {}).get('running'))}/"
                 f"{((data.get('jobs') or {}).get('completed'))}"
             )
-        lines += ["", f"Tailscale IPv4: {ts}", f"Updated: {time.strftime('%H:%M:%S')}"]
+            lines.append(
+                f"  pool CPU {data.get('cpu_cores')}  RAM avail {data.get('ram_available_mb')} MiB  "
+                f"disk free {data.get('disk_free_mb')} MiB  "
+                f"dedicated RAM {data.get('dedicated_ram_mb')} / disk {data.get('dedicated_disk_mb')}"
+            )
+        lines += [
+            "",
+            f"Portal: {status.get('portal_url') or '—'}  ·  invite {PORTAL_INVITE_CODE}",
+            f"Tailscale IPv4: {ts}",
+            f"Updated: {time.strftime('%H:%M:%S')}",
+        ]
         self.status_box.delete("1.0", "end")
         self.status_box.insert("1.0", "\n".join(lines))
 
-        # Button enablement
         running = bool(w.get("running"))
         self.join_btn.configure(state="disabled" if running else "normal")
         self.leave_btn.configure(state="normal" if running else "disabled")
@@ -830,6 +1573,8 @@ class MainFrame(ctk.CTkFrame):
 
         def tick() -> None:
             self._poll_status()
+            if self._mode == "utilize":
+                self._refresh_pool_utilize()
             self.app._poll_after = self.after(4000, tick)
 
         self.app._poll_after = self.after(4000, tick)

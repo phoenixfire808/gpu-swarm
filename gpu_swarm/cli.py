@@ -4,22 +4,36 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
-import time
 from typing import Any
 
-import httpx
-
 from gpu_swarm import ALLOWED_JOB_TYPES
-from gpu_swarm.config import ROOT, scheduler_config, worker_config
+from gpu_swarm.client import DEFAULT_SCHEDULER_URL, GPUPool, GPUPoolError
+from gpu_swarm.config import ROOT, scheduler_config
 
 
 def _base_url(url: str | None = None) -> str:
+    """Resolve scheduler URL: flag → GPU_SWARM_SCHEDULER_URL → local scheduler cfg → Tailscale default."""
     if url:
         return url.rstrip("/")
+    env = (os.environ.get("GPU_SWARM_SCHEDULER_URL") or "").strip()
+    if env:
+        return env.rstrip("/")
     c = scheduler_config()
-    host = "127.0.0.1" if c.host == "0.0.0.0" else c.host
-    return f"http://{host}:{c.port}"
+    # Prefer explicit local bind when running on the host; else utilizer Tailscale default.
+    if c.host in ("127.0.0.1", "localhost"):
+        return f"http://127.0.0.1:{c.port}"
+    if c.host == "0.0.0.0":
+        # LAN scheduler often means local utilizer should hit loopback first.
+        return f"http://127.0.0.1:{c.port}"
+    return DEFAULT_SCHEDULER_URL
+
+
+def _pool(args: argparse.Namespace) -> GPUPool:
+    url = getattr(args, "scheduler_url", None)
+    by = getattr(args, "by", None) or "cli"
+    return GPUPool(scheduler_url=_base_url(url), submitted_by=by)
 
 
 def cmd_scheduler(args: argparse.Namespace) -> int:
@@ -48,65 +62,96 @@ def cmd_bot(args: argparse.Namespace) -> int:
 
 
 def cmd_submit(args: argparse.Namespace) -> int:
+    """Submit via scheduler POST /jobs (same path as examples/coding_agent_pool.py)."""
     job_type = args.job_type
     if job_type not in ALLOWED_JOB_TYPES:
         print(f"Unknown/forbidden job type: {job_type}. Allowed: {sorted(ALLOWED_JOB_TYPES)}")
         return 2
+    pool = _pool(args)
     payload: dict[str, Any] = {}
     if job_type == "pytorch_cuda_probe":
         payload["matrix_size"] = args.matrix_size
         if args.device_index is not None:
             payload["device_index"] = args.device_index
-    body = {
-        "job_type": job_type,
-        "payload": payload,
-        "require_gpu": job_type == "pytorch_cuda_probe",
-        "min_vram_mb": args.min_vram_mb,
-        "submitted_by": args.by or "cli",
-    }
-    base = _base_url(args.scheduler_url)
-    with httpx.Client(timeout=30.0) as client:
-        r = client.post(f"{base}/jobs", json=body)
-        r.raise_for_status()
-        job = r.json()
+    try:
+        job = pool.submit(
+            job_type,
+            payload,
+            min_vram_mb=args.min_vram_mb,
+            wait=bool(args.wait),
+            wait_timeout=float(args.wait_timeout),
+        )
+    except GPUPoolError as exc:
+        print(str(exc), file=sys.stderr)
+        if exc.job:
+            print(json.dumps(exc.job, indent=2))
+        return 1
     print(json.dumps(job, indent=2))
     if args.wait:
-        return _wait_job(base, job["id"], args.wait_timeout)
+        return 0 if job.get("status") == "completed" else 1
     return 0
 
 
-def _wait_job(base: str, job_id: str, timeout: float) -> int:
-    deadline = time.time() + timeout
-    with httpx.Client(timeout=30.0) as client:
-        while time.time() < deadline:
-            r = client.get(f"{base}/jobs/{job_id}")
-            r.raise_for_status()
-            job = r.json()
-            st = job["status"]
-            if st in ("completed", "failed"):
-                print(json.dumps(job, indent=2))
-                return 0 if st == "completed" else 1
-            time.sleep(1.0)
-    print(f"timeout waiting for job {job_id}", file=sys.stderr)
-    return 1
-
-
 def cmd_status(args: argparse.Namespace) -> int:
-    base = _base_url(args.scheduler_url)
-    with httpx.Client(timeout=15.0) as client:
-        r = client.get(f"{base}/status")
-        r.raise_for_status()
-        print(json.dumps(r.json(), indent=2))
+    """GET /status — same as coding_agent_pool.py --status-only."""
+    try:
+        print(json.dumps(_pool(args).status(), indent=2))
+    except Exception as exc:  # noqa: BLE001
+        print(str(exc), file=sys.stderr)
+        return 1
     return 0
 
 
 def cmd_job(args: argparse.Namespace) -> int:
-    base = _base_url(args.scheduler_url)
-    with httpx.Client(timeout=15.0) as client:
-        r = client.get(f"{base}/jobs/{args.job_id}")
-        r.raise_for_status()
-        print(json.dumps(r.json(), indent=2))
+    try:
+        print(json.dumps(_pool(args).get_job(args.job_id), indent=2))
+    except Exception as exc:  # noqa: BLE001
+        print(str(exc), file=sys.stderr)
+        return 1
     return 0
+
+
+def cmd_utilize(args: argparse.Namespace) -> int:
+    """Coder-facing utilize helpers (status / probe / cuda) via GPUPool → /status + /jobs."""
+    pool = _pool(args)
+    action = args.utilize_action
+    try:
+        if action == "status":
+            print(json.dumps(pool.status(), indent=2))
+            return 0
+        if action == "probe":
+            job = pool.submit_probe(
+                wait=bool(args.wait),
+                wait_timeout=float(args.wait_timeout),
+                submitted_by=args.by,
+            )
+            print(json.dumps(job, indent=2))
+            if args.wait:
+                return 0 if job.get("status") == "completed" else 1
+            return 0
+        if action == "cuda":
+            job = pool.submit_cuda_probe(
+                matrix_size=args.matrix_size,
+                device_index=args.device_index,
+                min_vram_mb=args.min_vram_mb,
+                wait=bool(args.wait),
+                wait_timeout=float(args.wait_timeout),
+                submitted_by=args.by,
+            )
+            print(json.dumps(job, indent=2))
+            if args.wait:
+                return 0 if job.get("status") == "completed" else 1
+            return 0
+    except GPUPoolError as exc:
+        print(str(exc), file=sys.stderr)
+        if exc.job:
+            print(json.dumps(exc.job, indent=2))
+        return 1
+    except Exception as exc:  # noqa: BLE001
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(f"unknown utilize action: {action}", file=sys.stderr)
+    return 2
 
 
 def cmd_portal(args: argparse.Namespace) -> int:
@@ -128,7 +173,11 @@ def cmd_portal(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="gpu_swarm",
-        description="Private Discord GPU/CPU co-op swarm (scheduler, worker, bot, CLI)",
+        description=(
+            "Private Discord GPU/CPU co-op swarm.\n"
+            "Coders: use `utilize` or see CONNECTING.md + examples/coding_agent_pool.py"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -150,7 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
     w.set_defaults(func=cmd_worker)
 
     portal = sub.add_parser("portal", help="Start web contributor portal (browser UI)")
-    portal.add_argument("--host", default=None, help="Bind host (default 127.0.0.1; 0.0.0.0 for LAN)")
+    portal.add_argument("--host", default=None, help="Bind host (default 0.0.0.0 for LAN/Tailscale; 127.0.0.1 local-only)")
     portal.add_argument("--port", type=int, default=None, help="Default 8767")
     portal.set_defaults(func=cmd_portal)
 
@@ -158,7 +207,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--check", action="store_true", help="Verify bot wiring without connecting")
     b.set_defaults(func=cmd_bot)
 
-    sub_submit = sub.add_parser("submit", help="Submit a job")
+    sub_submit = sub.add_parser("submit", help="Submit a job (POST /jobs)")
     sub_submit.add_argument("job_type", choices=sorted(ALLOWED_JOB_TYPES))
     sub_submit.add_argument("--scheduler-url", default=None)
     sub_submit.add_argument("--matrix-size", type=int, default=1024)
@@ -169,14 +218,53 @@ def build_parser() -> argparse.ArgumentParser:
     sub_submit.add_argument("--wait-timeout", type=float, default=120.0)
     sub_submit.set_defaults(func=cmd_submit)
 
-    st = sub.add_parser("status", help="Pool status summary")
+    st = sub.add_parser("status", help="Pool status summary (GET /status)")
     st.add_argument("--scheduler-url", default=None)
     st.set_defaults(func=cmd_status)
 
-    j = sub.add_parser("job", help="Get a job by id")
+    j = sub.add_parser("job", help="Get a job by id (GET /jobs/{id})")
     j.add_argument("job_id")
     j.add_argument("--scheduler-url", default=None)
     j.set_defaults(func=cmd_job)
+
+    u = sub.add_parser(
+        "utilize",
+        help="Coder helpers: status / probe / cuda (uses GPUPool → scheduler /status + /jobs)",
+        description=(
+            "Utilize the GPU Pool from a coding session or local model runner.\n\n"
+            "Examples:\n"
+            "  python -m gpu_swarm utilize status\n"
+            "  python -m gpu_swarm utilize probe --wait\n"
+            "  python -m gpu_swarm utilize cuda --wait\n\n"
+            "Same HTTP surface as examples/coding_agent_pool.py (POST /jobs, GET /status).\n"
+            "See CONNECTING.md. Env: GPU_SWARM_SCHEDULER_URL "
+            f"(SDK default {DEFAULT_SCHEDULER_URL})."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    u_sub = u.add_subparsers(dest="utilize_action", required=True)
+
+    u_st = u_sub.add_parser("status", help="GET /status — workers, VRAM, job counts")
+    u_st.add_argument("--scheduler-url", default=None)
+    u_st.add_argument("--by", default="cli-utilize", help=argparse.SUPPRESS)
+    u_st.set_defaults(func=cmd_utilize)
+
+    u_pr = u_sub.add_parser("probe", help="Submit allowlisted probe job (nvidia-smi inventory)")
+    u_pr.add_argument("--scheduler-url", default=None)
+    u_pr.add_argument("--wait", action="store_true", help="Poll until completed/failed")
+    u_pr.add_argument("--wait-timeout", type=float, default=120.0)
+    u_pr.add_argument("--by", default="cli-utilize")
+    u_pr.set_defaults(func=cmd_utilize)
+
+    u_cu = u_sub.add_parser("cuda", help="Submit pytorch_cuda_probe (real CUDA matmul)")
+    u_cu.add_argument("--scheduler-url", default=None)
+    u_cu.add_argument("--matrix-size", type=int, default=1024)
+    u_cu.add_argument("--device-index", type=int, default=None)
+    u_cu.add_argument("--min-vram-mb", type=int, default=0)
+    u_cu.add_argument("--wait", action="store_true", help="Poll until completed/failed")
+    u_cu.add_argument("--wait-timeout", type=float, default=180.0)
+    u_cu.add_argument("--by", default="cli-utilize")
+    u_cu.set_defaults(func=cmd_utilize)
 
     a = sub.add_parser("app", help="Launch GPU Pool desktop joiner (customtkinter)")
     a.set_defaults(func=cmd_app)

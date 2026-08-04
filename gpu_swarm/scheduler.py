@@ -221,6 +221,142 @@ async def status() -> dict[str, Any]:
     return summary
 
 
+# --- Utilizer API (OpenAI-style path prefix; allowlisted jobs only) ---
+# Same semantics as /jobs + /status — cleaner for local-model / coding clients.
+# No public auth yet: keep scheduler on Tailscale/LAN only.
+
+
+class PoolJobSubmit(BaseModel):
+    job_type: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    require_gpu: bool | None = None
+    min_vram_mb: int = 0
+    submitted_by: str | None = "v1-pool"
+    matrix_size: int | None = Field(default=None, ge=64, le=4096)
+
+
+@app.get("/v1/pool/status")
+async def v1_pool_status() -> dict[str, Any]:
+    """Utilizer-friendly pool status (wraps /status)."""
+    return await status()
+
+
+@app.get("/v1/pool/jobs/{job_id}")
+async def v1_pool_job_get(job_id: str) -> dict[str, Any]:
+    """Utilizer-friendly job get (wraps /jobs/{id})."""
+    return await jobs_get(job_id)
+
+
+@app.post("/v1/pool/jobs")
+async def v1_pool_jobs_submit(body: PoolJobSubmit) -> dict[str, Any]:
+    """Submit allowlisted work from scripts / agents / OpenAI-shim clients.
+
+    Only ``probe`` and ``pytorch_cuda_probe`` are accepted. Arbitrary shell is rejected.
+    """
+    if body.job_type not in ALLOWED_JOB_TYPES:
+        raise HTTPException(
+            400,
+            f"job_type not allowlisted. Allowed: {sorted(ALLOWED_JOB_TYPES)}",
+        )
+    payload = dict(body.payload or {})
+    if body.job_type == "pytorch_cuda_probe":
+        if body.matrix_size is not None:
+            payload["matrix_size"] = int(body.matrix_size)
+        elif "matrix_size" not in payload and "size" not in payload:
+            payload["matrix_size"] = 1024
+    require_gpu = body.require_gpu
+    if require_gpu is None:
+        require_gpu = body.job_type == "pytorch_cuda_probe"
+    if body.job_type == "pytorch_cuda_probe":
+        require_gpu = True
+    return await _store().submit_job(
+        {
+            "job_type": body.job_type,
+            "payload": payload,
+            "require_gpu": require_gpu,
+            "min_vram_mb": body.min_vram_mb,
+            "submitted_by": body.submitted_by or "v1-pool",
+        }
+    )
+
+
+@app.post("/v1/chat/completions")
+async def v1_chat_completions(body: dict[str, Any]) -> dict[str, Any]:
+    """Minimal OpenAI-shaped shim: documents how to route heavy work to the pool.
+
+    This is **not** a full LLM gateway. It returns a structured assistant message
+    telling clients to call ``/v1/pool/jobs`` (or the Python SDK) for GPU work.
+    If ``tools`` / message content includes an explicit pool probe request, it may
+    enqueue an allowlisted probe and include the job id.
+    """
+    import time as _time
+    import uuid as _uuid
+
+    messages = body.get("messages") or []
+    text_blob = " ".join(
+        str(m.get("content") or "") for m in messages if isinstance(m, dict)
+    ).lower()
+    want_cuda = any(k in text_blob for k in ("cuda", "pytorch_cuda", "submit_compute", "matmul"))
+    want_probe = want_cuda or any(
+        k in text_blob for k in ("probe", "gpu pool", "nvidia-smi", "/v1/pool", "submit_probe")
+    )
+
+    job: dict[str, Any] | None = None
+    if want_probe:
+        jt = "pytorch_cuda_probe" if want_cuda else "probe"
+        job = await _store().submit_job(
+            {
+                "job_type": jt,
+                "payload": {"matrix_size": 1024} if jt == "pytorch_cuda_probe" else {},
+                "require_gpu": jt == "pytorch_cuda_probe",
+                "min_vram_mb": 0,
+                "submitted_by": "v1-chat-shim",
+            }
+        )
+
+    guidance = (
+        "GPU Pool utilizer shim (MVP). This endpoint is not a full chat model. "
+        "Route heavy GPU work via POST /v1/pool/jobs with allowlisted job_type "
+        "('probe' or 'pytorch_cuda_probe'), then poll GET /v1/pool/jobs/{id}. "
+        "Python: from gpu_swarm.client import GPUPool; pool = GPUPool(); "
+        "pool.submit_probe(wait=True) / pool.submit_cuda_probe(wait=True). "
+        "Env: GPU_SWARM_SCHEDULER_URL."
+    )
+    if job:
+        content = (
+            f"{guidance}\n\nEnqueued allowlisted job {job.get('id')} "
+            f"({job.get('job_type')}, status={job.get('status')}). "
+            f"Poll GET /v1/pool/jobs/{job.get('id')} or use GPUPool.wait(...)."
+        )
+    else:
+        content = guidance
+
+    created = int(_time.time())
+    return {
+        "id": f"chatcmpl-pool-{_uuid.uuid4().hex[:12]}",
+        "object": "chat.completion",
+        "created": created,
+        "model": body.get("model") or "gpu-pool-utilizer-shim",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        "gpu_pool": {
+            "scheduler_paths": {
+                "status": "/v1/pool/status",
+                "submit": "/v1/pool/jobs",
+                "job": "/v1/pool/jobs/{job_id}",
+            },
+            "allowed_job_types": sorted(ALLOWED_JOB_TYPES),
+            "job": job,
+        },
+    }
+
+
 def run_scheduler(host: str | None = None, port: int | None = None) -> None:
     import uvicorn
 

@@ -26,7 +26,9 @@ def run_probe(payload: dict[str, Any] | None = None) -> dict[str, Any]:
 def run_pytorch_cuda_probe(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     """Small real CUDA tensor op when torch+CUDA available; else clear CPU fallback note."""
     payload = payload or {}
-    size = int(payload.get("matrix_size") or 1024)
+    # Accept matrix_size (CLI/SDK) or size (portal Utilize panel)
+    raw_size = payload.get("matrix_size", payload.get("size", 1024))
+    size = int(raw_size or 1024)
     size = max(64, min(size, 4096))  # keep bounded
     device_index = payload.get("device_index")
     started = time.time()

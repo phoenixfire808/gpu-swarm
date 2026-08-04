@@ -28,6 +28,14 @@ Commands: `/pool` `/workers` `/contribute` `/submit_probe` `/submit_compute` `/j
   set GPU_SWARM_SCHEDULER_URL=http://100.85.165.84:8766
   python -m gpu_swarm worker --name YourDiscordName --discord-user YourDiscordName
 
+**Coding / local-model users**
+v1 does **not** proxy Ollama or chat APIs. Allowlisted jobs only:
+`probe` + `pytorch_cuda_probe`. Keep your local model on your PC; use the
+pool to discover capacity / prove CUDA. From the repo:
+  python examples\coding_agent_pool.py --job probe
+  python examples\coding_agent_pool.py --job pytorch_cuda_probe
+Docs: CONNECTING.md · examples/ollama_or_local_offload.md
+
 **Honest v1 limits**
 Jobs actually run on GPU/CPU. RAM + SSD numbers are capacity you advertise
 for scheduling — not a magic shared hard drive or pooled RAM across PCs yet.
@@ -49,7 +57,7 @@ Never share `.env` or bot tokens.
 Primary Discord: **Glitch Factor** (`1532614467974856724`).  
 If Tailscale IP changes: Drew runs `tailscale ip -4` and posts the new URLs.
 
-See also `VISION.md` (short product note) and `ADVANCED_VM.md` (optional agent-vms — no GPU passthrough).
+See also `CONNECTING.md` (Contribute / Utilize / code), `VISION.md`, `ADVANCED_VM.md` (optional agent-vms — no GPU passthrough), and `examples/ollama_or_local_offload.md` for local-model users.
 
 ## Secrets
 

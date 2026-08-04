@@ -65,7 +65,7 @@ class WorkerConfig:
 
 @dataclass
 class PortalConfig:
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 8767
     db_path: Path = ROOT / "data" / "portal.db"
     scheduler_url: str = "http://127.0.0.1:8766"
@@ -128,7 +128,7 @@ def portal_config() -> PortalConfig:
     db = _env("GPU_SWARM_PORTAL_DB") or str(ROOT / "data" / "portal.db")
     sched = (_env("GPU_SWARM_SCHEDULER_URL") or "http://127.0.0.1:8766").rstrip("/")
     return PortalConfig(
-        host=_env("GPU_SWARM_PORTAL_HOST", "127.0.0.1") or "127.0.0.1",
+        host=_env("GPU_SWARM_PORTAL_HOST", "0.0.0.0") or "0.0.0.0",
         port=_env_int("GPU_SWARM_PORTAL_PORT", 8767),
         db_path=Path(db),
         scheduler_url=sched,

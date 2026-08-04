@@ -25,9 +25,12 @@ Jobs execute on a worker’s own GPU/CPU. RAM/SSD numbers help the scheduler pic
 | **2. Desktop app** (native) | Power users on Windows | `start-gpu-pool-app.cmd` → `python -m gpu_swarm.app` |
 | **3. CLI worker** | Scripts / Hermes | `python -m gpu_swarm worker …` |
 | **Discord bot** | Status + submit jobs | `/pool`, `/workers`, … in **Glitch Factor** |
+| **Connect from code** | Coders / local models / agents | `GPUPool` SDK · `utilize` CLI · [`CONNECTING.md`](CONNECTING.md) |
 
 Product one-pager: [`VISION.md`](VISION.md).  
+Connect paths (Contribute / Utilize / code): [`CONNECTING.md`](CONNECTING.md).  
 Paste-ready blurb for Discord: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).  
+Local models / coding agents: [`examples/ollama_or_local_offload.md`](examples/ollama_or_local_offload.md) · [`examples/coding_agent_pool.py`](examples/coding_agent_pool.py) · [`examples/use_pool_from_script.py`](examples/use_pool_from_script.py).  
 Optional VM workspaces (not GPU passthrough): [`ADVANCED_VM.md`](ADVANCED_VM.md).
 
 ## What's included
@@ -38,7 +41,8 @@ Optional VM workspaces (not GPU passthrough): [`ADVANCED_VM.md`](ADVANCED_VM.md)
 | **Desktop app** | Native Windows joiner — wizard, caps, Join/Leave (`start-gpu-pool-app.cmd`) |
 | **Scheduler** | FastAPI + SQLite queue on **8766** (`/workers/*`, `/jobs/*`, `/status`) |
 | **Worker** | Real `nvidia-smi` + host metrics, heartbeats, leases + runs jobs |
-| **CLI** | Hermes-friendly `python -m gpu_swarm …` |
+| **CLI** | Hermes-friendly `python -m gpu_swarm …` + coder `utilize status|probe|cuda` |
+| **Python SDK** | `from gpu_swarm.client import GPUPool` — `status` / `submit` / `wait` / probes |
 | **Discord bot** | `/pool` `/workers` `/contribute` `/submit_probe` `/submit_compute` `/job_status` |
 
 ### Job types (allowlisted only)
@@ -80,7 +84,7 @@ Leave anytime from the portal (or stop the worker). Caps persist for the next se
 
 ## 2) GPU Pool desktop app (native)
 
-Windows joiner for people who prefer a local UI over the browser.
+Windows one-stop app: **Contribute** (join) + **Utilize** (submit jobs) + **Connect from code**.
 
 ```bat
 cd C:\Users\Drew\Projects\gpu-swarm
@@ -91,21 +95,33 @@ start-gpu-pool-app.cmd
 REM equivalent: python -m gpu_swarm.app
 ```
 
-**What you’ll do in the app**
+| Mode | What it does |
+|------|----------------|
+| **Contribute** | Wizard installs deps / checks NVIDIA / optional CUDA torch → set caps → **Join / Leave** worker |
+| **Utilize** | Live pool status → submit `probe` / `pytorch_cuda_probe` → poll results (+ Discord slash equivalents) |
+| **Connect from code** | Points at [`CONNECTING.md`](CONNECTING.md) + [`examples/coding_agent_pool.py`](examples/coding_agent_pool.py); copies `GPU_SWARM_SCHEDULER_URL` + Tailscale portal |
 
-1. Setup wizard — NVIDIA / `nvidia-smi` check, deps hint, scheduler URL (default Tailscale host `:8766`).
-2. Set worker display name (+ optional Discord username).
-3. Set **VRAM / CPU / RAM / disk** dedication (soft caps; `0` VRAM usually means “advertise free VRAM, no extra soft cap”).
-4. Test scheduler connectivity → **Join Pool** / **Leave Pool**.
-5. Use the Discord helper text (`/pool`, `/workers`, …) or open the portal URL for the browser dashboard.
+**Contribute flow**
 
-Settings persist under `data/` (gitignored), e.g. `data/joiner_settings.json`. The app talks to `gpu_swarm.app_backend` (real GPU detect, start/stop worker subprocess).
+1. Setup wizard — Python/deps, NVIDIA, optional CUDA torch (consent), scheduler URL (default Tailscale `:8766`).
+2. Identity + **VRAM / CPU / RAM / disk** soft caps.
+3. Portal awareness (Tailscale `http://100.85.165.84:8767/portal`, invite `glitch-factor`).
+4. **Join Pool** / **Leave Pool**.
 
-**VRAM dedication (same idea in portal + app + CLI)**
+**Utilize flow**
 
-- Soft cap via `GPU_SWARM_MAX_VRAM_MB` / app slider — worker won’t advertise more than that for leasing.
-- Soft CPU via `GPU_SWARM_MAX_CPU_PERCENT`.
-- RAM/disk caps (when enabled by backend) are **scheduling advertisements**, not shared storage.
+1. Open **Utilize** tab → refresh pool (workers / GPUs / CPU·RAM·disk ads).
+2. Submit **probe** or **CUDA matmul** → wait for completed JSON.
+3. Optional: copy Discord `/submit_probe` · `/submit_compute` · `/job_status`.
+
+**Connect from code**
+
+```bat
+set GPU_SWARM_SCHEDULER_URL=http://100.85.165.84:8766
+python examples\coding_agent_pool.py --job probe
+```
+
+Full map: [`CONNECTING.md`](CONNECTING.md). Settings under `data/joiner_settings.json` (gitignored).
 
 ---
 
@@ -213,12 +229,33 @@ python -m gpu_swarm.app
 - **Never commit `.env`** — listed in `.gitignore` with `data/`, tokens paste files, venvs, DBs
 - Copy `.env.example` → `.env` locally; share invite codes in private channels, never bot tokens
 
-## Hermes
+## Connect from a coding session (Cursor / Hermes)
+
+```python
+from gpu_swarm.client import GPUPool
+pool = GPUPool()  # GPU_SWARM_SCHEDULER_URL or http://100.85.165.84:8766
+print(pool.status()["workers_online"])
+print(pool.submit_probe(wait=True)["status"])
+```
+
+```bash
+set GPU_SWARM_SCHEDULER_URL=http://127.0.0.1:8766
+python -m gpu_swarm utilize status
+python -m gpu_swarm utilize probe --wait
+python -m gpu_swarm utilize cuda --wait
+python examples/coding_agent_pool.py --job probe
+python examples/use_pool_from_script.py --cuda
+```
+
+HTTP (same as the agent script): `GET /status`, `POST /jobs`, `GET /jobs/{id}`.  
+Details: [`CONNECTING.md`](CONNECTING.md) · Hermes notes: [`examples/hermes_pool_skill.md`](examples/hermes_pool_skill.md).
+
+## Hermes (host ops)
 
 ```bash
 python -m gpu_swarm scheduler --host 0.0.0.0 --port 8766
 python -m gpu_swarm worker --name Drew-Home
-python -m gpu_swarm submit probe --wait
+python -m gpu_swarm utilize probe --wait
 python -m gpu_swarm status
 ```
 
@@ -228,18 +265,20 @@ Skill stub: `shared-skills/gpu-swarm/SKILL.md`.
 
 ```
 gpu_swarm/
+  client.py         # GPUPool utilizer SDK (POST /jobs, GET /status)
   scheduler.py      # FastAPI scheduler (:8766)
   worker.py         # contribution worker
   jobs.py           # allowlisted runners
   gpu.py            # nvidia-smi inventory
   bot.py            # discord.py hybrid commands
-  cli.py            # entry CLI
+  cli.py            # entry CLI (+ utilize)
   db.py             # SQLite store
   config.py         # env config
   app_backend.py    # desktop/portal backend API
   joiner_settings.py
   app/              # desktop joiner (customtkinter)
-  portal/           # web contributor UI (when present)
+CONNECTING.md       # Contribute / Utilize / Connect map
+examples/           # coding_agent_pool.py, use_pool_from_script.py, …
 ADVANCED_VM.md      # optional agent-vms note (no fake GPU passthrough)
 DISCORD_MEMBER_QUICKSTART.md
 ```
