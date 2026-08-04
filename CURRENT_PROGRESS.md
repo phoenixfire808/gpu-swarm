@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
-Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:15 CDT · Friend-install diagnostics + portable Python isolation.
+Living scorecard for Drew private Discord GPU/CPU co-op.  
+**Updated:** 2026-08-04 ~12:20 CDT · Friend diagnostics + portable Python (3.10-3.12) + laptop path.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -15,6 +15,15 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 **v1 jobs only:** `probe`, `pytorch_cuda_probe` · Auth MVP: invite/password (OAuth later)  
 **Rules:** No Docker · No mock GPU/host data · Never commit `.env` / token paste files  
 **Network model:** Private Tailscale/LAN (+ optional public tunnel when Drew runs `start-public-access.cmd`)
+
+---
+
+## Friend laptop / no-NVIDIA path (2026-08-04)
+
+- [x] Portal black screen: removed Google Fonts @import; system fonts; laptop banner
+- [x] CPU-only worker: gpu_available=false without nvidia-smi
+- [x] Utilize-without-GPU probe path; scheduler URL validation; public_endpoints auto-detect
+- [x] Docs: FRIEND_LAPTOP.md
 
 ---
 
@@ -33,6 +42,23 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 ---
 
 ## Done (with dates)
+
+### Friend laptop / no-NVIDIA path (2026-08-04)
+- [x] Portal black screen: removed Google Fonts `@import` (root cause on locked-down laptops); system fonts; laptop banner
+- [x] Portal restarted on `0.0.0.0:8767`; Tailscale + localhost HTML 200; `/pool-api` proxy OK
+- [x] CPU-only worker: `gpu_available=false`, no hard fail without nvidia-smi; check_prereqs NVIDIA optional
+- [x] Utilize-without-GPU: probe from “no gpu” client → Drew workers completes
+- [x] Scheduler URL validation: “Incorrect Scheduler URL Environment Variable” for bare IP; accepts `:8766` + public `/pool-api`
+- [x] Installer auto-detect: public_endpoints.json → Tailscale → localhost; wizard Utilize-first when no NVIDIA
+- [x] Docs: `FRIEND_LAPTOP.md`
+
+### Install harden — multi-machine (2026-08-04)
+- [x] Pin requirements.txt / requirements-app.txt for Win CPython 3.10-3.12
+- [x] Add requirements-joiner.txt (no torch) + requirements-cuda.txt (optional cu128)
+- [x] scripts/install_joiner_deps.ps1 -> %LOCALAPPDATA%\GPUPool\env (coord w/ diagnostics portable Python)
+- [x] Prefer 3.12 > 3.11 > 3.10; do not auto-select 3.13
+- [x] Document supported matrix in DOWNLOAD.md
+
 
 ### Friend diagnostics + portable Python (2026-08-04)
 - [x] `gpu_swarm/diagnostics.py` — OS/python/pip freeze/nvidia-smi/scheduler test/traceback/wizard step; redact secrets
