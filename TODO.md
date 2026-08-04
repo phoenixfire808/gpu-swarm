@@ -5,40 +5,34 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 
 ## Done
 - [x] Scheduler + workers + heartbeats (GPU/CPU/RAM/disk)
-- [x] Jobs: `probe`, `pytorch_cuda_probe`
+- [x] Jobs: `probe`, `pytorch_cuda_probe`, **`llm_chat`**
 - [x] Discord **GPU Pool** bot (6 slash cmds → Glitch Factor)
-- [x] Portal Contribute / Utilize (`0.0.0.0:8767`, Tailscale OK)
-- [x] Desktop one-stop wizard (Save+Join / Leave / Utilize)
-- [x] `CONNECTING.md` + `GPUPool` client + coding examples
-- [x] Prereq / joiner-deps scripts (isolated `%LOCALAPPDATA%\GPUPool\venv`)
-- [x] Live smoke: scheduler, worker GPUs, portal 200, e2e jobs
-- [x] `gh auth login` (phoenixfire808)
-- [x] Public GitHub publish + push — https://github.com/phoenixfire808/gpu-swarm
-- [x] `DOWNLOAD.md` + EXE-first Discord quickstart + `.gitignore` PyInstaller rules (`!gpu_pool.spec`)
-- [x] Friend diagnostics: `diagnostics.py` + Copy/Submit UI + portal `/api/diagnostics`
-- [x] Portable Python bootstrap: `portable_python.py` + wizard + EXE first-run hook
-- [x] Local model endpoint + Connect Start/Stop UI (`LOCAL_MODEL.md`, `llm_chat`)
+- [x] Portal Contribute / Utilize / Connect
+- [x] Desktop one-stop wizard + Connect local model endpoint
+- [x] `CONNECTING.md` + `LOCAL_MODEL.md` + coding examples
+- [x] Local Pool Endpoint (`local-endpoint` / `start-local-endpoint.cmd`)
+- [x] Friend diagnostics + portable Python bootstrap
+- [x] Public GitHub publish — https://github.com/phoenixfire808/gpu-swarm
 
 ## Now
-- [x] Packaging Worker: publish Windows EXE v0.1.0 with portable_python + diagnostics
-- [ ] Rebuild/publish EXE with Connect local-endpoint controls
-- [ ] Discord `/pool` channel smoke (optional, stream)
-- [ ] Post member quickstart + EXE link + “Submit diagnostics on failure” in Glitch Factor
+- [ ] Drew: Ollama serve + model + worker restart → full chat e2e
+- [ ] Packaging Worker: publish Windows EXE with local_endpoint + llm_chat
+- [ ] Post member tip: `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`
 
 ## Next
-- [ ] Ensure ≥1 worker has Ollama (or compat) for `llm_chat`
-- [ ] Allowlisted `whisper_transcribe` (reuse DrewLocalVoice/faster-whisper carefully)
+- [ ] Streaming on local endpoint (`stream=true`)
+- [ ] Allowlisted `whisper_transcribe`
 - [ ] Portal Discord OAuth (replace invite/password MVP)
-- [ ] More Utilize UX polish after first external joiner
+- [ ] Worker advertise `llm_models` into `/status` for richer `/v1/models`
 
 ## Blocked
-- [ ] Whisper — blocked on design + deps story (intentional)
-- [ ] OAuth — blocked until auth priority (repo is public)
-- [ ] EXE with local-endpoint Connect UI — needs packaging rebuild
+- [ ] Full LLM e2e — Ollama not running on host worker yet
+- [ ] OAuth — blocked until auth priority
+- [ ] Exact EXE download URL — blocked on packaging Worker Release asset name
 
 ## Next 5
-1. Rebuild GPUPool.exe so Connect local-endpoint ships  
-2. Post EXE-first member quickstart + LOCAL_MODEL tip in Glitch Factor  
-3. Live smoke: Start local endpoint → paste into an AI app  
-4. Ollama on a contributor worker for real chat  
-5. Keep secrets out of git (never `.env`)  
+1. Enable Ollama on Drew-Home + restart worker (`llm_ready=yes`)
+2. Smoke: local endpoint → chat completion via pool
+3. Packaging Worker Release + EXE
+4. Tell friends (aariff01) Connect → Start local model endpoint
+5. Keep secrets out of git (never `.env`)

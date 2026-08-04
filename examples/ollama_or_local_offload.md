@@ -1,9 +1,12 @@
-# Ollama / local models ↔ GPU Pool (honest v1)
+# Ollama / local models ↔ GPU Pool
 
-**Short answer:** v1 does **not** proxy Ollama, OpenAI-compatible `/v1/chat`, or arbitrary inference.
-The pool runs **allowlisted jobs only**. Today that means connectivity + CUDA proof jobs — not “send my LLM prompt to a remote GPU.”
+**Updated:** Prefer [`LOCAL_MODEL.md`](../LOCAL_MODEL.md) — Local Pool Endpoint + allowlisted `llm_chat`.
 
-Use this guide if you run Ollama / LM Studio / a coding agent locally and want a real path into the co-op pool.
+**Short answer (current):** Friends run a localhost OpenAI-compatible endpoint
+(`python -m gpu_swarm local-endpoint` → `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`)
+that forwards chat to pool workers running Ollama. Still **not** a fake Windows GPU driver.
+
+Historical notes below remain useful for probe/CUDA jobs and the allowlist checklist.
 
 ## What works today
 
