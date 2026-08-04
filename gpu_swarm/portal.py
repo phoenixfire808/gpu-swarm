@@ -86,9 +86,6 @@ class MachineBody(BaseModel):
     availability_daily_start: str = "22:00"
     availability_daily_end: str = "08:00"
     availability_until: float = 0.0
-    availability_preset: str = "always"
-    availability_daily_start: str = "22:00"
-    availability_daily_end: str = "08:00"
 
 
 class MachineCapsPatch(BaseModel):
@@ -106,9 +103,6 @@ class MachineCapsPatch(BaseModel):
     availability_daily_start: str | None = None
     availability_daily_end: str | None = None
     availability_until: float | None = None
-    availability_preset: str | None = None
-    availability_daily_start: str | None = None
-    availability_daily_end: str | None = None
 
 
 class JobSubmitBody(BaseModel):

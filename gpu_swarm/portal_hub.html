@@ -562,6 +562,12 @@
       </div>
 
       <div class="section">
+        <h2>What can you use this for?</h2>
+        <p class="lede">A private friend club — not a public GPU store. Real reasons to hop on:</p>
+        <ul class="how-steps" id="useCasesList"></ul>
+      </div>
+
+      <div class="section">
         <h2>How it works</h2>
         <ul class="how-steps">
           <li>
@@ -584,18 +590,6 @@
           <button type="button" data-go="share">Copy invite for Discord</button>
           <button class="ghost" type="button" data-go="utilize">Run a job now</button>
         </div>
-      </div>
-
-      <div class="section">
-        <h2>What can you use this for?</h2>
-        <ul class="how-steps">
-          <li><span class="n">AI chat</span><span class="t">Run on friends' GPUs</span><span class="d">No NVIDIA on your laptop? Still run chat and jobs on whoever is online.</span></li>
-          <li><span class="n">Share idle GPU</span><span class="t">Evenings & weekends</span><span class="d">Lend spare power on a schedule — the group trains and runs faster together.</span></li>
-          <li><span class="n">Coding workspace</span><span class="t">Optional Linux VM</span><span class="d">Shared project desktop for coding together (CPU/RAM only).</span></li>
-          <li><span class="n">Local AI URL</span><span class="t">Cursor & agents</span><span class="d">OpenAI-compatible localhost endpoint — skip cloud GPU bills.</span></li>
-          <li><span class="n">Health checks</span><span class="t">Probe the pool</span><span class="d">Quick GPU/CUDA checks across online machines.</span></li>
-          <li><span class="n">Chat & grow</span><span class="t">Talk + invite</span><span class="d">Chat with the pool, suggest improvements, invite friends for more compute.</span></li>
-        </ul>
       </div>
 
       <div class="section">
@@ -727,7 +721,7 @@
           <option value="next_2_hours">Next 2 hours</option>
           <option value="custom">Custom daily window</option>
         </select>
-        <p class="note">Outside your window the worker stays registered but won't take new jobs.</p>
+        <p class="note" id="availStatusLabel">Sharing now — always on</p>
         <div class="row" id="customAvailRow" style="display:none">
           <div>
             <label for="availStart">From (24h)</label>
@@ -1067,7 +1061,9 @@ function paintPeers(workers) {
       ? `<span class="tag steel">llm_ready</span>`
       : `<span class="tag">llm off</span>`;
     const st = w.online
-      ? `<span class="status-dot on"></span><span class="tag ok">online</span>`
+      ? (String(w.status||"").toLowerCase() === "paused_schedule"
+          ? `<span class="status-dot"></span><span class="tag warn">paused</span>`
+          : `<span class="status-dot on"></span><span class="tag ok">online</span>`)
       : `<span class="status-dot"></span><span class="tag warn">offline</span>`;
     return `<article class="peer">
       <div>
@@ -1219,6 +1215,11 @@ async function loadConfig() {
   if (c.capacity_note && $("capacityNote")) $("capacityNote").textContent = c.capacity_note;
   if (c.laptop_note && $("laptopNote")) $("laptopNote").textContent = c.laptop_note;
   if (c.utilize_note && $("utilizeNote")) $("utilizeNote").textContent = c.utilize_note;
+  if (c.use_cases && $("useCasesList")) {
+    $("useCasesList").innerHTML = c.use_cases.map(u =>
+      `<li><span class="n">•</span><span class="t">${escapeHtml(u.title||"")}</span><span class="d">${escapeHtml(u.body||"")}</span></li>`
+    ).join("");
+  }
   paintConnect(c);
 }
 
@@ -1525,7 +1526,7 @@ $("submitJobBtn").onclick = async () => {
 };
 
 function capsPayload() {
-  const preset = $("availabilityPreset").value || "always";
+  const preset = ($("availabilityPreset") && $("availabilityPreset").value) || "always";
   return {
     worker_name: $("workerName").value.trim() || "browser-worker",
     scheduler_url: $("schedulerUrl").value.trim(),
@@ -1535,15 +1536,34 @@ function capsPayload() {
     dedicated_disk_mb: Number($("disk").value),
     dedicated_cpu_cores: Number($("cpuCores").value),
     availability_preset: preset,
-    availability_daily_start: $("availStart").value.trim() || "22:00",
-    availability_daily_end: $("availEnd").value.trim() || "08:00",
+    availability_daily_start: ($("availStart") && $("availStart").value.trim()) || "22:00",
+    availability_daily_end: ($("availEnd") && $("availEnd").value.trim()) || "08:00",
   };
+}
+
+function paintAvailStatusLabel() {
+  const el = $("availStatusLabel");
+  if (!el) return;
+  const preset = ($("availabilityPreset") && $("availabilityPreset").value) || "always";
+  const labels = {
+    always: "Sharing now — always on",
+    nights_weekends: "Nights & weekends — 10pm–8am weekdays + all weekend",
+    next_2_hours: "Next 2 hours — timer starts when you create/update your token",
+    custom: `Custom window — ${($("availStart")||{}).value||"22:00"} to ${($("availEnd")||{}).value||"08:00"} (local time)`,
+  };
+  el.textContent = labels[preset] || labels.always;
 }
 
 $("availabilityPreset").onchange = () => {
   const custom = $("availabilityPreset").value === "custom";
   $("customAvailRow").style.display = custom ? "grid" : "none";
+  paintAvailStatusLabel();
 };
+["availStart","availEnd"].forEach(id => {
+  const node = $(id);
+  if (node) node.addEventListener("input", paintAvailStatusLabel);
+});
+paintAvailStatusLabel();
 
 $("registerBtn").onclick = async () => {
   $("regErr").classList.add("hidden");

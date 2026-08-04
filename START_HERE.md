@@ -64,6 +64,21 @@ Files live under `%LOCALAPPDATA%\GPUPool\` (separate from your normal Python).
 
 ---
 
+## What can you use this for?
+
+| Why join | Plain English |
+|----------|----------------|
+| **Run AI on friends' GPUs** | No NVIDIA on your laptop? Still run chat and jobs on whoever is online. |
+| **Share idle evening GPU** | Lend spare power at night or weekends — everyone trains faster together. |
+| **Local AI for Cursor & agents** | `OPENAI_BASE_URL=http://127.0.0.1:8080/v1` — pool as a localhost API, no cloud GPU bill. |
+| **Quick GPU health checks** | Probe / CUDA jobs across online machines — see what's really available. |
+| **Grow the network** | Invite friends — every PC that joins gives everyone more compute. |
+
+**When should we use your PC?** (Share my PC → Contribute)  
+Pick **Always on**, **Nights & weekends**, **Next 2 hours**, or a **Custom daily window**. Outside your window the worker still checks in but **pauses new jobs** (like host GPU safety).
+
+---
+
 ## Paste into Discord (grow the pool)
 
 ```text
