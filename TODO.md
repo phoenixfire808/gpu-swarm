@@ -14,8 +14,10 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [x] Live smoke: scheduler, worker GPUs, portal 200, e2e jobs
 - [x] `gh auth login` (phoenixfire808)
 - [x] Public GitHub publish + push — https://github.com/phoenixfire808/gpu-swarm
+- [x] `DOWNLOAD.md` + EXE-first Discord quickstart + `.gitignore` PyInstaller rules (`!gpu_pool.spec`)
 
 ## Now
+- [ ] Packaging Worker: publish Windows EXE to GitHub Releases (docs use placeholder `/releases/latest`)
 - [ ] Discord `/pool` channel smoke (optional, stream)
 - [ ] Post member quickstart + repo URL in Glitch Factor (https://github.com/phoenixfire808/gpu-swarm)
 
@@ -28,10 +30,11 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 ## Blocked
 - [ ] Whisper/LLM — blocked on design + deps story (intentional)
 - [ ] OAuth — blocked until auth priority (repo is public)
+- [ ] Exact EXE download URL — blocked on packaging Worker Release asset name
 
 ## Next 5
-1. Live smoke: portal Utilize + `/pool`  
-2. Post member quickstart + repo URL in Glitch Factor  
-3. Plan Whisper/LLM runners  
-4. Portal Discord OAuth when ready  
+1. Packaging Worker Release + EXE  
+2. Post EXE-first member quickstart in Glitch Factor  
+3. Live smoke: portal Utilize + `/pool`  
+4. Plan Whisper/LLM runners  
 5. Keep secrets out of git (never `.env`)

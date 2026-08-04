@@ -21,13 +21,15 @@ Jobs execute on a worker’s own GPU/CPU. RAM/SSD numbers help the scheduler pic
 
 | Path | Who it’s for | Entry |
 |------|--------------|--------|
-| **1. Web portal** (primary) | Friends / Twitch collab | `http://<host>:8767/portal` |
-| **2. Desktop app** (native) | Power users on Windows | `start-gpu-pool-app.cmd` → `python -m gpu_swarm.app` |
+| **0. Windows EXE** (easiest) | Friends on Windows | [Releases](https://github.com/phoenixfire808/gpu-swarm/releases/latest) · [`DOWNLOAD.md`](DOWNLOAD.md) |
+| **1. Web portal** | Friends / Twitch collab | `http://<host>:8767/portal` |
+| **2. Desktop app** (from source) | Power users on Windows | `start-gpu-pool-app.cmd` → `python -m gpu_swarm.app` |
 | **3. CLI worker** | Scripts / Hermes | `python -m gpu_swarm worker …` |
 | **Discord bot** | Status + submit jobs | `/pool`, `/workers`, … in **Glitch Factor** |
 | **Connect from code** | Coders / local models / agents | `GPUPool` SDK · `utilize` CLI · [`CONNECTING.md`](CONNECTING.md) |
 
 Product one-pager: [`VISION.md`](VISION.md).  
+**Windows EXE download:** [`DOWNLOAD.md`](DOWNLOAD.md) · [GitHub Releases](https://github.com/phoenixfire808/gpu-swarm/releases/latest).  
 Connect paths (Contribute / Utilize / code): [`CONNECTING.md`](CONNECTING.md).  
 Paste-ready blurb for Discord: [`DISCORD_MEMBER_QUICKSTART.md`](DISCORD_MEMBER_QUICKSTART.md).  
 Local models / coding agents: [`examples/ollama_or_local_offload.md`](examples/ollama_or_local_offload.md) · [`examples/coding_agent_pool.py`](examples/coding_agent_pool.py) · [`examples/use_pool_from_script.py`](examples/use_pool_from_script.py).  

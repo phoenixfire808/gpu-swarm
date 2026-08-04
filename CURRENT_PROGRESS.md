@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 · Public GitHub published; scheduler `/v1/pool/*` live on `:8766`.
+**Updated:** 2026-08-04 ~11:52 CDT · EXE download docs + ignore rules (packaging Worker builds the binary).
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -17,31 +17,23 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 
 ---
 
-## Live scorecard (spot-check 2026-08-04)
-
-### Scheduler restart (2026-08-04, post-SDK `/v1/pool`)
-- Restarted **only** `python -m gpu_swarm scheduler --host 0.0.0.0 --port 8766`; did **not** touch Robinhood `:8765` or Discord bot
-- **PASS** scheduler: listening `0.0.0.0:8766`
-- **PASS** classic: `GET /status` 200; `POST /jobs` + `GET /jobs/{id}` 200
-- **PASS** `/v1/pool`: `GET /v1/pool/status` 200; `POST /v1/pool/jobs` + `GET /v1/pool/jobs/{id}` 200
-- **PASS** worker: `Drew-Home` stayed online (no worker restart)
-
-
+## Live scorecard (fresh LIVE probe 2026-08-04 ~11:50 CDT)
 
 | # | Check | Result |
 |---|--------|--------|
-| 1 | Scheduler `:8766` `/status` + workers + GPU/CPU/RAM/disk | **PASS** (live JSON; bind `0.0.0.0`) |
-| 2 | Worker online with real GPUs | **PASS** (`Drew-Home`: 5060 Ti + 2070 SUPER) |
-| 3 | Job e2e `probe` + `pytorch_cuda_probe` | **PASS** (completed earlier today; jobs.completed ≥ 17) |
-| 4 | Portal `:8767` Contribute/Utilize + Tailscale | **PASS** (HTTP 200 localhost + Tailscale) |
-| 5 | Desktop wizard / prereqs / join helpers | **PASS** (code + prior smoke) |
-| 6 | Discord GPU Pool bot + guild slash cmds | **PASS** (6 cmds; process left running in prior session) |
-| 7 | Coding client / `CONNECTING.md` / examples | **PASS** — `GPUPool` + `utilize` CLI + examples e2e |
-| 8 | GitHub remote + push | **PASS** — https://github.com/phoenixfire808/gpu-swarm (public; `origin` → `master`) |
+| 1 | Scheduler `:8766` `/status` + workers + resource fields | **PASS** — `workers_online=1`, CPU/RAM/disk/VRAM fields present; `/v1/pool/status` mirrors |
+| 2 | Worker online with real GPUs | **PASS** — `Drew-Home` online; RTX 5060 Ti + 2070 SUPER via nvidia-smi |
+| 3 | Job e2e `probe` + `pytorch_cuda_probe` via `/jobs` + `/v1/pool` | **PASS** — probe `cf64269b…` completed; CUDA `49c6ddfa…` `cuda_available=true` on `cuda:0` 5060 Ti |
+| 4 | Portal Tailscale `http://100.85.165.84:8767/portal` + invite login | **PASS** — HTTP 200; invite `glitch-factor` → `auth_method=invite_code` |
+| 5 | Portal Utilize submit (quick probe) | **PASS** — `POST /api/jobs` probe completes through worker |
+| 6 | Desktop app import / `start-gpu-pool-app` | **PASS** — `GPUPool`+`desktop_app` import OK; `start-gpu-pool-app.cmd` present; process `-m gpu_swarm.app` running |
+| 7 | Discord GPU Pool bot + guild commands | **PASS** — PID running `-m gpu_swarm bot`; earlier sync 6 guild cmds (`pool/workers/contribute/submit_probe/submit_compute/job_status`) |
+| 8 | GitHub `phoenixfire808/gpu-swarm` local=remote | **PASS** — public repo; `master` = `origin/master` @ `5cc347f` |
+| 9 | agent-vms quick status | **PASS (cheap)** — `agent-ubuntu` running SSH/RDP; `demo-a` poweroff |
 
-Honest v1: GPU/CPU run jobs; RAM/SSD are **capacity ads** for scheduling, not pooled memory/DFS.
+**Demo verdict:** MOSTLY — safe Twitch show: scheduler status, real GPUs, probe/CUDA jobs, Tailscale portal invite+Utilize, Discord slash cmds, GitHub. Gaps vs vision: RAM/SSD ads not DFS; OAuth later; no Whisper/LLM jobs yet; only allowlisted job types.
 
----
+
 
 ## Done (with dates)
 
@@ -94,9 +86,18 @@ Honest v1: GPU/CPU run jobs; RAM/SSD are **capacity ads** for scheduling, not po
 ### GitHub (2026-08-04)
 - [x] **GitHub publish** — public repo https://github.com/phoenixfire808/gpu-swarm (`gh auth` as phoenixfire808; `origin` pushed)
 
+### EXE download UX docs (2026-08-04)
+- [x] `DOWNLOAD.md` — Releases URL placeholder, Tailscale, invite `glitch-factor`, NVIDIA drivers, join steps
+- [x] `DISCORD_MEMBER_QUICKSTART.md` — leads with Windows EXE download (placeholder asset URL until packaging Worker publishes)
+- [x] README links Releases + `DOWNLOAD.md` as easiest path
+- [x] `.gitignore` — `dist/` `build/` `*.spec` with `!gpu_pool.spec` (track PyInstaller spec when packaging Worker adds it)
+- [ ] GitHub Release + EXE asset — **owned by packaging Worker** (docs use `/releases/latest` placeholder)
+
 ## In progress
 
 - [x] Public repo published — remaining work is Discord smoke + member quickstart, not git publish.
+- [x] Download / member docs prepared for EXE Releases UX (placeholder URL until release exists).
+- [ ] Packaging Worker: build + publish Windows EXE to GitHub Releases; fill exact asset URL in docs if name differs.
 - [ ] Confirm Discord `/pool` smoke in a Glitch Factor channel (manual; optional but good for stream).
 - [ ] Keep scorecard/TODO in sync as features land (this file + `TODO.md`).
 
@@ -104,19 +105,20 @@ Honest v1: GPU/CPU run jobs; RAM/SSD are **capacity ads** for scheduling, not po
 
 ## Next (prioritized)
 
-1. **Stream-friendly verify** — wizard Join → portal Contribute/Utilize → Discord `/pool` → `coding_agent_pool.py --job probe`.
-2. **Member onboarding paste** — ship `DISCORD_MEMBER_QUICKSTART.md` blurb in Glitch Factor with repo URL https://github.com/phoenixfire808/gpu-swarm.
-3. **Discord `/pool` channel smoke** (optional, stream).
-4. **Future job types** — design then implement `whisper_transcribe` / bounded `llm_generate` (see `examples/ollama_or_local_offload.md`); no shell jobs.
-5. **Discord OAuth** for portal (replace invite/password MVP).
-6. Optional: DFS / pooled memory — out of v1 scope (VISION.md).
+1. **Packaging Worker** — publish Windows EXE to GitHub Releases; swap placeholder asset name/URL if needed.
+2. **Member onboarding paste** — post `DISCORD_MEMBER_QUICKSTART.md` in Glitch Factor (EXE + repo URL).
+3. **Stream-friendly verify** — EXE/wizard Join → portal Contribute/Utilize → Discord `/pool` → `coding_agent_pool.py --job probe`.
+4. **Discord `/pool` channel smoke** (optional, stream).
+5. **Future job types** — design then implement `whisper_transcribe` / bounded `llm_generate` (see `examples/ollama_or_local_offload.md`); no shell jobs.
+6. **Discord OAuth** for portal (replace invite/password MVP).
+7. Optional: DFS / pooled memory — out of v1 scope (VISION.md).
 
 ### Next 5 Drew should care about right now
 
-1. Quick live smoke: portal Utilize + Discord `/pool`.
-2. Post member quickstart + repo URL in Glitch Factor.
-3. Plan Whisper/LLM allowlisted runners (post-publish).
-4. Portal Discord OAuth when auth priority rises.
+1. Wait for / verify packaging Worker Release + EXE asset.
+2. Post member quickstart (EXE-first) + repo URL in Glitch Factor.
+3. Quick live smoke: portal Utilize + Discord `/pool`.
+4. Plan Whisper/LLM allowlisted runners (post-publish).
 5. Keep `.env` / tokens local — never commit.
 
 ---
