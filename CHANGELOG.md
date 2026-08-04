@@ -9,6 +9,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 
 ### Added
 
+- **All-in-One Network Hub portal** — brand-first peer-mesh `/portal` (`portal_hub.html`); live workers from `/status` (no mocks); Contribute / Utilize / Connect / Workspace / Diagnostics in one place.
+- **Pool chat** — authenticated shared room; SQLite in `portal.db`; 2.5s poll; empty state when quiet (`GET/POST /api/chat`, `/api/presence`).
+- **Suggestions & review inbox** — submit suggestion/bug/review; host marks open/read/done (`/api/suggestions`).
+- Workers advertise **`llm_ready`** on register/heartbeat for hub display.
+- **Workspace VM integration (MVP)** — desktop Home/Connect → Hermes `agent-vm` with Contribute/`host_protect` CPU+RAM caps; `gpu_swarm/agent_vm_bridge.py`; honest no-NVIDIA-passthrough docs (`ADVANCED_VM.md`); portal Connect note.
 - **Host GPU safety ceiling (`host_protect`)** — default ON; offer ≤55% VRAM; pause lease at ≥65% util / low free VRAM; Contribute checkbox + env tunables; light unit tests.
 - **Living project memory** — `ROADMAP.md`, this `CHANGELOG.md`, `DESIGN.md` (idea → ship pipeline), Cursor rule to keep docs current.
 - Local Pool Endpoint (`local-endpoint` / Connect Start–Stop) — OpenAI-compatible `http://127.0.0.1:8080/v1`.

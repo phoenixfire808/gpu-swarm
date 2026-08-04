@@ -44,10 +44,39 @@ CREATE TABLE IF NOT EXISTS portal_machines (
     FOREIGN KEY(user_id) REFERENCES portal_users(id)
 );
 
+CREATE TABLE IF NOT EXISTS portal_chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES portal_users(id)
+);
+
+CREATE TABLE IF NOT EXISTS portal_suggestions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'suggestion',
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES portal_users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_portal_sessions_user ON portal_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_portal_machines_user ON portal_machines(user_id);
 CREATE INDEX IF NOT EXISTS idx_portal_machines_token ON portal_machines(start_token);
+CREATE INDEX IF NOT EXISTS idx_portal_chat_created ON portal_chat_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_portal_suggestions_created ON portal_suggestions(created_at);
 """
+
+CHAT_RETENTION = 250
+CHAT_BODY_MAX = 1000
+SUGGESTION_BODY_MAX = 4000
+SUGGESTION_CATEGORIES = frozenset({"suggestion", "bug", "review"})
+SUGGESTION_STATUSES = frozenset({"open", "read", "done"})
 
 
 class PortalStore:
@@ -278,3 +307,159 @@ class PortalStore:
         machine["contributor_name"] = (user or {}).get("display_name") or ""
         machine["discord_user"] = (user or {}).get("display_name") or ""
         return machine
+
+    async def list_recent_users(self, within_sec: int = 300) -> list[dict[str, Any]]:
+        """Users with portal activity in the last ``within_sec`` seconds."""
+        cutoff = time.time() - max(30, within_sec)
+        cur = await self.db.execute(
+            """
+            SELECT id, display_name, auth_method, last_seen
+            FROM portal_users
+            WHERE last_seen >= ?
+            ORDER BY last_seen DESC
+            LIMIT 40
+            """,
+            (cutoff,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+    async def add_chat_message(self, user_id: str, display_name: str, body: str) -> dict[str, Any]:
+        text = (body or "").strip()
+        if not text:
+            raise ValueError("message body required")
+        if len(text) > CHAT_BODY_MAX:
+            text = text[:CHAT_BODY_MAX]
+        name = (display_name or "member").strip()[:64] or "member"
+        now = time.time()
+        cur = await self.db.execute(
+            """
+            INSERT INTO portal_chat_messages (user_id, display_name, body, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, name, text, now),
+        )
+        await self.db.commit()
+        msg_id = int(cur.lastrowid or 0)
+        # Cap retention — keep newest N
+        await self.db.execute(
+            """
+            DELETE FROM portal_chat_messages
+            WHERE id NOT IN (
+                SELECT id FROM portal_chat_messages ORDER BY id DESC LIMIT ?
+            )
+            """,
+            (CHAT_RETENTION,),
+        )
+        await self.db.commit()
+        return {
+            "id": msg_id,
+            "user_id": user_id,
+            "display_name": name,
+            "body": text,
+            "created_at": now,
+        }
+
+    async def list_chat_messages(
+        self, *, since_id: int = 0, limit: int = 80
+    ) -> list[dict[str, Any]]:
+        lim = max(1, min(int(limit or 80), 200))
+        if since_id > 0:
+            cur = await self.db.execute(
+                """
+                SELECT id, user_id, display_name, body, created_at
+                FROM portal_chat_messages
+                WHERE id > ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (int(since_id), lim),
+            )
+        else:
+            cur = await self.db.execute(
+                """
+                SELECT id, user_id, display_name, body, created_at
+                FROM portal_chat_messages
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (lim,),
+            )
+            rows = [dict(r) for r in await cur.fetchall()]
+            rows.reverse()
+            return rows
+        return [dict(r) for r in await cur.fetchall()]
+
+    async def add_suggestion(
+        self, user_id: str, display_name: str, body: str, category: str = "suggestion"
+    ) -> dict[str, Any]:
+        text = (body or "").strip()
+        if not text:
+            raise ValueError("suggestion body required")
+        if len(text) > SUGGESTION_BODY_MAX:
+            text = text[:SUGGESTION_BODY_MAX]
+        cat = (category or "suggestion").strip().lower()
+        if cat not in SUGGESTION_CATEGORIES:
+            cat = "suggestion"
+        name = (display_name or "member").strip()[:64] or "member"
+        now = time.time()
+        sid = str(uuid.uuid4())
+        await self.db.execute(
+            """
+            INSERT INTO portal_suggestions (
+                id, user_id, display_name, category, body, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
+            """,
+            (sid, user_id, name, cat, text, now, now),
+        )
+        await self.db.commit()
+        return await self.get_suggestion(sid)  # type: ignore[return-value]
+
+    async def get_suggestion(self, suggestion_id: str) -> dict[str, Any] | None:
+        cur = await self.db.execute(
+            "SELECT * FROM portal_suggestions WHERE id=?",
+            (suggestion_id,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+    async def list_suggestions(
+        self, *, status: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        lim = max(1, min(int(limit or 100), 300))
+        if status and status in SUGGESTION_STATUSES:
+            cur = await self.db.execute(
+                """
+                SELECT * FROM portal_suggestions
+                WHERE status=?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (status, lim),
+            )
+        else:
+            cur = await self.db.execute(
+                """
+                SELECT * FROM portal_suggestions
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (lim,),
+            )
+        return [dict(r) for r in await cur.fetchall()]
+
+    async def set_suggestion_status(
+        self, suggestion_id: str, status: str
+    ) -> dict[str, Any] | None:
+        st = (status or "").strip().lower()
+        if st not in SUGGESTION_STATUSES:
+            raise ValueError(f"status must be one of {sorted(SUGGESTION_STATUSES)}")
+        row = await self.get_suggestion(suggestion_id)
+        if not row:
+            return None
+        now = time.time()
+        await self.db.execute(
+            "UPDATE portal_suggestions SET status=?, updated_at=? WHERE id=?",
+            (st, now, suggestion_id),
+        )
+        await self.db.commit()
+        return await self.get_suggestion(suggestion_id)

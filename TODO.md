@@ -16,12 +16,14 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [x] **Contributor offer ownership** — only owner changes caps; cross-user PATCH 403
 - [x] **Host GPU safety ceiling** — default ON; ≤55% VRAM offer; pause at ≥65% util / low free VRAM
 - [x] Living docs + Cursor rule (TODO / ROADMAP / CHANGELOG / DESIGN / CURRENT_PROGRESS)
+- [x] **Network Hub portal** — peer mesh UI + live `/status` workers (`portal_hub.html`)
+- [x] **Pool chat** + **suggestions/review inbox** (portal sqlite APIs)
 
 ## Now
-- [ ] Drew: Ollama serve + model + worker restart → full chat e2e
-- [ ] Packaging Worker: publish Windows EXE with host_protect + local_endpoint + llm_chat
+- [x] Workspace VM MVP — GPU Pool → Hermes agent-vm with Contribute/host_protect CPU+RAM caps
+- [ ] Drew: Ollama serve + model + worker restart → full chat e2e (and `llm_ready` on hub)
+- [ ] Packaging Worker: publish Windows EXE with host_protect + local_endpoint + llm_chat + workspace bridge
 - [ ] Post member tip: `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`
-- [ ] **In progress:** agent-vms ↔ GPU Pool workspace/VM mode (Hermes owns VMs; no passthrough claims)
 
 ## Next
 - [ ] Streaming on local endpoint (`stream=true`)
@@ -29,6 +31,9 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [ ] Portal Discord OAuth (replace invite/password MVP)
 - [ ] Worker advertise `llm_models` into `/status` for richer `/v1/models`
 - [ ] Stable public URL (durable tunnel / DNS)
+- [ ] Workspace: confirm dialog for halt+start when running above offer
+- [ ] Workspace: multi-session create from desktop UI
+- [ ] Workspace: disk resize / quota (today: scheduling soft-cap only)
 
 ## Blocked
 - [ ] Full LLM e2e — Ollama not running on host worker yet
@@ -38,6 +43,6 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 ## Next 5
 1. Enable Ollama on Drew-Home + restart worker (`llm_ready=yes`)
 2. Smoke: local endpoint → chat completion via pool
-3. Packaging Worker Release + EXE (include host_protect)
-4. Continue VM/workspace integration carefully (do not break in-flight work)
+3. Packaging Worker Release + EXE (include host_protect + workspace bridge)
+4. Try Workspace: `start-gpu-pool-app.cmd` → Home → Workspace → Start / Open
 5. Keep secrets out of git (never `.env` / `data/public_endpoints*`)

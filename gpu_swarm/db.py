@@ -78,6 +78,7 @@ _WORKER_MIGRATIONS: list[tuple[str, str]] = [
         "ALTER TABLE workers ADD COLUMN dedicated_cpu_cores REAL NOT NULL DEFAULT 0",
     ),
     ("contributor_name", "ALTER TABLE workers ADD COLUMN contributor_name TEXT"),
+    ("llm_ready", "ALTER TABLE workers ADD COLUMN llm_ready INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
@@ -130,8 +131,9 @@ class Store:
                 cpu_cores, ram_total_mb, ram_available_mb, max_ram_mb,
                 disk_free_mb, disk_total_mb, disk_path, max_disk_mb,
                 dedicated_ram_mb, dedicated_disk_mb, dedicated_cpu_cores, contributor_name,
+                llm_ready,
                 status, last_heartbeat, registered_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name,
                 discord_user=excluded.discord_user,
@@ -153,6 +155,7 @@ class Store:
                 dedicated_disk_mb=excluded.dedicated_disk_mb,
                 dedicated_cpu_cores=excluded.dedicated_cpu_cores,
                 contributor_name=excluded.contributor_name,
+                llm_ready=excluded.llm_ready,
                 status='online',
                 last_heartbeat=excluded.last_heartbeat
             """,
@@ -178,6 +181,7 @@ class Store:
                 ded_disk,
                 float(data.get("dedicated_cpu_cores") or 0),
                 data.get("contributor_name"),
+                1 if data.get("llm_ready") else 0,
                 now,
                 now,
             ),
@@ -221,6 +225,7 @@ class Store:
         ded_disk = data.get("dedicated_disk_mb")
         ded_cpu = data.get("dedicated_cpu_cores")
         contributor = data.get("contributor_name")
+        llm_ready = data.get("llm_ready")
 
         await self.db.execute(
             """
@@ -239,7 +244,8 @@ class Store:
                 dedicated_ram_mb=COALESCE(?, dedicated_ram_mb),
                 dedicated_disk_mb=COALESCE(?, dedicated_disk_mb),
                 dedicated_cpu_cores=COALESCE(?, dedicated_cpu_cores),
-                contributor_name=COALESCE(?, contributor_name)
+                contributor_name=COALESCE(?, contributor_name),
+                llm_ready=COALESCE(?, llm_ready)
             WHERE id=?
             """,
             (
@@ -262,6 +268,7 @@ class Store:
                 int(ded_disk) if ded_disk is not None else None,
                 float(ded_cpu) if ded_cpu is not None else None,
                 contributor,
+                (1 if llm_ready else 0) if llm_ready is not None else None,
                 worker_id,
             ),
         )
@@ -486,6 +493,7 @@ def _worker_row(row: aiosqlite.Row) -> dict[str, Any]:
         d.setdefault(key, default)
     d.setdefault("disk_path", None)
     d.setdefault("contributor_name", None)
+    d["llm_ready"] = bool(d.get("llm_ready"))
     # Keep portal aliases populated even if only max_* was stored
     if not d.get("dedicated_ram_mb") and d.get("max_ram_mb"):
         d["dedicated_ram_mb"] = d["max_ram_mb"]

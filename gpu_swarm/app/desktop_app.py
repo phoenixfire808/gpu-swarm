@@ -43,7 +43,7 @@ def run_app() -> int:
 class GpuPoolApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
-        self.title(f"{APP_TITLE} — Contribute · Utilize · Connect")
+        self.title(f"{APP_TITLE} — Network Hub")
         self.geometry("1120x820")
         self.minsize(960, 720)
         self.configure(fg_color=BG)
@@ -1152,7 +1152,7 @@ class MainFrame(ctk.CTkFrame):
         ).pack(anchor="w")
         ctk.CTkLabel(
             left,
-            text=f"Contribute · Utilize · Connect  ·  invite: {PORTAL_INVITE_CODE}",
+            text=f"Network Hub · Contribute · Utilize · Connect · invite: {PORTAL_INVITE_CODE}",
             text_color=MUTED,
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w")
@@ -1253,18 +1253,19 @@ class MainFrame(ctk.CTkFrame):
         elif mode == "connect":
             self._refresh_connect_snippets()
             self._test_connect_scheduler()
+            self._refresh_workspace()
 
     def _build_home(self, parent: Any) -> None:
         ctk.CTkLabel(
             parent,
-            text="What do you want to do?",
+            text="Network Hub",
             font=ctk.CTkFont(family="Segoe UI Semibold", size=26),
         ).pack(anchor="w", pady=(4, 4))
         ctk.CTkLabel(
             parent,
             text=(
-                "Contribute joins your GPU. Utilize runs jobs on the pool. "
-                "Connect covers APIs + the agent Workspace VM (capped to your share)."
+                "Peer mesh for spare GPUs among friends. Contribute · Utilize · Connect here; "
+                "Pool chat + suggestions live on the web hub. Workspace = agent-vms (Hermes; not passthrough)."
             ),
             text_color=MUTED,
             wraplength=980,
@@ -1281,65 +1282,83 @@ class MainFrame(ctk.CTkFrame):
                 "contribute",
                 "1 · Contribute",
                 "Install / join as a worker",
-                "Wizard + Join/Leave · VRAM/CPU/RAM/disk caps · your GPU helps the pool.",
+                "Wizard + Join/Leave · VRAM/CPU/RAM/disk caps · host_protect ON.",
                 "Open Contribute →",
+                False,
             ),
             (
                 "utilize",
                 "2 · Utilize",
                 "Use the pool NOW",
-                "Live workers & GPUs · Run Probe · Run CUDA Job · see status + results end-to-end.",
+                "Live workers & GPUs · Run Probe · Run CUDA Job · status + results.",
                 "Open Utilize →",
+                False,
             ),
             (
                 "connect",
                 "3 · Connect",
-                "APIs + Workspace VM",
-                "Scheduler/portal URLs · local model endpoint · agent Ubuntu VM under your share caps.",
+                "APIs + local model",
+                "Scheduler/portal URLs · OpenAI-style endpoint · Discord / CLI.",
                 "Open Connect →",
+                False,
             ),
             (
-                "connect",
+                "workspace",
                 "4 · Workspace",
-                "Open agent Ubuntu VM",
-                "Hermes/VirtualBox desktop · CPU/RAM from Contribute · GPU stays on host worker.",
+                "agent-vms slot",
+                "Optional Linux desktop via Hermes — GPU stays on host worker.",
                 "Open Workspace →",
+                True,
             ),
         )
-        for col, (key, title, subtitle, body, cta) in enumerate(specs):
+        for col, (key, title, subtitle, body, cta, is_workspace) in enumerate(specs):
             card = ctk.CTkFrame(cards, fg_color=PANEL, corner_radius=14, border_width=1, border_color="#2A3544")
             card.grid(row=0, column=col, sticky="nsew", padx=8, pady=4)
             ctk.CTkLabel(
                 card,
                 text=title,
-                font=ctk.CTkFont(size=22, weight="bold"),
+                font=ctk.CTkFont(size=20, weight="bold"),
                 text_color=ACCENT,
             ).pack(anchor="w", padx=18, pady=(20, 4))
             ctk.CTkLabel(
                 card,
                 text=subtitle,
-                font=ctk.CTkFont(size=15, weight="bold"),
+                font=ctk.CTkFont(size=14, weight="bold"),
             ).pack(anchor="w", padx=18)
             ctk.CTkLabel(
                 card,
                 text=body,
                 text_color=MUTED,
-                wraplength=280,
+                wraplength=220,
                 justify="left",
             ).pack(anchor="w", padx=18, pady=(10, 16))
-            ctk.CTkButton(
-                card,
-                text=cta,
-                height=44,
-                fg_color=ACCENT,
-                text_color="#0A1210",
-                font=ctk.CTkFont(size=14, weight="bold"),
-                command=lambda k=key: self._set_mode(k),
-            ).pack(fill="x", padx=18, pady=(0, 20))
+            if is_workspace:
+                ctk.CTkButton(
+                    card,
+                    text=cta,
+                    height=44,
+                    fg_color="#2A3544",
+                    font=ctk.CTkFont(size=14, weight="bold"),
+                    command=self._home_workspace_slot,
+                ).pack(fill="x", padx=18, pady=(0, 20))
+            else:
+                ctk.CTkButton(
+                    card,
+                    text=cta,
+                    height=44,
+                    fg_color=ACCENT,
+                    text_color="#0A1210",
+                    font=ctk.CTkFont(size=14, weight="bold"),
+                    command=lambda k=key: self._set_mode(k),
+                ).pack(fill="x", padx=18, pady=(0, 20))
 
-        live = self._card(parent, "Live pool snapshot (home)")
+        live = self._card(parent, "Live pool snapshot (hub)")
         self.home_pool_lbl = ctk.CTkLabel(live, text="Checking scheduler…", text_color=MUTED, wraplength=960, justify="left")
         self.home_pool_lbl.pack(anchor="w")
+        self.home_workspace_lbl = ctk.CTkLabel(
+            live, text="Workspace slot: …", text_color=MUTED, wraplength=960, justify="left"
+        )
+        self.home_workspace_lbl.pack(anchor="w", pady=(6, 0))
         row = ctk.CTkFrame(live, fg_color="transparent")
         row.pack(fill="x", pady=(10, 0))
         ctk.CTkButton(row, text="Refresh", fg_color="#2A3544", command=self._refresh_home_pool).pack(side="left")
@@ -1352,22 +1371,52 @@ class MainFrame(ctk.CTkFrame):
         ).pack(side="left", padx=8)
         ctk.CTkButton(
             row,
+            text="Web hub (chat / suggest)",
+            fg_color="#2A3544",
+            command=self._open_portal,
+        ).pack(side="left", padx=8)
+        ctk.CTkButton(
+            row,
             text="How to Connect →",
             fg_color="#2A3544",
             command=lambda: self._set_mode("connect"),
         ).pack(side="left")
 
+    def _home_workspace_slot(self) -> None:
+        """Jump to Connect workspace controls; web hub also has a Workspace slot."""
+        info = be.get_agent_vms_info()
+        ready = bool(info.get("ready"))
+        path = info.get("path") or "(default)"
+        msg = (
+            f"Workspace: agent-vms {'ready' if ready else 'slot'} · {path} "
+            "(Hermes owns VMs — not GPU passthrough). Chat/suggestions: Open web hub."
+        )
+        if hasattr(self, "home_workspace_lbl"):
+            self.home_workspace_lbl.configure(text=msg, text_color=OK_GREEN if ready else MUTED)
+        self._set_mode("connect")
+        if hasattr(self, "_refresh_workspace"):
+            self._refresh_workspace()
+
     def _refresh_home_pool(self) -> None:
         def work() -> None:
             url = self._scheduler_url_for_jobs()
             st = be.pool_status(url)
-            self.after(0, lambda: self._render_home_pool(st))
+            info = be.get_agent_vms_info()
+            self.after(0, lambda: self._render_home_pool(st, info))
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _render_home_pool(self, st: dict[str, Any]) -> None:
+    def _render_home_pool(self, st: dict[str, Any], workspace: dict[str, Any] | None = None) -> None:
         if not hasattr(self, "home_pool_lbl"):
             return
+        if workspace is not None and hasattr(self, "home_workspace_lbl"):
+            ready = bool(workspace.get("ready"))
+            self.home_workspace_lbl.configure(
+                text=(
+                    f"Workspace: agent-vms {'ready' if ready else 'slot'} · {workspace.get('path') or ''}"
+                ),
+                text_color=OK_GREEN if ready else MUTED,
+            )
         if st.get("ok"):
             gpus = ", ".join(st.get("gpus") or []) or "(none listed)"
             text = (
@@ -1554,6 +1603,77 @@ class MainFrame(ctk.CTkFrame):
     def _build_connect(self, parent: Any) -> None:
         scroll = ctk.CTkScrollableFrame(parent, fg_color=BG)
         scroll.pack(fill="both", expand=True)
+
+        ws = self._card(scroll, "Workspace — agent Ubuntu VM (Hermes / VirtualBox)")
+        ctk.CTkLabel(
+            ws,
+            text=(
+                "One-product path: open a capped Linux desktop workspace from GPU Pool. "
+                "CPU/RAM come from your Contribute share (+ host_protect ceiling). "
+                "Shared GPU/VRAM is NOT passed into the VM — pool jobs still use the host worker."
+            ),
+            text_color=MUTED,
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w")
+        self.workspace_plan_lbl = ctk.CTkLabel(
+            ws,
+            text="Resource plan: checking…",
+            text_color=ACCENT,
+            wraplength=900,
+            justify="left",
+        )
+        self.workspace_plan_lbl.pack(anchor="w", pady=(8, 4))
+        ws_row = ctk.CTkFrame(ws, fg_color="transparent")
+        ws_row.pack(fill="x", pady=(8, 4))
+        self.workspace_open_btn = ctk.CTkButton(
+            ws_row,
+            text="Start / Open workspace",
+            width=200,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=self._open_workspace,
+        )
+        self.workspace_open_btn.pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            ws_row,
+            text="Open RDP only",
+            width=130,
+            fg_color="#2A3544",
+            command=self._open_workspace_rdp,
+        ).pack(side="left", padx=(0, 8))
+        self.workspace_halt_btn = ctk.CTkButton(
+            ws_row,
+            text="Halt VM",
+            width=100,
+            fg_color=DANGER,
+            command=self._halt_workspace,
+        )
+        self.workspace_halt_btn.pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            ws_row,
+            text="Refresh",
+            width=90,
+            fg_color="#2A3544",
+            command=self._refresh_workspace,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            ws_row,
+            text="ADVANCED_VM.md",
+            width=140,
+            fg_color="#2A3544",
+            command=lambda: self._open_doc(be.ADVANCED_VM_DOC),
+        ).pack(side="left")
+        self.workspace_status_lbl = ctk.CTkLabel(
+            ws,
+            text="Workspace: checking…",
+            text_color=MUTED,
+            wraplength=900,
+            justify="left",
+        )
+        self.workspace_status_lbl.pack(anchor="w", pady=(6, 0))
+        self._refresh_workspace()
+
         friends = self._card(scroll, "How friends connect")
         friends_box = ctk.CTkTextbox(friends, height=150, fg_color="#121A24")
         friends_box.pack(fill="x")
@@ -2186,6 +2306,118 @@ class MainFrame(ctk.CTkFrame):
                 return url
         return (self.settings.scheduler_url or DEFAULT_SCHEDULER_URL).rstrip("/")
 
+    def _refresh_workspace(self) -> None:
+        if not hasattr(self, "workspace_status_lbl"):
+            return
+
+        def work() -> None:
+            try:
+                st = be.workspace_status()
+                plan = be.workspace_resource_plan()
+            except Exception as exc:  # noqa: BLE001
+                st = {"ok": False, "message": str(exc), "vm_status": "error"}
+                plan = {}
+            self.after(0, lambda: self._render_workspace(st, plan))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _render_workspace(self, st: dict[str, Any], plan: dict[str, Any] | None = None) -> None:
+        if not hasattr(self, "workspace_status_lbl"):
+            return
+        plan = plan or st.get("plan") or {}
+        mapping = str(plan.get("mapping") or st.get("message") or "")
+        if hasattr(self, "workspace_plan_lbl"):
+            offer = plan.get("offer") or {}
+            self.workspace_plan_lbl.configure(
+                text=(
+                    f"Offer → VM: {plan.get('cpus', '?')} CPUs · "
+                    f"{plan.get('memory_mb', '?')} MiB RAM · "
+                    f"display VRAM {plan.get('display_vram_mb', 64)} MiB\n"
+                    f"Contribute CPU {offer.get('max_cpu_percent', '?')}% · "
+                    f"RAM cap {offer.get('max_ram_mb') or 'auto'} · "
+                    f"GPU offer {offer.get('max_vram_mb', 0)} MiB (host worker only)\n"
+                    f"{mapping}"
+                )
+            )
+        running = str(st.get("vm_status") or "").lower() == "running"
+        color = OK_GREEN if running else (WARN if st.get("ok") else DANGER)
+        detail = str(st.get("message") or "")
+        gpu = str(st.get("gpu_note") or getattr(be, "ADVANCED_VM_DOC", ""))
+        caps = st.get("caps_match")
+        caps_bit = ""
+        if caps is True:
+            caps_bit = " · caps OK"
+        elif caps is False:
+            caps_bit = " · above offer (halt+start to clamp)"
+        self.workspace_status_lbl.configure(
+            text=(
+                f"Status: {st.get('vm_status', 'unknown')}{caps_bit}\n"
+                f"RDP: {st.get('hint_rdp') or 'mstsc /v:127.0.0.1:3390'}  "
+                f"(login {st.get('rdp_user', 'vagrant')}/{st.get('rdp_password', 'vagrant')})\n"
+                f"{detail}\n"
+                f"{st.get('gpu_note') or 'No NVIDIA passthrough into VirtualBox — GPU stays on host worker.'}"
+            ),
+            text_color=color,
+        )
+        if hasattr(self, "workspace_halt_btn"):
+            self.workspace_halt_btn.configure(state="normal" if running else "disabled")
+        _ = gpu  # doc path available via ADVANCED_VM button
+
+    def _open_workspace(self) -> None:
+        if hasattr(self, "workspace_status_lbl"):
+            self.workspace_status_lbl.configure(
+                text="Starting / opening workspace (Hermes agent-vm)…",
+                text_color=WARN,
+            )
+        if hasattr(self, "workspace_open_btn"):
+            self.workspace_open_btn.configure(state="disabled")
+
+        def work() -> None:
+            result = be.open_workspace(open_rdp=True, start_if_needed=True)
+            self.after(0, lambda: self._workspace_action_done(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _open_workspace_rdp(self) -> None:
+        def work() -> None:
+            result = be.open_workspace_rdp()
+            self.after(
+                0,
+                lambda: self.workspace_status_lbl.configure(
+                    text=str(result.get("message") or result),
+                    text_color=OK_GREEN if result.get("ok") else DANGER,
+                )
+                if hasattr(self, "workspace_status_lbl")
+                else None,
+            )
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _halt_workspace(self) -> None:
+        if hasattr(self, "workspace_status_lbl"):
+            self.workspace_status_lbl.configure(text="Halting workspace…", text_color=WARN)
+        if hasattr(self, "workspace_halt_btn"):
+            self.workspace_halt_btn.configure(state="disabled")
+
+        def work() -> None:
+            result = be.halt_workspace()
+            self.after(0, lambda: self._workspace_action_done(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _workspace_action_done(self, result: dict[str, Any]) -> None:
+        if hasattr(self, "workspace_open_btn"):
+            self.workspace_open_btn.configure(state="normal")
+        self._refresh_workspace()
+        if hasattr(self, "workspace_status_lbl") and result.get("message"):
+            color = OK_GREEN if result.get("ok") else WARN
+            # Keep refreshed status; briefly surface action result in plan line if useful
+            if hasattr(self, "workspace_plan_lbl") and not result.get("ok"):
+                self.workspace_plan_lbl.configure(
+                    text=str(result.get("message")),
+                    text_color=color,
+                )
+
     def _refresh_local_endpoint(self) -> None:
         if not hasattr(self, "local_ep_status_lbl"):
             return
@@ -2565,6 +2797,7 @@ class MainFrame(ctk.CTkFrame):
                 self._refresh_home_pool()
             elif self._mode == "connect":
                 self._refresh_local_endpoint()
+                self._refresh_workspace()
             self.app._poll_after = self.after(4000, tick)
 
         self.app._poll_after = self.after(4000, tick)

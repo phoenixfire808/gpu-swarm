@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GPU Pool — Network Hub</title>
+<style>
+  :root {
+    --bg0: #12151a;
+    --bg1: #1a1f27;
+    --ink: #ebe6dc;
+    --muted: #9a958a;
+    --line: #2c3340;
+    --copper: #d4924a;
+    --steel: #6aa8b5;
+    --ok: #7fb88a;
+    --warn: #c97b6a;
+    --display: "Bahnschrift", "Segoe UI Variable Display", "Trebuchet MS", sans-serif;
+    --body: "Candara", "Calibri", "Segoe UI", sans-serif;
+    --mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: var(--body);
+    color: var(--ink);
+    background:
+      radial-gradient(900px 520px at 8% -8%, rgba(212,146,74,0.16) 0%, transparent 55%),
+      radial-gradient(800px 480px at 96% 4%, rgba(106,168,181,0.12) 0%, transparent 50%),
+      linear-gradient(165deg, #161a21 0%, var(--bg0) 42%, #0e1116 100%);
+    background-attachment: fixed;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.35;
+    background-image:
+      linear-gradient(rgba(106,168,181,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(106,168,181,0.05) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 20%, transparent 75%);
+    animation: gridDrift 28s linear infinite;
+  }
+  @keyframes gridDrift {
+    from { background-position: 0 0, 0 0; }
+    to { background-position: 48px 24px, 24px 48px; }
+  }
+  @keyframes pulseNode {
+    0%, 100% { opacity: 0.55; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.08); }
+  }
+  @keyframes fadeRise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .shell { position: relative; z-index: 1; max-width: 1120px; margin: 0 auto; padding: 0 1.25rem 4rem; }
+
+  /* —— Hero: one composition —— */
+  .hero {
+    min-height: min(92vh, 820px);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 3.5rem 0 2rem;
+    position: relative;
+    animation: fadeRise 0.7s ease-out;
+  }
+  .hero-mesh {
+    position: absolute;
+    inset: 8% 0 auto;
+    height: 46%;
+    pointer-events: none;
+  }
+  .hero-mesh svg { width: 100%; height: 100%; overflow: visible; }
+  .hero-mesh .link { stroke: rgba(106,168,181,0.28); stroke-width: 1; fill: none; }
+  .hero-mesh .node {
+    fill: var(--copper);
+    animation: pulseNode 3.6s ease-in-out infinite;
+  }
+  .hero-mesh .node.offline { fill: #5a5f6a; animation: none; opacity: 0.45; }
+  .hero-mesh .node.llm { fill: var(--steel); }
+  .brand {
+    font-family: var(--display);
+    font-size: clamp(3rem, 9vw, 5.4rem);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 0.95;
+    margin: 0 0 0.65rem;
+  }
+  .brand em {
+    font-style: normal;
+    color: var(--copper);
+  }
+  .hero-line {
+    font-family: var(--display);
+    font-size: clamp(1.15rem, 2.6vw, 1.55rem);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    max-width: 28ch;
+    margin: 0 0 0.55rem;
+  }
+  .hero-sub {
+    color: var(--muted);
+    max-width: 38rem;
+    line-height: 1.5;
+    margin: 0 0 1.4rem;
+    font-size: 1.02rem;
+  }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center; }
+  .mesh-live {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--steel);
+    letter-spacing: 0.04em;
+    margin-top: 1.1rem;
+  }
+
+  /* —— Shared chrome —— */
+  button, .btn {
+    font-family: var(--display);
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: 0;
+    border-radius: 4px;
+    padding: 0.62rem 1.05rem;
+    cursor: pointer;
+    background: var(--copper);
+    color: #1a1208;
+  }
+  button.ghost, .btn.ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  button.steel { background: var(--steel); color: #0b1518; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  a { color: var(--steel); }
+  label { display: block; font-size: 0.82rem; color: var(--muted); margin: 0.7rem 0 0.28rem; }
+  input[type="text"], input[type="password"], input[type="number"], select, textarea {
+    width: 100%;
+    padding: 0.58rem 0.72rem;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    background: rgba(10,12,16,0.72);
+    color: var(--ink);
+    font: inherit;
+  }
+  textarea { min-height: 5.5rem; resize: vertical; font-family: var(--body); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  @media (max-width: 720px) { .row { grid-template-columns: 1fr; } }
+  .slider-row { display: grid; grid-template-columns: 1fr auto; gap: 0.6rem; align-items: center; }
+  input[type="range"] { width: 100%; accent-color: var(--steel); }
+  .val { font-family: var(--mono); font-size: 0.85rem; color: var(--copper); min-width: 4.5rem; text-align: right; }
+  .note {
+    margin: 0.85rem 0 0;
+    padding: 0.65rem 0;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  .err { color: #e0a59a; font-size: 0.9rem; margin-top: 0.5rem; }
+  .hidden { display: none !important; }
+  pre {
+    margin: 0.5rem 0 0;
+    padding: 0.75rem;
+    background: rgba(8,10,14,0.85);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: auto;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+  h2 {
+    font-family: var(--display);
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem;
+  }
+  h3 {
+    font-family: var(--display);
+    font-size: 0.95rem;
+    color: var(--copper);
+    margin: 1.2rem 0 0.4rem;
+    font-weight: 600;
+  }
+  .lede { color: var(--muted); line-height: 1.5; margin: 0 0 0.85rem; max-width: 46rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-top: 1rem; }
+  .status-dot {
+    display: inline-block;
+    width: 0.55rem; height: 0.55rem;
+    border-radius: 50%;
+    margin-right: 0.35rem;
+    background: var(--warn);
+    vertical-align: middle;
+  }
+  .status-dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(127,184,138,0.15); }
+  .tag {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    margin-right: 0.3rem;
+  }
+  .tag.ok { color: var(--ok); border-color: rgba(127,184,138,0.35); }
+  .tag.steel { color: var(--steel); border-color: rgba(106,168,181,0.4); }
+  .tag.warn { color: var(--warn); border-color: rgba(201,123,106,0.4); }
+
+  /* —— Auth form in hero —— */
+  .gate {
+    margin-top: 1.5rem;
+    max-width: 28rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--line);
+  }
+  .gate h2 { font-size: 1.05rem; color: var(--muted); font-weight: 500; }
+
+  /* —— App chrome —— */
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 1rem 0 0.35rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .who { color: var(--muted); font-size: 0.92rem; }
+  .who strong { color: var(--ink); font-family: var(--display); }
+  .nav {
+    display: flex;
+    gap: 0.15rem;
+    flex-wrap: wrap;
+    margin: 0.85rem 0 1.25rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .nav button {
+    background: transparent;
+    color: var(--muted);
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.65rem 0.85rem;
+    font-weight: 500;
+    flex: 0 1 auto;
+  }
+  .nav button.active {
+    color: var(--ink);
+    border-bottom-color: var(--copper);
+  }
+
+  /* —— Mode destinations (interactive, not decorative cards) —— */
+  .mode-rail {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.5rem;
+    margin: 0.5rem 0 1.5rem;
+  }
+  .mode-rail button {
+    text-align: left;
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.85rem 0.9rem;
+    transition: border-color 0.18s ease, color 0.18s ease;
+  }
+  .mode-rail button:hover { border-color: var(--copper); color: var(--copper); }
+  .mode-rail .k {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin-bottom: 0.25rem;
+  }
+  .mode-rail .t { font-family: var(--display); font-size: 1.05rem; font-weight: 600; }
+
+  /* —— Peer mesh list —— */
+  .section { margin: 1.75rem 0 2rem; animation: fadeRise 0.45s ease-out; }
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+  }
+  .peer-list { display: flex; flex-direction: column; gap: 0; }
+  .peer {
+    display: grid;
+    grid-template-columns: minmax(140px, 1.1fr) minmax(160px, 1.4fr) minmax(120px, 1fr) auto;
+    gap: 0.75rem 1rem;
+    padding: 0.95rem 0;
+    border-bottom: 1px solid var(--line);
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .peer { grid-template-columns: 1fr; gap: 0.35rem; }
+  }
+  .peer .name {
+    font-family: var(--display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .peer .meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.2rem; }
+  .peer .gpus { font-size: 0.9rem; line-height: 1.4; }
+  .peer .caps { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+  .empty {
+    color: var(--muted);
+    font-size: 0.95rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* —— Chat —— */
+  .chat-layout {
+    display: grid;
+    grid-template-columns: 1fr 160px;
+    gap: 1.25rem;
+    min-height: 320px;
+  }
+  @media (max-width: 720px) { .chat-layout { grid-template-columns: 1fr; } }
+  .chat-log {
+    height: 320px;
+    overflow: auto;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 0.75rem 0;
+  }
+  .chat-msg { margin: 0 0 0.85rem; }
+  .chat-msg .who-line {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--steel);
+    margin-bottom: 0.15rem;
+  }
+  .chat-msg .body { line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+  .chat-compose { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+  .chat-compose input { flex: 1; }
+  .presence-list { font-size: 0.85rem; color: var(--muted); }
+  .presence-list li { margin: 0.35rem 0; list-style: none; }
+  .presence-list ul { margin: 0; padding: 0; }
+
+  /* —— Suggestions —— */
+  .inbox-item {
+    padding: 0.9rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .inbox-item .head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+    margin-bottom: 0.35rem;
+  }
+  .inbox-item .author { font-family: var(--display); font-weight: 600; }
+  .inbox-item .when { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+  .inbox-item.done { opacity: 0.55; }
+
+  .url-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+  @media (max-width: 720px) { .url-grid { grid-template-columns: 1fr; } }
+  .url-row {
+    border-top: 1px solid var(--line);
+    padding: 0.65rem 0;
+  }
+  .url-row span { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 0.2rem; }
+  .url-row code { font-family: var(--mono); font-size: 0.82rem; word-break: break-all; }
+  .cmd-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+  .cmd-list code {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 0.28rem 0.5rem;
+    border-radius: 3px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid var(--line);
+  }
+  .job-meta { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); margin-top: 0.65rem; }
+  .pill {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-family: var(--mono);
+  }
+  .pill.on { background: rgba(127,184,138,0.15); color: var(--ok); }
+  .pill.off { background: rgba(201,123,106,0.15); color: var(--warn); }
+  .pill.queued, .pill.running { background: rgba(106,168,181,0.15); color: var(--steel); }
+  .pill.completed { background: rgba(127,184,138,0.15); color: var(--ok); }
+  .pill.failed { background: rgba(201,123,106,0.15); color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Logged-out / always-visible hero composition -->
+  <header class="hero" id="hero">
+    <div class="hero-mesh" aria-hidden="true">
+      <svg id="meshSvg" viewBox="0 0 1000 280" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <h1 class="brand">GPU <em>Pool</em></h1>
+    <p class="hero-line">Peer mesh for spare GPUs among friends.</p>
+    <p class="hero-sub" id="heroSub">
+      Share what you can spare, borrow what you need — Contribute, Utilize, Connect,
+      and talk in one private network hub.
+    </p>
+    <div class="cta-row" id="heroCta">
+      <button type="button" id="heroEnterBtn">Enter the hub</button>
+      <button type="button" class="ghost" data-go-public="mesh">See who's online</button>
+    </div>
+    <p class="mesh-live" id="meshLive">Listening for peers…</p>
+
+    <div class="gate" id="loginPanel">
+      <h2>Sign in with invite</h2>
+      <label for="displayName">Display name</label>
+      <input id="displayName" type="text" placeholder="YourDiscordName" autocomplete="nickname" />
+      <div class="row">
+        <div>
+          <label for="poolPassword">Pool password</label>
+          <input id="poolPassword" type="password" placeholder="shared pool password" autocomplete="current-password" />
+        </div>
+        <div>
+          <label for="inviteCode">Invite code</label>
+          <input id="inviteCode" type="text" placeholder="glitch-factor" autocomplete="off" />
+        </div>
+      </div>
+      <div class="actions">
+        <button id="loginBtn" type="button">Join the mesh</button>
+      </div>
+      <div class="err hidden" id="loginErr"></div>
+      <p class="note" id="networkNote">Private Tailscale/LAN by default; public HTTPS when Drew opens the tunnel.</p>
+    </div>
+  </header>
+
+  <section id="appPanel" class="hidden">
+    <div class="topbar">
+      <div class="who">Signed in as <strong id="who"></strong> · Network Hub</div>
+      <button class="ghost" id="logoutBtn" type="button">Log out</button>
+    </div>
+
+    <nav class="nav" aria-label="Hub sections">
+      <button type="button" class="active" data-view="home">Hub</button>
+      <button type="button" data-view="contribute">Contribute</button>
+      <button type="button" data-view="utilize">Utilize</button>
+      <button type="button" data-view="connect">Connect</button>
+      <button type="button" data-view="chat">Chat</button>
+      <button type="button" data-view="suggest">Suggest</button>
+      <button type="button" data-view="workspace">Workspace</button>
+      <button type="button" data-view="diagnostics">Diagnostics</button>
+    </nav>
+
+    <!-- HOME / HUB -->
+    <div id="viewHome">
+      <div class="mode-rail">
+        <button type="button" data-go="contribute"><span class="k">Share</span><span class="t">Contribute</span></button>
+        <button type="button" data-go="utilize"><span class="k">Run</span><span class="t">Utilize</span></button>
+        <button type="button" data-go="connect"><span class="k">Endpoint</span><span class="t">Connect</span></button>
+        <button type="button" data-go="chat"><span class="k">Talk</span><span class="t">Pool chat</span></button>
+        <button type="button" data-go="suggest"><span class="k">Ideas</span><span class="t">Suggest</span></button>
+        <button type="button" data-go="workspace"><span class="k">VM</span><span class="t">Workspace</span></button>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <h2>Network availability</h2>
+          <button class="ghost" id="refreshBtn" type="button">Refresh</button>
+        </div>
+        <p class="lede" id="capacityNote">Live workers from scheduler /status — offered caps, not mock inventory.</p>
+        <p class="err hidden" id="dashErr"></p>
+        <div class="peer-list" id="peerList"></div>
+      </div>
+
+      <div class="section" id="friendsHomeCard">
+        <h2>How friends connect</h2>
+        <p class="lede" id="friendsHomeLede">Public HTTPS when the tunnel is on — invite still required.</p>
+        <ol id="friendsHomeSteps" style="margin:0; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
+        <div class="actions">
+          <button type="button" data-go="connect">Full Connect guide</button>
+          <button class="ghost" type="button" data-go="chat">Open chat</button>
+        </div>
+      </div>
+      <p class="note" id="laptopNote"></p>
+    </div>
+
+    <!-- UTILIZE -->
+    <div id="viewUtilize" class="hidden">
+      <div class="section">
+        <h2>Utilize the pool</h2>
+        <p class="lede" id="utilizeNote">Allowlisted jobs only — probe, pytorch_cuda_probe, llm_chat.</p>
+        <label for="jobType">Job type</label>
+        <select id="jobType">
+          <option value="probe">probe — live GPU inventory</option>
+          <option value="pytorch_cuda_probe">pytorch_cuda_probe — CUDA matmul</option>
+          <option value="llm_chat">llm_chat — chat via llm_ready workers</option>
+        </select>
+        <div id="cudaOpts" class="hidden">
+          <label for="matrixSize">Matrix size</label>
+          <input id="matrixSize" type="number" min="16" max="4096" step="16" value="512" />
+        </div>
+        <div class="actions">
+          <button id="submitJobBtn" type="button">Submit job</button>
+          <button class="ghost" id="pollJobBtn" type="button" disabled>Refresh status</button>
+          <button class="ghost" type="button" data-go="home">Back to Hub</button>
+        </div>
+        <div class="err hidden" id="jobErr"></div>
+        <div id="jobBox" class="hidden">
+          <p class="job-meta">Job <strong id="jobId"></strong> · <span class="pill" id="jobStatusPill">—</span></p>
+          <pre id="jobResult">—</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTRIBUTE -->
+    <div id="viewContribute" class="hidden">
+      <div class="section">
+        <h2>Contribute — register this machine</h2>
+        <p class="lede">Set dedication caps, then copy a start-token command. Worker reports real nvidia-smi.</p>
+        <p class="note" id="ownershipNote">Only you control how much of your PC is offered. Host GPU safety stays ON by default (offer ≤~55% VRAM; pause when util ≥65% or free VRAM is low).</p>
+        <label for="workerName">Worker name</label>
+        <input id="workerName" type="text" placeholder="My-PC-gpu" />
+        <label for="schedulerUrl">Scheduler URL</label>
+        <input id="schedulerUrl" type="text" />
+        <label>GPU VRAM soft cap (MB) — 0 = use free VRAM</label>
+        <div class="slider-row">
+          <input id="vram" type="range" min="0" max="24576" step="256" value="0" />
+          <span class="val" id="vramVal">0</span>
+        </div>
+        <label>CPU percent available for jobs</label>
+        <div class="slider-row">
+          <input id="cpuPct" type="range" min="5" max="100" step="5" value="50" />
+          <span class="val" id="cpuPctVal">50%</span>
+        </div>
+        <label>CPU cores to advertise (0 = detect)</label>
+        <div class="slider-row">
+          <input id="cpuCores" type="range" min="0" max="64" step="1" value="0" />
+          <span class="val" id="cpuCoresVal">0</span>
+        </div>
+        <label>RAM to advertise (MB)</label>
+        <div class="slider-row">
+          <input id="ram" type="range" min="0" max="65536" step="512" value="0" />
+          <span class="val" id="ramVal">0</span>
+        </div>
+        <label>SSD / disk for jobs (MB)</label>
+        <div class="slider-row">
+          <input id="disk" type="range" min="0" max="524288" step="1024" value="0" />
+          <span class="val" id="diskVal">0</span>
+        </div>
+        <div class="actions">
+          <button id="registerBtn" type="button">Create start token</button>
+          <button class="ghost" id="updateCapsBtn" type="button" disabled>Update my caps</button>
+          <button class="ghost" type="button" data-go="home">Back to Hub</button>
+        </div>
+        <div class="err hidden" id="regErr"></div>
+        <div id="myMachinesBox" style="margin-top:1.25rem">
+          <h3>Your machines</h3>
+          <div id="myMachinesList" class="lede">Loading…</div>
+        </div>
+        <div id="instrBox" class="hidden" style="margin-top:1rem">
+          <h3>Run worker</h3>
+          <pre id="instrWin"></pre>
+          <pre id="instrOne" style="margin-top:0.6rem"></pre>
+          <pre id="instrEnv" style="margin-top:0.6rem"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONNECT -->
+    <div id="viewConnect" class="hidden">
+      <div class="section">
+        <h2>Connect — reach the pool</h2>
+        <p class="lede" id="connectLede">Public HTTPS when the tunnel is on — no Tailscale needed.</p>
+        <div id="publicBanner" class="note hidden"><strong>No Tailscale needed</strong> — public access is live. Invite still required.</div>
+        <h3>How friends connect</h3>
+        <ol id="friendsConnectSteps" style="margin:0.4rem 0 0.85rem; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
+        <h3 id="localModelTitle">Local model endpoint</h3>
+        <p class="lede" id="localModelHonesty">OpenAI-compatible localhost API → pool llm_chat. Not a PCI GPU.</p>
+        <pre id="localModelBlock">—</pre>
+        <p class="lede" id="localModelHost"></p>
+        <h3>URLs</h3>
+        <div class="url-grid">
+          <div class="url-row" id="cardPortalPublic"><span>Portal (public)</span><code id="urlPortalPublic">—</code></div>
+          <div class="url-row" id="cardPoolApiPublic"><span>Pool API (public)</span><code id="urlPoolApiPublic">—</code></div>
+          <div class="url-row"><span>Scheduler (Tailscale)</span><code id="urlSchedTs">—</code></div>
+          <div class="url-row"><span>Scheduler (localhost)</span><code id="urlSchedLocal">—</code></div>
+          <div class="url-row"><span>Portal (Tailscale)</span><code id="urlPortalTs">—</code></div>
+          <div class="url-row"><span>Portal (this session)</span><code id="urlPortalThis">—</code></div>
+        </div>
+        <h3>Discord · <span id="discordGuild">Glitch Factor</span> · <span id="discordBot">GPU Pool</span></h3>
+        <div class="cmd-list" id="discordCmds"></div>
+        <h3>Env</h3>
+        <pre id="connectEnv">—</pre>
+        <h3>CLI</h3>
+        <pre id="connectCli">—</pre>
+        <h3>Python SDK</h3>
+        <pre id="connectPy">—</pre>
+        <h3>HTTP</h3>
+        <pre id="connectHttp">—</pre>
+        <h3>Rules</h3>
+        <ul id="connectRules" style="margin:0.4rem 0 0; padding-left:1.2rem; color:var(--muted); line-height:1.5"></ul>
+        <p class="lede" style="margin-top:1rem">Docs: <code id="connectDocs">CONNECTING.md</code> · Invite: <code id="inviteHint">—</code></p>
+        <div class="actions">
+          <button class="ghost" type="button" data-go="home">Back to Hub</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div id="viewChat" class="hidden">
+      <div class="section">
+        <h2>Pool chat</h2>
+        <p class="lede">One shared room for people signed into this portal. Near-real-time poll — no mock backlog.</p>
+        <div class="chat-layout">
+          <div>
+            <div class="chat-log" id="chatLog"><div class="empty" id="chatEmpty">No messages yet — say hello to the mesh.</div></div>
+            <form class="chat-compose" id="chatForm">
+              <input id="chatInput" type="text" maxlength="1000" placeholder="Message the pool…" autocomplete="off" />
+              <button type="submit">Send</button>
+            </form>
+            <div class="err hidden" id="chatErr"></div>
+          </div>
+          <aside class="presence-list">
+            <h3 style="margin-top:0">Recently here</h3>
+            <ul id="presenceList"><li class="empty" style="border:0;padding:0">—</li></ul>
+          </aside>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button" data-go="home">Back to Hub</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUGGEST -->
+    <div id="viewSuggest" class="hidden">
+      <div class="section">
+        <h2>Suggestions &amp; reviews</h2>
+        <p class="lede">Ideas, bugs, and praise for Drew to work later. Stored on the portal host — not mock data.</p>
+        <label for="suggestCategory">Category</label>
+        <select id="suggestCategory">
+          <option value="suggestion">Suggestion</option>
+          <option value="bug">Bug</option>
+          <option value="review">Review / praise</option>
+        </select>
+        <label for="suggestBody">Your note</label>
+        <textarea id="suggestBody" maxlength="4000" placeholder="What should we improve or keep?"></textarea>
+        <div class="actions">
+          <button id="suggestBtn" type="button">Submit</button>
+          <button class="ghost" id="suggestRefreshBtn" type="button">Refresh inbox</button>
+        </div>
+        <div class="err hidden" id="suggestErr"></div>
+        <p class="lede" id="suggestOk" style="color:var(--ok)"></p>
+      </div>
+      <div class="section">
+        <div class="section-head">
+          <h2>Review inbox</h2>
+          <select id="suggestFilter" style="width:auto;min-width:8rem">
+            <option value="">All</option>
+            <option value="open">Open</option>
+            <option value="read">Read</option>
+            <option value="done">Done</option>
+          </select>
+        </div>
+        <div id="suggestInbox"><div class="empty">No submissions yet.</div></div>
+      </div>
+    </div>
+
+    <!-- WORKSPACE -->
+    <div id="viewWorkspace" class="hidden">
+      <div class="section">
+        <h2>Workspace</h2>
+        <p class="lede" id="workspaceHonesty">Optional Linux desktop via agent-vms — not GPU passthrough.</p>
+        <p class="mesh-live" id="workspaceStatus">Checking local agent-vms…</p>
+        <pre id="workspaceDetail">—</pre>
+        <div class="actions">
+          <button class="ghost" type="button" data-go="home">Back to Hub</button>
+          <button class="ghost" type="button" data-go="contribute">Contribute host GPU instead</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DIAGNOSTICS -->
+    <div id="viewDiagnostics" class="hidden">
+      <div class="section">
+        <h2>Diagnostics</h2>
+        <p class="lede">Paste install/join logs for Drew. Secrets are redacted server-side. Max ~250 KB.</p>
+        <label for="diagHost">Hostname</label>
+        <input id="diagHost" type="text" placeholder="optional" />
+        <label for="diagStep">Wizard step</label>
+        <input id="diagStep" type="text" placeholder="optional" />
+        <label for="diagLog">Log text</label>
+        <textarea id="diagLog" style="min-height:10rem" placeholder="Paste log output…"></textarea>
+        <div class="actions">
+          <button id="diagBtn" type="button">Submit diagnostics</button>
+          <button class="ghost" type="button" data-go="home">Back to Hub</button>
+        </div>
+        <div class="err hidden" id="diagErr"></div>
+        <p class="lede" id="diagOk" style="color:var(--ok)"></p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const bindSlider = (id, valId, fmt) => {
+  const el = $(id), out = $(valId);
+  if (!el || !out) return;
+  const paint = () => { out.textContent = fmt(el.value); };
+  el.addEventListener("input", paint); paint();
+};
+bindSlider("vram", "vramVal", v => `${v} MB`);
+bindSlider("cpuPct", "cpuPctVal", v => `${v}%`);
+bindSlider("cpuCores", "cpuCoresVal", v => v);
+bindSlider("ram", "ramVal", v => `${v} MB`);
+bindSlider("disk", "diskVal", v => `${v} MB`);
+
+let currentJobId = null;
+let jobPollTimer = null;
+let chatPollTimer = null;
+let portalConfig = null;
+let selectedMachineId = null;
+let myMachines = [];
+let chatSinceId = 0;
+let loggedIn = false;
+let lastWorkers = [];
+
+async function api(path, opts={}) {
+  const r = await fetch(path, {
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...(opts.headers||{}) },
+    ...opts,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const detail = data.detail;
+    const msg = typeof detail === "string" ? detail
+      : (Array.isArray(detail) ? detail.map(x => x.msg || JSON.stringify(x)).join("; ") : null);
+    throw new Error(msg || data.message || r.statusText);
+  }
+  return data;
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtMb(n) {
+  n = Number(n||0);
+  if (n >= 1024) return (n/1024).toFixed(1) + " GB";
+  return n + " MB";
+}
+function fmtTime(ts) {
+  if (!ts) return "";
+  try { return new Date(ts * 1000).toLocaleString(); } catch { return ""; }
+}
+
+function show(isIn) {
+  loggedIn = !!isIn;
+  $("loginPanel").classList.toggle("hidden", isIn);
+  $("appPanel").classList.toggle("hidden", !isIn);
+  $("heroCta").classList.toggle("hidden", isIn);
+  if (isIn) {
+    $("hero").style.minHeight = "auto";
+    $("hero").style.paddingBottom = "0.5rem";
+  } else {
+    $("hero").style.minHeight = "";
+    $("hero").style.paddingBottom = "";
+    stopChatPoll();
+  }
+}
+
+function setView(name) {
+  const views = ["home","utilize","contribute","connect","chat","suggest","workspace","diagnostics"];
+  views.forEach(v => {
+    const el = $("view" + v.charAt(0).toUpperCase() + v.slice(1));
+    if (el) el.classList.toggle("hidden", v !== name);
+  });
+  document.querySelectorAll(".nav button").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.view === name);
+  });
+  if (name === "home") refreshDash();
+  if (name === "contribute") refreshMyMachines();
+  if (name === "chat") { refreshChat(true); refreshPresence(); startChatPoll(); }
+  else stopChatPoll();
+  if (name === "suggest") refreshSuggestions();
+  if (name === "workspace") refreshWorkspace();
+}
+
+function paintMesh(workers) {
+  lastWorkers = workers || [];
+  const svg = $("meshSvg");
+  if (!svg) return;
+  const w = lastWorkers.slice(0, 8);
+  const online = w.filter(x => x.online).length;
+  const total = w.length;
+  $("meshLive").textContent = total
+    ? `${online} online · ${total} known peer${total===1?"":"s"} on the mesh`
+    : "No workers heartbeating yet — waiting for contributors";
+  if (!w.length) {
+    svg.innerHTML = `<circle class="node offline" cx="500" cy="140" r="6"/><text x="500" y="175" text-anchor="middle" fill="#9a958a" font-size="14" font-family="Candara,sans-serif">mesh quiet</text>`;
+    return;
+  }
+  const cx = 500, cy = 130, R = 95;
+  const pts = w.map((peer, i) => {
+    const a = (Math.PI * 2 * i) / w.length - Math.PI / 2;
+    return { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * (R * 0.72), peer };
+  });
+  let html = "";
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      if (pts[i].peer.online || pts[j].peer.online) {
+        html += `<line class="link" x1="${pts[i].x}" y1="${pts[i].y}" x2="${pts[j].x}" y2="${pts[j].y}"/>`;
+      }
+    }
+  }
+  pts.forEach((p, i) => {
+    const cls = !p.peer.online ? "node offline" : (p.peer.llm_ready ? "node llm" : "node");
+    html += `<circle class="${cls}" cx="${p.x}" cy="${p.y}" r="7" style="animation-delay:${i*0.25}s"/>`;
+    html += `<text x="${p.x}" y="${p.y + 22}" text-anchor="middle" fill="#9a958a" font-size="11" font-family="Cascadia Mono,Consolas,monospace">${escapeHtml((p.peer.name||"?").slice(0,14))}</text>`;
+  });
+  svg.innerHTML = html;
+}
+
+function paintPeers(workers) {
+  const box = $("peerList");
+  if (!box) return;
+  if (!workers || !workers.length) {
+    box.innerHTML = `<div class="empty">No workers on the network yet.</div>`;
+    paintMesh([]);
+    return;
+  }
+  box.innerHTML = workers.map(w => {
+    const gpus = (w.gpus||[]).map(g => g.name || "?").join(" · ") || "CPU / no GPU listed";
+    const vramFree = w.free_vram_mb;
+    const vramTotal = w.total_vram_mb;
+    const offered = w.max_vram_mb != null ? w.max_vram_mb : null;
+    const vramLine = offered != null && offered > 0
+      ? `${fmtMb(vramFree)} free / ${fmtMb(vramTotal)} · offer cap ${fmtMb(offered)}`
+      : `${fmtMb(vramFree)} free / ${fmtMb(vramTotal)}`;
+    const discord = w.discord_user || w.contributor_name || "";
+    const llm = w.llm_ready
+      ? `<span class="tag steel">llm_ready</span>`
+      : `<span class="tag">llm off</span>`;
+    const st = w.online
+      ? `<span class="status-dot on"></span><span class="tag ok">online</span>`
+      : `<span class="status-dot"></span><span class="tag warn">offline</span>`;
+    return `<article class="peer">
+      <div>
+        <div class="name">${escapeHtml(w.name||"?")}</div>
+        <div class="meta">${escapeHtml(w.host||"")} ${discord ? "· " + escapeHtml(discord) : ""}</div>
+        <div class="meta" style="margin-top:0.35rem">${st} ${llm}</div>
+      </div>
+      <div class="gpus">${escapeHtml(gpus)}<div class="meta">${vramLine}</div></div>
+      <div class="caps">CPU ${(w.cpu_cores!=null?w.cpu_cores:0)}c · ${(w.max_cpu_percent!=null?Number(w.max_cpu_percent).toFixed(0):"—")}%<br>
+        RAM ${fmtMb(w.ram_available_mb)} (cap ${fmtMb(w.max_ram_mb||w.dedicated_ram_mb)})<br>
+        Disk ${fmtMb(w.disk_free_mb)} (cap ${fmtMb(w.max_disk_mb||w.dedicated_disk_mb)})</div>
+      <div class="meta">${w.heartbeat_age_sec!=null?w.heartbeat_age_sec+"s":""} ${escapeHtml(w.status||"")}</div>
+    </article>`;
+  }).join("");
+  paintMesh(workers);
+}
+
+async function refreshPublicMesh() {
+  try {
+    const d = await fetch("/pool-api/status", { credentials: "omit" }).then(r => r.json());
+    paintMesh(d.workers || []);
+  } catch {
+    $("meshLive").textContent = "Scheduler unreachable from this browser — sign in after Tailscale/tunnel is up";
+  }
+}
+
+function paintInstructions(i) {
+  if (!i) return;
+  $("instrWin").textContent = i.windows_cmd;
+  $("instrOne").textContent = i.one_liner;
+  $("instrEnv").textContent = i.env_direct;
+  $("instrBox").classList.remove("hidden");
+}
+
+function selectMachine(m) {
+  selectedMachineId = m.id;
+  $("workerName").value = m.worker_name || "";
+  if (m.scheduler_url) $("schedulerUrl").value = m.scheduler_url;
+  $("vram").value = m.max_vram_mb || 0;
+  $("cpuPct").value = m.max_cpu_percent || 50;
+  $("cpuCores").value = m.dedicated_cpu_cores || 0;
+  $("ram").value = m.dedicated_ram_mb || 0;
+  $("disk").value = m.dedicated_disk_mb || 0;
+  ["vram","cpuPct","cpuCores","ram","disk"].forEach(id => $(id).dispatchEvent(new Event("input")));
+  $("updateCapsBtn").disabled = !selectedMachineId;
+  refreshMyMachinesListOnly();
+}
+
+function refreshMyMachinesListOnly() {
+  const box = $("myMachinesList");
+  if (!box) return;
+  if (!myMachines.length) {
+    box.textContent = "No machines yet — Create start token above.";
+    return;
+  }
+  box.innerHTML = myMachines.map(m => {
+    const sel = m.id === selectedMachineId ? " · selected" : "";
+    return `<div style="margin:0.35rem 0;padding:0.5rem 0;border-bottom:1px solid var(--line);cursor:pointer" data-mid="${escapeHtml(m.id)}">
+      <strong>${escapeHtml(m.worker_name||"worker")}</strong>${sel}<br>
+      <span style="color:var(--muted);font-size:0.85rem">VRAM ${m.max_vram_mb||0} MB · CPU ${m.max_cpu_percent||0}% · RAM ${m.dedicated_ram_mb||0} MB · Disk ${m.dedicated_disk_mb||0} MB</span>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-mid]").forEach(el => {
+    el.onclick = () => {
+      const m = myMachines.find(x => x.id === el.getAttribute("data-mid"));
+      if (m) selectMachine(m);
+    };
+  });
+}
+
+async function refreshMyMachines() {
+  try {
+    const data = await api("/api/machines");
+    myMachines = data.machines || [];
+    if (!selectedMachineId && myMachines.length) selectedMachineId = myMachines[0].id;
+    if (selectedMachineId && !myMachines.find(m => m.id === selectedMachineId)) {
+      selectedMachineId = myMachines.length ? myMachines[0].id : null;
+    }
+    $("updateCapsBtn").disabled = !selectedMachineId;
+    const cur = myMachines.find(m => m.id === selectedMachineId);
+    if (cur) {
+      $("workerName").value = cur.worker_name || $("workerName").value;
+      if (cur.scheduler_url) $("schedulerUrl").value = cur.scheduler_url;
+    }
+    refreshMyMachinesListOnly();
+  } catch (e) {
+    if ($("myMachinesList")) $("myMachinesList").textContent = String(e.message||e);
+  }
+}
+
+function syncCudaOpts() {
+  $("cudaOpts").classList.toggle("hidden", $("jobType").value !== "pytorch_cuda_probe");
+}
+
+function paintConnect(c) {
+  const conn = (c && c.connect) || {};
+  const friends = conn.friends_connect || [];
+  const publicOn = !!(c.public_access || conn.no_tailscale_needed || conn.portal_public);
+  const privateNet = conn.private_network
+    || (publicOn
+      ? "Public HTTPS access is ON — no Tailscale needed. Invite code still required."
+      : "When Drew runs start-public-access.cmd, a public HTTPS portal appears. Tailscale remains optional.");
+  if ($("urlPortalPublic")) $("urlPortalPublic").textContent = conn.portal_public || "(tunnel off — Drew: start-public-access.cmd)";
+  if ($("urlPoolApiPublic")) $("urlPoolApiPublic").textContent = conn.pool_api_public || "—";
+  if ($("publicBanner")) $("publicBanner").classList.toggle("hidden", !publicOn);
+  $("urlSchedTs").textContent = conn.scheduler_tailscale || "—";
+  $("urlSchedLocal").textContent = conn.scheduler_local || "—";
+  $("urlPortalTs").textContent = conn.portal_tailscale || "—";
+  $("urlPortalThis").textContent = conn.portal_this || c.portal_url || "—";
+  $("discordGuild").textContent = conn.discord_primary || "Glitch Factor";
+  $("discordBot").textContent = conn.discord_bot || "GPU Pool";
+  $("discordCmds").innerHTML = (conn.discord_commands || []).map(x => `<code>${escapeHtml(x)}</code>`).join("") || "—";
+  $("connectEnv").textContent = conn.env_example || "—";
+  $("connectCli").textContent = (conn.cli || []).join("\n") || "—";
+  $("connectPy").textContent = conn.python_sdk || "—";
+  $("connectHttp").textContent = (conn.http || []).join("\n") || "—";
+  $("connectDocs").textContent = conn.docs || "CONNECTING.md";
+  $("inviteHint").textContent = c.invite_code_hint || "glitch-factor";
+  $("connectRules").innerHTML = (conn.rules || []).map(r => `<li>${escapeHtml(r)}</li>`).join("");
+  if ($("connectLede")) $("connectLede").textContent = privateNet;
+  if ($("networkNote")) $("networkNote").textContent = privateNet;
+  if ($("friendsHomeLede")) $("friendsHomeLede").textContent = privateNet;
+  const stepsHtml = friends.map(s => `<li>${escapeHtml(s)}</li>`).join("");
+  if ($("friendsConnectSteps")) $("friendsConnectSteps").innerHTML = stepsHtml || "<li>Open portal → invite → Contribute or Utilize</li>";
+  if ($("friendsHomeSteps")) $("friendsHomeSteps").innerHTML = stepsHtml || "<li>Open portal → invite → Contribute or Utilize</li>";
+  const lm = conn.local_model || {};
+  if ($("localModelTitle")) $("localModelTitle").textContent = lm.title || "Local model endpoint";
+  if ($("localModelHonesty")) $("localModelHonesty").textContent = lm.honesty || "OpenAI-compatible localhost API → pool llm_chat.";
+  if ($("localModelBlock")) {
+    $("localModelBlock").textContent = [
+      lm.start || "python -m gpu_swarm local-endpoint",
+      "URL:  " + (lm.url || "http://127.0.0.1:8080/v1"),
+      "Env:  " + (lm.env || "OPENAI_BASE_URL=http://127.0.0.1:8080/v1"),
+      "Apps: " + (lm.apps || "Open WebUI · LM Studio · Continue · Cursor"),
+    ].join("\n");
+  }
+  if ($("localModelHost")) $("localModelHost").textContent = lm.host_worker || "";
+}
+
+async function loadConfig() {
+  const c = await api("/api/config");
+  portalConfig = c;
+  const conn = c.connect || {};
+  const sched = (c.scheduler_url || "").includes("127.0.0.1")
+    ? (conn.scheduler_tailscale || c.scheduler_url)
+    : (c.scheduler_url || conn.scheduler_tailscale || "");
+  if ($("schedulerUrl")) $("schedulerUrl").value = sched || "";
+  if (c.capacity_note && $("capacityNote")) $("capacityNote").textContent = c.capacity_note;
+  if (c.laptop_note && $("laptopNote")) $("laptopNote").textContent = c.laptop_note;
+  if (c.utilize_note && $("utilizeNote")) $("utilizeNote").textContent = c.utilize_note;
+  paintConnect(c);
+}
+
+async function refreshMe() {
+  const me = await api("/api/me");
+  if (me.ok) {
+    $("who").textContent = me.user.display_name;
+    show(true);
+    setView("home");
+  } else {
+    show(false);
+  }
+}
+
+async function refreshDash() {
+  $("dashErr").classList.add("hidden");
+  try {
+    const d = await api("/api/dashboard");
+    if (!d.ok) {
+      $("dashErr").textContent = "Cannot reach scheduler: " + (d.scheduler_error||"");
+      $("dashErr").classList.remove("hidden");
+    }
+    paintPeers(d.workers || []);
+  } catch (e) {
+    $("dashErr").textContent = String(e.message||e);
+    $("dashErr").classList.remove("hidden");
+  }
+}
+
+/* —— Chat —— */
+function appendChatMessages(messages, replace) {
+  const log = $("chatLog");
+  const empty = $("chatEmpty");
+  if (replace) {
+    log.innerHTML = "";
+    chatSinceId = 0;
+  }
+  if (!messages || !messages.length) {
+    if (!log.querySelector(".chat-msg")) {
+      log.innerHTML = `<div class="empty" id="chatEmpty">No messages yet — say hello to the mesh.</div>`;
+    }
+    return;
+  }
+  if (empty) empty.remove();
+  const existingEmpty = $("chatEmpty");
+  if (existingEmpty) existingEmpty.remove();
+  let added = false;
+  messages.forEach(m => {
+    if (m.id <= chatSinceId) return;
+    chatSinceId = Math.max(chatSinceId, m.id);
+    const el = document.createElement("div");
+    el.className = "chat-msg";
+    el.innerHTML = `<div class="who-line">${escapeHtml(m.display_name)} · ${escapeHtml(fmtTime(m.created_at))}</div>
+      <div class="body">${escapeHtml(m.body)}</div>`;
+    log.appendChild(el);
+    added = true;
+  });
+  if (added) log.scrollTop = log.scrollHeight;
+}
+
+async function refreshChat(full) {
+  try {
+    const q = full ? "?limit=80" : `?since_id=${chatSinceId}&limit=80`;
+    const data = await api("/api/chat" + q);
+    appendChatMessages(data.messages || [], !!full);
+    $("chatErr").classList.add("hidden");
+  } catch (e) {
+    $("chatErr").textContent = String(e.message||e);
+    $("chatErr").classList.remove("hidden");
+  }
+}
+
+async function refreshPresence() {
+  try {
+    const data = await api("/api/presence");
+    const users = data.users || [];
+    const ul = $("presenceList");
+    if (!users.length) {
+      ul.innerHTML = `<li style="color:var(--muted)">Just you for now</li>`;
+      return;
+    }
+    ul.innerHTML = users.map(u =>
+      `<li><span class="status-dot on"></span>${escapeHtml(u.display_name)}</li>`
+    ).join("");
+  } catch {
+    $("presenceList").innerHTML = `<li>—</li>`;
+  }
+}
+
+function startChatPoll() {
+  stopChatPoll();
+  chatPollTimer = setInterval(() => {
+    if (!$("viewChat").classList.contains("hidden")) {
+      refreshChat(false);
+      refreshPresence();
+    }
+  }, 2500);
+}
+function stopChatPoll() {
+  if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+}
+
+/* —— Suggestions —— */
+async function refreshSuggestions() {
+  const filter = ($("suggestFilter") && $("suggestFilter").value) || "";
+  const q = filter ? `?status=${encodeURIComponent(filter)}` : "";
+  try {
+    const data = await api("/api/suggestions" + q);
+    const items = data.items || [];
+    const box = $("suggestInbox");
+    if (!items.length) {
+      box.innerHTML = `<div class="empty">No submissions yet.</div>`;
+      return;
+    }
+    box.innerHTML = items.map(it => {
+      const done = it.status === "done";
+      return `<article class="inbox-item ${done?"done":""}" data-sid="${escapeHtml(it.id)}">
+        <div class="head">
+          <span class="tag">${escapeHtml(it.category||"suggestion")}</span>
+          <span class="tag ${it.status==="open"?"ok":it.status==="read"?"steel":""}">${escapeHtml(it.status||"open")}</span>
+          <span class="author">${escapeHtml(it.display_name)}</span>
+          <span class="when">${escapeHtml(fmtTime(it.created_at))}</span>
+        </div>
+        <div>${escapeHtml(it.body)}</div>
+        <div class="actions" style="margin-top:0.5rem">
+          <button class="ghost" type="button" data-st="read">Mark read</button>
+          <button class="ghost" type="button" data-st="done">Mark done</button>
+          <button class="ghost" type="button" data-st="open">Reopen</button>
+        </div>
+      </article>`;
+    }).join("");
+    box.querySelectorAll(".inbox-item").forEach(article => {
+      article.querySelectorAll("button[data-st]").forEach(btn => {
+        btn.onclick = async () => {
+          try {
+            await api("/api/suggestions/" + encodeURIComponent(article.getAttribute("data-sid")), {
+              method: "PATCH",
+              body: JSON.stringify({ status: btn.getAttribute("data-st") }),
+            });
+            refreshSuggestions();
+          } catch (e) {
+            $("suggestErr").textContent = String(e.message||e);
+            $("suggestErr").classList.remove("hidden");
+          }
+        };
+      });
+    });
+  } catch (e) {
+    $("suggestInbox").innerHTML = `<div class="err">${escapeHtml(e.message||e)}</div>`;
+  }
+}
+
+async function refreshWorkspace() {
+  try {
+    const data = await api("/api/workspace");
+    const w = data.workspace || {};
+    $("workspaceHonesty").textContent = w.honesty || "";
+    $("workspaceStatus").textContent = w.ready
+      ? `agent-vms ready at ${w.path}`
+      : `Workspace slot — agent-vms ${w.exists ? "found but incomplete" : "not detected"} (wire later via Hermes)`;
+    $("workspaceDetail").textContent = JSON.stringify({
+      path: w.path,
+      exists: w.exists,
+      has_vagrantfile: w.has_vagrantfile,
+      ready: w.ready,
+      control: w.control,
+      docs: w.docs,
+    }, null, 2);
+  } catch (e) {
+    $("workspaceStatus").textContent = String(e.message||e);
+  }
+}
+
+function renderJob(job) {
+  if (!job) return;
+  currentJobId = job.id;
+  $("jobBox").classList.remove("hidden");
+  $("pollJobBtn").disabled = false;
+  $("jobId").textContent = job.id || "—";
+  const st = (job.status || "unknown").toLowerCase();
+  const pill = $("jobStatusPill");
+  pill.textContent = st;
+  pill.className = "pill " + (["queued","running","completed","failed"].includes(st) ? st : "queued");
+  const payload = job.result != null ? job.result : (job.error || null);
+  $("jobResult").textContent = payload == null ? "(waiting…)" : JSON.stringify(payload, null, 2);
+  if (st === "completed" || st === "failed") {
+    if (jobPollTimer) { clearInterval(jobPollTimer); jobPollTimer = null; }
+  }
+}
+
+async function pollJobOnce() {
+  if (!currentJobId) return;
+  $("jobErr").classList.add("hidden");
+  try {
+    const data = await api("/api/jobs/" + encodeURIComponent(currentJobId));
+    renderJob(data.job);
+  } catch (e) {
+    $("jobErr").textContent = String(e.message||e);
+    $("jobErr").classList.remove("hidden");
+  }
+}
+
+function startJobPoll() {
+  if (jobPollTimer) clearInterval(jobPollTimer);
+  jobPollTimer = setInterval(pollJobOnce, 2000);
+}
+
+$("jobType").addEventListener("change", syncCudaOpts);
+syncCudaOpts();
+
+document.querySelectorAll(".nav button").forEach(btn => {
+  btn.onclick = () => setView(btn.dataset.view);
+});
+document.querySelectorAll("[data-go]").forEach(el => {
+  el.addEventListener("click", () => {
+    if (!loggedIn) {
+      $("displayName").focus();
+      return;
+    }
+    setView(el.dataset.go);
+  });
+});
+document.querySelectorAll("[data-go-public]").forEach(el => {
+  el.addEventListener("click", () => {
+    refreshPublicMesh();
+    $("meshLive").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+});
+
+$("heroEnterBtn").onclick = () => {
+  $("displayName").focus();
+  $("loginPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+};
+
+$("loginBtn").onclick = async () => {
+  $("loginErr").classList.add("hidden");
+  try {
+    const data = await api("/api/login", {
+      method: "POST",
+      body: JSON.stringify({
+        display_name: $("displayName").value.trim(),
+        pool_password: $("poolPassword").value,
+        invite_code: $("inviteCode").value.trim(),
+      }),
+    });
+    $("who").textContent = data.user.display_name;
+    show(true);
+    setView("home");
+  } catch (e) {
+    $("loginErr").textContent = String(e.message||e);
+    $("loginErr").classList.remove("hidden");
+  }
+};
+
+$("logoutBtn").onclick = async () => {
+  await api("/api/logout", { method: "POST", body: "{}" });
+  if (jobPollTimer) { clearInterval(jobPollTimer); jobPollTimer = null; }
+  currentJobId = null;
+  chatSinceId = 0;
+  stopChatPoll();
+  show(false);
+};
+
+$("refreshBtn").onclick = () => refreshDash();
+$("pollJobBtn").onclick = () => pollJobOnce();
+
+$("submitJobBtn").onclick = async () => {
+  $("jobErr").classList.add("hidden");
+  try {
+    const job_type = $("jobType").value;
+    const body = { job_type };
+    if (job_type === "pytorch_cuda_probe") {
+      body.matrix_size = Number($("matrixSize").value) || 512;
+    }
+    const data = await api("/api/jobs", { method: "POST", body: JSON.stringify(body) });
+    renderJob(data.job);
+    startJobPoll();
+    await refreshDash();
+  } catch (e) {
+    $("jobErr").textContent = String(e.message||e);
+    $("jobErr").classList.remove("hidden");
+  }
+};
+
+function capsPayload() {
+  return {
+    worker_name: $("workerName").value.trim() || "browser-worker",
+    scheduler_url: $("schedulerUrl").value.trim(),
+    max_vram_mb: Number($("vram").value),
+    max_cpu_percent: Number($("cpuPct").value),
+    dedicated_ram_mb: Number($("ram").value),
+    dedicated_disk_mb: Number($("disk").value),
+    dedicated_cpu_cores: Number($("cpuCores").value),
+  };
+}
+
+$("registerBtn").onclick = async () => {
+  $("regErr").classList.add("hidden");
+  try {
+    const data = await api("/api/machines", {
+      method: "POST",
+      body: JSON.stringify(capsPayload()),
+    });
+    selectedMachineId = data.machine && data.machine.id;
+    paintInstructions(data.instructions);
+    await refreshMyMachines();
+  } catch (e) {
+    $("regErr").textContent = String(e.message||e);
+    $("regErr").classList.remove("hidden");
+  }
+};
+
+$("updateCapsBtn").onclick = async () => {
+  $("regErr").classList.add("hidden");
+  if (!selectedMachineId) {
+    $("regErr").textContent = "Select one of your machines first.";
+    $("regErr").classList.remove("hidden");
+    return;
+  }
+  try {
+    const body = capsPayload();
+    delete body.scheduler_url;
+    const data = await api("/api/machines/" + encodeURIComponent(selectedMachineId), {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    paintInstructions(data.instructions);
+    await refreshMyMachines();
+  } catch (e) {
+    $("regErr").textContent = String(e.message||e);
+    $("regErr").classList.remove("hidden");
+  }
+};
+
+$("chatForm").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const text = $("chatInput").value.trim();
+  if (!text) return;
+  $("chatErr").classList.add("hidden");
+  try {
+    await api("/api/chat", { method: "POST", body: JSON.stringify({ text }) });
+    $("chatInput").value = "";
+    await refreshChat(false);
+  } catch (e) {
+    $("chatErr").textContent = String(e.message||e);
+    $("chatErr").classList.remove("hidden");
+  }
+};
+
+$("suggestBtn").onclick = async () => {
+  $("suggestErr").classList.add("hidden");
+  $("suggestOk").textContent = "";
+  try {
+    await api("/api/suggestions", {
+      method: "POST",
+      body: JSON.stringify({
+        body: $("suggestBody").value.trim(),
+        category: $("suggestCategory").value,
+      }),
+    });
+    $("suggestBody").value = "";
+    $("suggestOk").textContent = "Submitted — thanks. It is in the review inbox.";
+    refreshSuggestions();
+  } catch (e) {
+    $("suggestErr").textContent = String(e.message||e);
+    $("suggestErr").classList.remove("hidden");
+  }
+};
+$("suggestRefreshBtn").onclick = () => refreshSuggestions();
+$("suggestFilter").onchange = () => refreshSuggestions();
+
+$("diagBtn").onclick = async () => {
+  $("diagErr").classList.add("hidden");
+  $("diagOk").textContent = "";
+  try {
+    const data = await api("/api/diagnostics", {
+      method: "POST",
+      body: JSON.stringify({
+        hostname: $("diagHost").value.trim(),
+        wizard_step: $("diagStep").value.trim(),
+        log_text: $("diagLog").value,
+        client_time: Date.now() / 1000,
+      }),
+    });
+    $("diagOk").textContent = data.message || "Stored.";
+    $("diagLog").value = "";
+  } catch (e) {
+    $("diagErr").textContent = String(e.message||e);
+    $("diagErr").classList.remove("hidden");
+  }
+};
+
+refreshPublicMesh();
+loadConfig().then(refreshMe).catch(err => {
+  $("loginErr").textContent = String(err.message||err);
+  $("loginErr").classList.remove("hidden");
+});
+setInterval(() => {
+  if (!loggedIn) refreshPublicMesh();
+  else if (!$("viewHome").classList.contains("hidden")) refreshDash();
+}, 8000);
+</script>
+</body>
+</html>

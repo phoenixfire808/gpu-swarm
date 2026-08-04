@@ -114,6 +114,19 @@ class DiagnosticsBody(BaseModel):
     client_time: float | None = None
 
 
+class ChatPostBody(BaseModel):
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class SuggestionPostBody(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+    category: str = Field(default="suggestion", max_length=32)
+
+
+class SuggestionStatusBody(BaseModel):
+    status: str = Field(min_length=1, max_length=16)
+
+
 def _auth_ok(password: str, invite: str) -> tuple[bool, str]:
     """MVP auth: shared pool password and/or invite code. Real OAuth later."""
     pw = (password or "").strip()
@@ -225,7 +238,8 @@ async def pool_api_proxy(request: Request, path: str = "") -> Response:
 
 @app.get("/portal", response_class=HTMLResponse)
 async def portal_page() -> HTMLResponse:
-    return HTMLResponse(PORTAL_HTML)
+    # Reload template each request so hub HTML edits apply without full redeploy.
+    return HTMLResponse(_load_portal_html())
 
 
 @app.get("/api/config")
@@ -320,6 +334,19 @@ async def api_config(request: Request) -> dict[str, Any]:
                     "keep ollama serve on :11434, restart the GPU Pool worker "
                     "so llm_ready=yes. See LOCAL_MODEL.md."
                 ),
+            },
+            "workspace_vm": {
+                "title": "Workspace VM (agent Ubuntu — Hermes / VirtualBox)",
+                "honesty": (
+                    "CPU/RAM from your Contribute share only. "
+                    "No NVIDIA GPU passthrough into VirtualBox — "
+                    "pool GPU jobs stay on the host worker."
+                ),
+                "how": (
+                    "Desktop app: Home → Workspace → Start / Open. "
+                    "RDP 127.0.0.1:3390 · vagrant/vagrant. See ADVANCED_VM.md."
+                ),
+                "control_plane": "hermes agent-vm-control (not OpenClaw, no Docker)",
             },
             "env_example": (
                 f"set GPU_SWARM_SCHEDULER_URL={env_sched}\n"
@@ -605,6 +632,103 @@ def _redact_diag_text(text: str) -> str:
         return text or ""
 
 
+@app.get("/api/chat")
+async def api_chat_list(
+    request: Request, since_id: int = 0, limit: int = 80
+) -> dict[str, Any]:
+    """Pool room chat for authenticated portal users. Empty list when no messages."""
+    await _require_user(request)
+    messages = await _store().list_chat_messages(since_id=since_id, limit=limit)
+    return {"ok": True, "messages": messages, "room": "pool"}
+
+
+@app.post("/api/chat")
+async def api_chat_post(body: ChatPostBody, request: Request) -> dict[str, Any]:
+    user = await _require_user(request)
+    try:
+        msg = await _store().add_chat_message(
+            user["id"],
+            user.get("display_name") or "member",
+            body.text,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "message": msg}
+
+
+@app.get("/api/presence")
+async def api_presence(request: Request) -> dict[str, Any]:
+    """Recently active portal users (for the hub presence rail)."""
+    await _require_user(request)
+    users = await _store().list_recent_users(within_sec=300)
+    return {"ok": True, "users": users, "window_sec": 300}
+
+
+@app.get("/api/suggestions")
+async def api_suggestions_list(
+    request: Request, status: str = "", limit: int = 100
+) -> dict[str, Any]:
+    """Review inbox — authenticated members can read pool suggestions."""
+    await _require_user(request)
+    st = (status or "").strip().lower() or None
+    items = await _store().list_suggestions(status=st, limit=limit)
+    return {"ok": True, "items": items, "count": len(items)}
+
+
+@app.post("/api/suggestions")
+async def api_suggestions_post(
+    body: SuggestionPostBody, request: Request
+) -> dict[str, Any]:
+    user = await _require_user(request)
+    try:
+        item = await _store().add_suggestion(
+            user["id"],
+            user.get("display_name") or "member",
+            body.body,
+            body.category,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "item": item}
+
+
+@app.patch("/api/suggestions/{suggestion_id}")
+async def api_suggestions_patch(
+    suggestion_id: str, body: SuggestionStatusBody, request: Request
+) -> dict[str, Any]:
+    """Mark a suggestion open / read / done (friend co-op review inbox)."""
+    await _require_user(request)
+    try:
+        item = await _store().set_suggestion_status(suggestion_id, body.status)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not item:
+        raise HTTPException(404, "suggestion not found")
+    return {"ok": True, "item": item}
+
+
+@app.get("/api/workspace")
+async def api_workspace() -> dict[str, Any]:
+    """Optional agent-vms slot — real path probe, not GPU passthrough."""
+    from gpu_swarm.joiner_settings import agent_vms_present
+
+    info = agent_vms_present()
+    return {
+        "ok": True,
+        "workspace": {
+            **info,
+            "title": "Workspace (agent-vms)",
+            "status": "ready" if info.get("ready") else "slot",
+            "honesty": (
+                "Linux desktop workspaces via VirtualBox + Vagrant (Hermes / agent-vm). "
+                "Not NVIDIA GPU passthrough — contribute compute with the host worker."
+            ),
+            "docs": "ADVANCED_VM.md",
+            "control": "Hermes owns VMs — GPU Pool only detects / links this slot.",
+        },
+    }
+
+
 @app.post("/api/diagnostics")
 async def api_diagnostics_submit(body: DiagnosticsBody, request: Request) -> dict[str, Any]:
     """
@@ -760,877 +884,18 @@ def run_portal(host: str | None = None, port: int | None = None) -> None:
         log_level="info",
     )
 
+def _load_portal_html() -> str:
+    """Prefer external hub template; fall back to a tiny stub if missing."""
+    from pathlib import Path
 
-PORTAL_HTML = r"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>GPU Pool — Contribute · Utilize · Connect</title>
-<style>
-  /* No external @import — Google Fonts blocked/slow caused blank/black portal for some friends */
-  :root {
-    --bg0: #0f1412;
-    --bg1: #17201c;
-    --bg2: #1f2b25;
-    --ink: #e8f0ea;
-    --muted: #9bb0a3;
-    --line: #2d3d34;
-    --accent: #d4a24c;
-    --accent2: #3d9b7a;
-    --ok: #6fbf8a;
-    --font: "Segoe UI", "Helvetica Neue", ui-sans-serif, sans-serif;
-    --mono: Consolas, "Cascadia Mono", ui-monospace, monospace;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    min-height: 100vh;
-    font-family: var(--font);
-    color: var(--ink);
-    background:
-      radial-gradient(1200px 600px at 10% -10%, #24352c 0%, transparent 55%),
-      radial-gradient(900px 500px at 100% 0%, #2a2418 0%, transparent 50%),
-      var(--bg0);
-  }
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
-  header { margin-bottom: 1.5rem; }
-  .brand {
-    font-size: clamp(1.8rem, 4vw, 2.6rem);
-    font-weight: 600;
-    letter-spacing: -0.03em;
-    margin: 0 0 0.35rem;
-  }
-  .brand span { color: var(--accent); }
-  .lede { color: var(--muted); max-width: 44rem; line-height: 1.5; margin: 0; }
-  .note {
-    margin: 1rem 0 0;
-    padding: 0.75rem 0.9rem;
-    border-left: 3px solid var(--accent);
-    background: rgba(212,162,76,0.08);
-    color: #e6d3a8;
-    font-size: 0.92rem;
-    line-height: 1.45;
-  }
-  .panel {
-    background: linear-gradient(180deg, var(--bg1), var(--bg2));
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 1.25rem 1.35rem;
-    margin-top: 1.1rem;
-  }
-  h2 { margin: 0 0 0.85rem; font-size: 1.15rem; font-weight: 600; }
-  h3 { margin: 1.1rem 0 0.45rem; font-size: 0.95rem; font-weight: 600; color: var(--accent); }
-  label { display: block; font-size: 0.85rem; color: var(--muted); margin: 0.65rem 0 0.3rem; }
-  input[type="text"], input[type="password"], input[type="number"], select {
-    width: 100%;
-    padding: 0.55rem 0.7rem;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: #0c110f;
-    color: var(--ink);
-    font: inherit;
-  }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-  @media (max-width: 720px) { .row { grid-template-columns: 1fr; } }
-  .slider-row { display: grid; grid-template-columns: 1fr auto; gap: 0.6rem; align-items: center; }
-  input[type="range"] { width: 100%; accent-color: var(--accent2); }
-  .val { font-family: var(--mono); font-size: 0.85rem; color: var(--accent); min-width: 4.5rem; text-align: right; }
-  .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; }
-  button, .btn {
-    border: 0;
-    border-radius: 8px;
-    padding: 0.55rem 0.95rem;
-    font: inherit;
-    font-weight: 500;
-    cursor: pointer;
-    background: var(--accent2);
-    color: #04120c;
-  }
-  button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 0.55rem;
-  }
-  .stat {
-    background: rgba(0,0,0,0.22);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 0.6rem 0.7rem;
-  }
-  .stat b { display: block; font-family: var(--mono); font-size: 1.05rem; }
-  .stat span { color: var(--muted); font-size: 0.74rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-  th, td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
-  .pill {
-    display: inline-block;
-    padding: 0.12rem 0.45rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-family: var(--mono);
-  }
-  .pill.on { background: rgba(111,191,138,0.18); color: var(--ok); }
-  .pill.off { background: rgba(196,92,74,0.18); color: #e39a90; }
-  .pill.queued { background: rgba(212,162,76,0.18); color: var(--accent); }
-  .pill.running { background: rgba(61,155,122,0.22); color: #8fd4ba; }
-  .pill.completed { background: rgba(111,191,138,0.18); color: var(--ok); }
-  .pill.failed { background: rgba(196,92,74,0.18); color: #e39a90; }
-  pre {
-    margin: 0.5rem 0 0;
-    padding: 0.75rem;
-    background: #0a0e0c;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    overflow: auto;
-    font-family: var(--mono);
-    font-size: 0.78rem;
-    line-height: 1.45;
-    white-space: pre-wrap;
-  }
-  .hidden { display: none !important; }
-  .err { color: #f0a399; font-size: 0.9rem; margin-top: 0.5rem; }
-  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
-  .who { color: var(--muted); font-size: 0.9rem; }
-  .nav {
-    display: flex;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-    margin-top: 0.9rem;
-    padding: 0.35rem;
-    background: rgba(0,0,0,0.25);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-  }
-  .nav button {
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid transparent;
-    flex: 1;
-    min-width: 6.5rem;
-  }
-  .nav button.active {
-    background: rgba(61,155,122,0.18);
-    color: var(--ink);
-    border-color: var(--accent2);
-  }
-  .job-meta { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); margin-top: 0.65rem; }
-  .chooser {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.85rem;
-    margin-top: 1rem;
-  }
-  @media (max-width: 860px) { .chooser { grid-template-columns: 1fr; } }
-  .choice {
-    text-align: left;
-    background: linear-gradient(165deg, #1c2922 0%, #141c18 100%);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 1.25rem 1.2rem 1.15rem;
-    color: var(--ink);
-    min-height: 11.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-    transition: border-color 0.15s ease, transform 0.15s ease;
-  }
-  .choice:hover { border-color: var(--accent2); transform: translateY(-2px); }
-  .choice .eyebrow {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--accent);
-  }
-  .choice .title {
-    font-size: 1.45rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    margin: 0;
-  }
-  .choice .blurb {
-    color: var(--muted);
-    font-size: 0.92rem;
-    line-height: 1.45;
-    flex: 1;
-    margin: 0;
-  }
-  .choice .go {
-    font-family: var(--mono);
-    font-size: 0.8rem;
-    color: var(--accent2);
-  }
-  .url-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.65rem;
-  }
-  @media (max-width: 720px) { .url-grid { grid-template-columns: 1fr; } }
-  .url-card {
-    background: rgba(0,0,0,0.22);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 0.75rem 0.85rem;
-  }
-  .url-card span { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 0.25rem; }
-  .url-card code { font-family: var(--mono); font-size: 0.82rem; word-break: break-all; }
-  .cmd-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
-  .cmd-list code {
-    font-family: var(--mono);
-    font-size: 0.8rem;
-    padding: 0.28rem 0.5rem;
-    border-radius: 6px;
-    background: rgba(0,0,0,0.35);
-    border: 1px solid var(--line);
-  }
-  .workers-wrap { margin-top: 1rem; overflow: auto; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1 class="brand">GPU <span>Pool</span></h1>
-    <p class="lede">Private Tailscale/LAN co-op — pick <strong>Contribute</strong>, <strong>Utilize</strong>, or <strong>Connect</strong> (how friends reach the pool from Discord / code / CLI).</p>
-    <p class="note" id="laptopNote">No NVIDIA? You can still <strong>Utilize</strong> the pool or contribute <strong>CPU</strong>.</p>
-    <p class="note" id="capacityNote">v1 contributes compute to JOBS (GPU/CPU). RAM/SSD figures are capacity advertisements — not a distributed filesystem yet.</p>
-    <p class="note" id="networkNote" style="border-left-color:var(--accent2);background:rgba(61,155,122,0.08);color:#b8dcc9">Private Tailscale/LAN pool — not exposed to the open internet. Friends join via Tailscale, then open this portal.</p>
-  </header>
+    path = Path(__file__).with_name("portal_hub.html")
+    if path.is_file():
+        return path.read_text(encoding="utf-8")
+    return (
+        "<!DOCTYPE html><html><body style='font-family:sans-serif;background:#111;color:#eee;"
+        "padding:2rem'><h1>GPU Pool</h1><p>portal_hub.html missing beside portal.py</p>"
+        "</body></html>"
+    )
 
-  <section id="loginPanel" class="panel">
-    <h2>Sign in</h2>
-    <p class="lede" style="margin-bottom:0.5rem">MVP auth: invite code <code>glitch-factor</code> (or pool password) + display name. Public link or Tailscale both work. Real OAuth comes later.</p>
-    <label for="displayName">Display name</label>
-    <input id="displayName" type="text" placeholder="YourDiscordName" autocomplete="nickname" />
-    <div class="row">
-      <div>
-        <label for="poolPassword">Pool password</label>
-        <input id="poolPassword" type="password" placeholder="shared pool password" autocomplete="current-password" />
-      </div>
-      <div>
-        <label for="inviteCode">Invite code</label>
-        <input id="inviteCode" type="text" placeholder="optional invite" autocomplete="off" />
-      </div>
-    </div>
-    <div class="actions">
-      <button id="loginBtn" type="button">Enter portal</button>
-    </div>
-    <div class="err hidden" id="loginErr"></div>
-  </section>
 
-  <section id="appPanel" class="hidden">
-    <div class="topbar panel" style="margin-top:0">
-      <div class="who">Signed in as <strong id="who"></strong></div>
-      <button class="secondary" id="logoutBtn" type="button">Log out</button>
-    </div>
-
-    <nav class="nav" aria-label="Portal sections">
-      <button type="button" class="active" data-view="home" id="navHome">Home</button>
-      <button type="button" data-view="contribute" id="navContribute">Contribute</button>
-      <button type="button" data-view="utilize" id="navUtilize">Utilize</button>
-      <button type="button" data-view="connect" id="navConnect">Connect</button>
-    </nav>
-
-    <div id="viewHome">
-      <div class="panel">
-        <h2>What do you want to do?</h2>
-        <p class="lede">Three clear paths — same private pool.</p>
-        <div class="chooser">
-          <button type="button" class="choice" data-go="contribute" id="cardContribute">
-            <span class="eyebrow">Path 1</span>
-            <p class="title">Contribute</p>
-            <p class="blurb">Plug in spare GPU/CPU. Set soft caps, get a start token, and join as a worker.</p>
-            <span class="go">Register machine →</span>
-          </button>
-          <button type="button" class="choice" data-go="utilize" id="cardUtilize">
-            <span class="eyebrow">Path 2</span>
-            <p class="title">Utilize</p>
-            <p class="blurb">Run an allowlisted job on the pool — probe or CUDA matmul — and watch status + result.</p>
-            <span class="go">Submit a job →</span>
-          </button>
-          <button type="button" class="choice" data-go="connect" id="cardConnect">
-            <span class="eyebrow">Path 3</span>
-            <p class="title">Connect</p>
-            <p class="blurb">How-to: public HTTPS (no Tailscale) or Tailscale URLs, Discord, Python / CLI.</p>
-            <span class="go">See how to connect →</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="panel" id="friendsHomeCard">
-        <h2>How friends connect</h2>
-        <p class="lede" id="friendsHomeLede">Public HTTPS when the tunnel is on — no Tailscale needed. Invite still required.</p>
-        <ol id="friendsHomeSteps" style="margin:0.5rem 0 0; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
-        <div class="actions">
-          <button type="button" data-go="connect">Full Connect guide →</button>
-          <button class="secondary" type="button" data-go="contribute">Contribute</button>
-          <button class="secondary" type="button" data-go="utilize">Utilize</button>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h2>Live pool capacity</h2>
-        <p class="lede" style="margin-bottom:0.85rem">From scheduler <code>/status</code>.</p>
-        <div class="stats" id="stats"></div>
-        <p class="err hidden" id="dashErr" style="margin-top:0.75rem"></p>
-        <div class="actions">
-          <button class="secondary" id="refreshBtn" type="button">Refresh</button>
-        </div>
-        <div class="workers-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Worker</th>
-                <th>Status</th>
-                <th>GPUs / VRAM</th>
-                <th>CPU</th>
-                <th>RAM ad</th>
-                <th>Disk ad</th>
-              </tr>
-            </thead>
-            <tbody id="workerRows"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div id="viewUtilize" class="hidden">
-      <div class="panel">
-        <h2>Utilize the pool</h2>
-        <p class="note" id="utilizeNote" style="margin-top:0">v1: allowlisted jobs only — <code>probe</code> and <code>pytorch_cuda_probe</code>. No arbitrary shell.</p>
-        <label for="jobType">Job type</label>
-        <select id="jobType">
-          <option value="probe">probe — live GPU inventory</option>
-          <option value="pytorch_cuda_probe">pytorch_cuda_probe — CUDA matmul</option>
-        </select>
-        <div id="cudaOpts" class="hidden">
-          <label for="matrixSize">Matrix size (pytorch_cuda_probe)</label>
-          <input id="matrixSize" type="number" min="16" max="4096" step="16" value="512" />
-        </div>
-        <div class="actions">
-          <button id="submitJobBtn" type="button">Submit job</button>
-          <button class="secondary" id="pollJobBtn" type="button" disabled>Refresh status</button>
-          <button class="secondary" type="button" data-go="home">Back to Home</button>
-        </div>
-        <div class="err hidden" id="jobErr"></div>
-        <div id="jobBox" class="hidden">
-          <p class="job-meta">Job <strong id="jobId"></strong> · <span class="pill" id="jobStatusPill">—</span></p>
-          <p class="lede" style="margin-top:0.5rem">Result / error</p>
-          <pre id="jobResult">—</pre>
-        </div>
-      </div>
-    </div>
-
-    <div id="viewContribute" class="hidden">
-      <div class="panel">
-        <h2>Contribute — register this machine</h2>
-        <p class="lede">Set dedication caps, then copy a start-token command. The worker reports real nvidia-smi / host inventory — nothing mocked.</p>
-        <p class="note" id="ownershipNote" style="margin:0.5rem 0 1rem">Only you control how much of your PC is offered. Change anytime on your machine or in your Contribute settings. Nobody else (including pool admin via Discord) can remotely raise your caps. Host GPU safety stays ON by default on the worker (offer ≤~55% VRAM; pause when util ≥65% or free VRAM is low) so contributing cannot freeze your desktop — raise your offer caps freely; the safety ceiling still protects the host.</p>
-        <label for="workerName">Worker name</label>
-        <input id="workerName" type="text" placeholder="My-PC-gpu" />
-        <label for="schedulerUrl">Scheduler URL</label>
-        <input id="schedulerUrl" type="text" />
-
-        <label>GPU VRAM soft cap (MB) — 0 = use free VRAM</label>
-        <div class="slider-row">
-          <input id="vram" type="range" min="0" max="24576" step="256" value="0" />
-          <span class="val" id="vramVal">0</span>
-        </div>
-        <label>CPU percent available for jobs</label>
-        <div class="slider-row">
-          <input id="cpuPct" type="range" min="5" max="100" step="5" value="50" />
-          <span class="val" id="cpuPctVal">50%</span>
-        </div>
-        <label>CPU cores to advertise (0 = detect)</label>
-        <div class="slider-row">
-          <input id="cpuCores" type="range" min="0" max="64" step="1" value="0" />
-          <span class="val" id="cpuCoresVal">0</span>
-        </div>
-        <label>RAM to advertise (MB) — capacity ad, not shared memory</label>
-        <div class="slider-row">
-          <input id="ram" type="range" min="0" max="65536" step="512" value="0" />
-          <span class="val" id="ramVal">0</span>
-        </div>
-        <label>SSD / disk for jobs (MB) — capacity ad, not a DFS yet</label>
-        <div class="slider-row">
-          <input id="disk" type="range" min="0" max="524288" step="1024" value="0" />
-          <span class="val" id="diskVal">0</span>
-        </div>
-
-        <div class="actions">
-          <button id="registerBtn" type="button">Create start token</button>
-          <button class="secondary" id="updateCapsBtn" type="button" disabled>Update my caps</button>
-          <button class="secondary" type="button" data-go="home">Back to Home</button>
-        </div>
-        <div class="err hidden" id="regErr"></div>
-        <div id="myMachinesBox" style="margin-top:1rem">
-          <h2>Your machines (editable by you only)</h2>
-          <p class="lede">Select a machine you own to edit sliders, then <strong>Update my caps</strong>. This refreshes <em>your</em> start-token launch instructions — not anyone else's worker.</p>
-          <div id="myMachinesList" class="lede">Loading…</div>
-        </div>
-        <div id="instrBox" class="hidden" style="margin-top:1rem">
-          <h2>Run worker</h2>
-          <p class="lede">Windows (cmd):</p>
-          <pre id="instrWin"></pre>
-          <p class="lede" style="margin-top:0.75rem">One-liner:</p>
-          <pre id="instrOne"></pre>
-          <p class="lede" style="margin-top:0.75rem">Or set env caps directly (no token):</p>
-          <pre id="instrEnv"></pre>
-        </div>
-      </div>
-    </div>
-
-    <div id="viewConnect" class="hidden">
-      <div class="panel">
-        <h2>Connect — how to reach the pool</h2>
-        <p class="lede" id="connectLede">Public HTTPS when the tunnel is on — no Tailscale needed. Invite code still required.</p>
-
-        <div id="publicBanner" class="note hidden" style="border-left-color:var(--accent);background:rgba(232,168,74,0.12);color:#f0d9a8;margin-bottom:0.85rem">
-          <strong>No Tailscale needed</strong> — public access is live. Share the portal URL + invite <code>glitch-factor</code>.
-        </div>
-
-        <h3>How friends connect</h3>
-        <ol id="friendsConnectSteps" style="margin:0.4rem 0 0.85rem; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
-
-        <h3 id="localModelTitle">Local model endpoint</h3>
-        <p class="note" id="localModelHonesty" style="margin-top:0.35rem">Pool as a local AI API (OpenAI-compatible) — not a Windows GPU driver.</p>
-        <pre id="localModelBlock">—</pre>
-        <p class="lede" id="localModelHost" style="margin-top:0.5rem"></p>
-
-        <h3>URLs</h3>
-        <div class="url-grid">
-          <div class="url-card" id="cardPortalPublic"><span>Portal (public — no Tailscale)</span><code id="urlPortalPublic">—</code></div>
-          <div class="url-card" id="cardPoolApiPublic"><span>Pool API (public /pool-api proxy)</span><code id="urlPoolApiPublic">—</code></div>
-          <div class="url-card"><span>Scheduler (Tailscale)</span><code id="urlSchedTs">—</code></div>
-          <div class="url-card"><span>Scheduler (localhost on host)</span><code id="urlSchedLocal">—</code></div>
-          <div class="url-card"><span>Portal (Tailscale)</span><code id="urlPortalTs">—</code></div>
-          <div class="url-card"><span>Portal (this session)</span><code id="urlPortalThis">—</code></div>
-        </div>
-
-        <h3>Discord · <span id="discordGuild">Glitch Factor</span> · bot <span id="discordBot">GPU Pool</span></h3>
-        <div class="cmd-list" id="discordCmds"></div>
-
-        <h3>Env (public /pool-api or Tailscale)</h3>
-        <pre id="connectEnv">—</pre>
-
-        <h3>CLI</h3>
-        <pre id="connectCli">—</pre>
-
-        <h3>Python SDK</h3>
-        <pre id="connectPy">—</pre>
-
-        <h3>HTTP</h3>
-        <pre id="connectHttp">—</pre>
-
-        <h3>Rules</h3>
-        <ul id="connectRules" style="margin:0.4rem 0 0; padding-left:1.2rem; color:var(--muted); line-height:1.5"></ul>
-
-        <p class="lede" style="margin-top:1rem">Full guide: <code id="connectDocs">CONNECTING.md</code> in the repo. Invite code (safe to share): <code id="inviteHint">—</code></p>
-        <div class="actions">
-          <button class="secondary" type="button" data-go="home">Back to Home</button>
-          <button type="button" data-go="utilize">Go Utilize</button>
-          <button class="secondary" type="button" data-go="contribute">Go Contribute</button>
-        </div>
-      </div>
-    </div>
-  </section>
-</div>
-<script>
-const $ = (id) => document.getElementById(id);
-const bindSlider = (id, valId, fmt) => {
-  const el = $(id), out = $(valId);
-  if (!el || !out) return;
-  const paint = () => { out.textContent = fmt(el.value); };
-  el.addEventListener("input", paint); paint();
-};
-bindSlider("vram", "vramVal", v => `${v} MB`);
-bindSlider("cpuPct", "cpuPctVal", v => `${v}%`);
-bindSlider("cpuCores", "cpuCoresVal", v => v);
-bindSlider("ram", "ramVal", v => `${v} MB`);
-bindSlider("disk", "diskVal", v => `${v} MB`);
-
-let currentJobId = null;
-let jobPollTimer = null;
-let portalConfig = null;
-let selectedMachineId = null;
-let myMachines = [];
-
-async function api(path, opts={}) {
-  const r = await fetch(path, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(opts.headers||{}) },
-    ...opts,
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const detail = data.detail;
-    const msg = typeof detail === "string" ? detail
-      : (Array.isArray(detail) ? detail.map(x => x.msg || JSON.stringify(x)).join("; ") : null);
-    throw new Error(msg || data.message || r.statusText);
-  }
-  return data;
-}
-
-function show(loggedIn) {
-  $("loginPanel").classList.toggle("hidden", loggedIn);
-  $("appPanel").classList.toggle("hidden", !loggedIn);
-}
-
-function setView(name) {
-  $("viewHome").classList.toggle("hidden", name !== "home");
-  $("viewUtilize").classList.toggle("hidden", name !== "utilize");
-  $("viewContribute").classList.toggle("hidden", name !== "contribute");
-  $("viewConnect").classList.toggle("hidden", name !== "connect");
-  document.querySelectorAll(".nav button").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.view === name);
-  });
-  if (name === "home") refreshDash();
-  if (name === "contribute") refreshMyMachines();
-}
-
-function paintInstructions(i) {
-  if (!i) return;
-  $("instrWin").textContent = i.windows_cmd;
-  $("instrOne").textContent = i.one_liner;
-  $("instrEnv").textContent = i.env_direct;
-  $("instrBox").classList.remove("hidden");
-}
-
-function selectMachine(m) {
-  selectedMachineId = m.id;
-  $("workerName").value = m.worker_name || "";
-  if (m.scheduler_url) $("schedulerUrl").value = m.scheduler_url;
-  $("vram").value = m.max_vram_mb || 0;
-  $("cpuPct").value = m.max_cpu_percent || 50;
-  $("cpuCores").value = m.dedicated_cpu_cores || 0;
-  $("ram").value = m.dedicated_ram_mb || 0;
-  $("disk").value = m.dedicated_disk_mb || 0;
-  ["vram","cpuPct","cpuCores","ram","disk"].forEach(id => $(id).dispatchEvent(new Event("input")));
-  $("updateCapsBtn").disabled = !selectedMachineId;
-  refreshMyMachinesListOnly();
-}
-
-function refreshMyMachinesListOnly() {
-  const box = $("myMachinesList");
-  if (!box) return;
-  if (!myMachines.length) {
-    box.textContent = "No machines yet — Create start token above. Caps apply only to your worker.";
-    return;
-  }
-  box.innerHTML = myMachines.map(m => {
-    const sel = m.id === selectedMachineId ? " · selected" : "";
-    return `<div style="margin:0.35rem 0;padding:0.45rem 0.6rem;border:1px solid #2a3a32;border-radius:8px;cursor:pointer;background:${m.id===selectedMachineId?"rgba(232,168,74,0.12)":"transparent"}" data-mid="${escapeHtml(m.id)}">
-      <strong>${escapeHtml(m.worker_name||"worker")}</strong>${sel}<br>
-      VRAM ${m.max_vram_mb||0} MB · CPU ${m.max_cpu_percent||0}% · RAM ${m.dedicated_ram_mb||0} MB · Disk ${m.dedicated_disk_mb||0} MB
-    </div>`;
-  }).join("");
-  box.querySelectorAll("[data-mid]").forEach(el => {
-    el.onclick = () => {
-      const m = myMachines.find(x => x.id === el.getAttribute("data-mid"));
-      if (m) selectMachine(m);
-    };
-  });
-}
-
-async function refreshMyMachines() {
-  try {
-    const data = await api("/api/machines");
-    myMachines = data.machines || [];
-    if (!selectedMachineId && myMachines.length) selectedMachineId = myMachines[0].id;
-    if (selectedMachineId && !myMachines.find(m => m.id === selectedMachineId)) {
-      selectedMachineId = myMachines.length ? myMachines[0].id : null;
-    }
-    $("updateCapsBtn").disabled = !selectedMachineId;
-    const cur = myMachines.find(m => m.id === selectedMachineId);
-    if (cur) {
-      $("workerName").value = cur.worker_name || $("workerName").value;
-      if (cur.scheduler_url) $("schedulerUrl").value = cur.scheduler_url;
-    }
-    refreshMyMachinesListOnly();
-  } catch (e) {
-    if ($("myMachinesList")) $("myMachinesList").textContent = String(e.message||e);
-  }
-}
-
-function fmtMb(n) {
-  n = Number(n||0);
-  if (n >= 1024) return (n/1024).toFixed(1) + " GB";
-  return n + " MB";
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function syncCudaOpts() {
-  $("cudaOpts").classList.toggle("hidden", $("jobType").value !== "pytorch_cuda_probe");
-}
-
-function paintConnect(c) {
-  const conn = (c && c.connect) || {};
-  const friends = conn.friends_connect || [];
-  const publicOn = !!(c.public_access || conn.no_tailscale_needed || conn.portal_public);
-  const privateNet = conn.private_network
-    || (publicOn
-      ? "Public HTTPS access is ON — no Tailscale needed. Invite code still required."
-      : "When Drew runs start-public-access.cmd, a public HTTPS portal appears (no Tailscale). Tailscale remains optional.");
-  if ($("urlPortalPublic")) $("urlPortalPublic").textContent = conn.portal_public || "(tunnel off — Drew: start-public-access.cmd)";
-  if ($("urlPoolApiPublic")) $("urlPoolApiPublic").textContent = conn.pool_api_public || "—";
-  if ($("publicBanner")) $("publicBanner").classList.toggle("hidden", !publicOn);
-  $("urlSchedTs").textContent = conn.scheduler_tailscale || "—";
-  $("urlSchedLocal").textContent = conn.scheduler_local || "—";
-  $("urlPortalTs").textContent = conn.portal_tailscale || "—";
-  $("urlPortalThis").textContent = conn.portal_this || c.portal_url || "—";
-  $("discordGuild").textContent = conn.discord_primary || "Glitch Factor";
-  $("discordBot").textContent = conn.discord_bot || "GPU Pool";
-  $("discordCmds").innerHTML = (conn.discord_commands || []).map(x => `<code>${escapeHtml(x)}</code>`).join("") || "—";
-  $("connectEnv").textContent = conn.env_example || "—";
-  $("connectCli").textContent = (conn.cli || []).join("\n") || "—";
-  $("connectPy").textContent = conn.python_sdk || "—";
-  $("connectHttp").textContent = (conn.http || []).join("\n") || "—";
-  $("connectDocs").textContent = conn.docs || "CONNECTING.md";
-  $("inviteHint").textContent = c.invite_code_hint || "glitch-factor";
-  $("connectRules").innerHTML = (conn.rules || []).map(r => `<li>${escapeHtml(r)}</li>`).join("");
-  if ($("connectLede")) $("connectLede").textContent = privateNet;
-  if ($("networkNote")) $("networkNote").textContent = privateNet;
-  if ($("friendsHomeLede")) $("friendsHomeLede").textContent = privateNet;
-  const stepsHtml = friends.map(s => `<li>${escapeHtml(s)}</li>`).join("");
-  if ($("friendsConnectSteps")) $("friendsConnectSteps").innerHTML = stepsHtml || "<li>Open public portal URL (or Tailscale) → invite → Contribute or Utilize</li>";
-  if ($("friendsHomeSteps")) $("friendsHomeSteps").innerHTML = stepsHtml || "<li>Open public portal URL (or Tailscale) → invite → Contribute or Utilize</li>";
-  const lm = conn.local_model || {};
-  if ($("localModelTitle")) $("localModelTitle").textContent = lm.title || "Local model endpoint";
-  if ($("localModelHonesty")) $("localModelHonesty").textContent = lm.honesty || "OpenAI-compatible localhost API → pool llm_chat jobs. Not a PCI GPU.";
-  if ($("localModelBlock")) {
-    $("localModelBlock").textContent = [
-      lm.start || "python -m gpu_swarm local-endpoint",
-      "URL:  " + (lm.url || "http://127.0.0.1:8080/v1"),
-      "Env:  " + (lm.env || "OPENAI_BASE_URL=http://127.0.0.1:8080/v1"),
-      "Apps: " + (lm.apps || "Open WebUI · LM Studio · Continue · Cursor"),
-    ].join("\n");
-  }
-  if ($("localModelHost")) $("localModelHost").textContent = lm.host_worker || "";
-}
-
-async function loadConfig() {
-  const c = await api("/api/config");
-  portalConfig = c;
-  // Prefer Tailscale scheduler for member contribute form when config points at localhost
-  const conn = c.connect || {};
-  const sched = (c.scheduler_url || "").includes("127.0.0.1")
-    ? (conn.scheduler_tailscale || c.scheduler_url)
-    : (c.scheduler_url || conn.scheduler_tailscale || "");
-  $("schedulerUrl").value = sched || "";
-  if (c.capacity_note) $("capacityNote").textContent = c.capacity_note;
-  if (c.laptop_note && $("laptopNote")) $("laptopNote").textContent = c.laptop_note;
-  if (c.utilize_note) $("utilizeNote").textContent = c.utilize_note;
-  paintConnect(c);
-}
-
-async function refreshMe() {
-  const me = await api("/api/me");
-  if (me.ok) {
-    $("who").textContent = me.user.display_name;
-    show(true);
-    setView("home");
-  } else {
-    show(false);
-  }
-}
-
-async function refreshDash() {
-  $("dashErr").classList.add("hidden");
-  try {
-    const d = await api("/api/dashboard");
-    const s = d.summary || {};
-    $("stats").innerHTML = [
-      ["Online", (s.workers_online != null ? s.workers_online : 0)],
-      ["Free VRAM", fmtMb(s.free_vram_mb)],
-      ["Total VRAM", fmtMb(s.total_vram_mb)],
-      ["CPU cores", (s.cpu_cores != null ? s.cpu_cores : 0)],
-      ["RAM avail (ad)", fmtMb(s.ram_available_mb)],
-      ["Disk free (ad)", fmtMb(s.disk_free_mb)],
-      ["Jobs queued", (s.jobs&&s.jobs.queued)||0],
-      ["Jobs running", (s.jobs&&s.jobs.running)||0],
-      ["Jobs done", (s.jobs&&s.jobs.completed)||0],
-    ].map(([k,v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("");
-    if (!d.ok) {
-      $("dashErr").textContent = "Cannot reach Tailscale/LAN scheduler yet (install/login Tailscale + join Drew’s tailnet): " + (d.scheduler_error||"");
-      $("dashErr").classList.remove("hidden");
-    }
-    const rows = (d.workers||[]).map(w => {
-      const gpus = (w.gpus||[]).map(g => g.name || "?").join(", ") || "—";
-      const vram = `${fmtMb(w.free_vram_mb)} free / ${fmtMb(w.total_vram_mb)}`;
-      const pill = w.online ? '<span class="pill on">online</span>' : '<span class="pill off">offline</span>';
-      return `<tr>
-        <td><strong>${escapeHtml(w.name||"?")}</strong><br><span style="color:var(--muted);font-size:0.8rem">${escapeHtml(w.host||"")}</span></td>
-        <td>${pill}<br><span style="color:var(--muted);font-size:0.78rem">${escapeHtml(w.status||"")} · ${(w.heartbeat_age_sec != null ? w.heartbeat_age_sec : "?")}s</span></td>
-        <td>${escapeHtml(gpus)}<br>${vram}</td>
-        <td>${(w.cpu_cores != null ? w.cpu_cores : 0)} cores · ${(w.max_cpu_percent != null ? w.max_cpu_percent : "—")}%</td>
-        <td>${fmtMb(w.ram_available_mb)} avail<br>cap ${fmtMb(w.max_ram_mb)}</td>
-        <td>${fmtMb(w.disk_free_mb)} free<br>cap ${fmtMb(w.max_disk_mb)}</td>
-      </tr>`;
-    }).join("") || `<tr><td colspan="6" style="color:var(--muted)">No workers heartbeating yet.</td></tr>`;
-    $("workerRows").innerHTML = rows;
-  } catch (e) {
-    $("dashErr").textContent = String(e.message||e);
-    $("dashErr").classList.remove("hidden");
-  }
-}
-
-function renderJob(job) {
-  if (!job) return;
-  currentJobId = job.id;
-  $("jobBox").classList.remove("hidden");
-  $("pollJobBtn").disabled = false;
-  $("jobId").textContent = job.id || "—";
-  const st = (job.status || "unknown").toLowerCase();
-  const pill = $("jobStatusPill");
-  pill.textContent = st;
-  pill.className = "pill " + (["queued","running","completed","failed"].includes(st) ? st : "queued");
-  const payload = job.result != null ? job.result : (job.error || null);
-  $("jobResult").textContent = payload == null ? "(waiting…)" : JSON.stringify(payload, null, 2);
-  if (st === "completed" || st === "failed") {
-    if (jobPollTimer) { clearInterval(jobPollTimer); jobPollTimer = null; }
-  }
-}
-
-async function pollJobOnce() {
-  if (!currentJobId) return;
-  $("jobErr").classList.add("hidden");
-  try {
-    const data = await api("/api/jobs/" + encodeURIComponent(currentJobId));
-    renderJob(data.job);
-  } catch (e) {
-    $("jobErr").textContent = String(e.message||e);
-    $("jobErr").classList.remove("hidden");
-  }
-}
-
-function startJobPoll() {
-  if (jobPollTimer) clearInterval(jobPollTimer);
-  jobPollTimer = setInterval(pollJobOnce, 2000);
-}
-
-$("jobType").addEventListener("change", syncCudaOpts);
-syncCudaOpts();
-
-document.querySelectorAll(".nav button").forEach(btn => {
-  btn.onclick = () => setView(btn.dataset.view);
-});
-document.querySelectorAll("[data-go]").forEach(el => {
-  el.addEventListener("click", () => setView(el.dataset.go));
-});
-
-$("loginBtn").onclick = async () => {
-  $("loginErr").classList.add("hidden");
-  try {
-    const data = await api("/api/login", {
-      method: "POST",
-      body: JSON.stringify({
-        display_name: $("displayName").value.trim(),
-        pool_password: $("poolPassword").value,
-        invite_code: $("inviteCode").value.trim(),
-      }),
-    });
-    $("who").textContent = data.user.display_name;
-    show(true);
-    setView("home");
-  } catch (e) {
-    $("loginErr").textContent = String(e.message||e);
-    $("loginErr").classList.remove("hidden");
-  }
-};
-
-$("logoutBtn").onclick = async () => {
-  await api("/api/logout", { method: "POST", body: "{}" });
-  if (jobPollTimer) { clearInterval(jobPollTimer); jobPollTimer = null; }
-  currentJobId = null;
-  show(false);
-};
-
-$("refreshBtn").onclick = () => refreshDash();
-$("pollJobBtn").onclick = () => pollJobOnce();
-
-$("submitJobBtn").onclick = async () => {
-  $("jobErr").classList.add("hidden");
-  try {
-    const job_type = $("jobType").value;
-    const body = { job_type };
-    if (job_type === "pytorch_cuda_probe") {
-      body.matrix_size = Number($("matrixSize").value) || 512;
-    }
-    const data = await api("/api/jobs", { method: "POST", body: JSON.stringify(body) });
-    renderJob(data.job);
-    startJobPoll();
-    await refreshDash();
-  } catch (e) {
-    $("jobErr").textContent = String(e.message||e);
-    $("jobErr").classList.remove("hidden");
-  }
-};
-
-function capsPayload() {
-  return {
-    worker_name: $("workerName").value.trim() || "browser-worker",
-    scheduler_url: $("schedulerUrl").value.trim(),
-    max_vram_mb: Number($("vram").value),
-    max_cpu_percent: Number($("cpuPct").value),
-    dedicated_ram_mb: Number($("ram").value),
-    dedicated_disk_mb: Number($("disk").value),
-    dedicated_cpu_cores: Number($("cpuCores").value),
-  };
-}
-
-$("registerBtn").onclick = async () => {
-  $("regErr").classList.add("hidden");
-  try {
-    const data = await api("/api/machines", {
-      method: "POST",
-      body: JSON.stringify(capsPayload()),
-    });
-    selectedMachineId = data.machine && data.machine.id;
-    paintInstructions(data.instructions);
-    await refreshMyMachines();
-  } catch (e) {
-    $("regErr").textContent = String(e.message||e);
-    $("regErr").classList.remove("hidden");
-  }
-};
-
-$("updateCapsBtn").onclick = async () => {
-  $("regErr").classList.add("hidden");
-  if (!selectedMachineId) {
-    $("regErr").textContent = "Select one of your machines first (or create a start token).";
-    $("regErr").classList.remove("hidden");
-    return;
-  }
-  try {
-    const body = capsPayload();
-    delete body.scheduler_url; // owner may update caps; scheduler URL stays as registered
-    const data = await api("/api/machines/" + encodeURIComponent(selectedMachineId), {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    });
-    paintInstructions(data.instructions);
-    await refreshMyMachines();
-  } catch (e) {
-    $("regErr").textContent = String(e.message||e);
-    $("regErr").classList.remove("hidden");
-  }
-};
-
-loadConfig().then(refreshMe).catch(err => {
-  $("loginErr").textContent = String(err.message||err);
-  $("loginErr").classList.remove("hidden");
-});
-setInterval(() => {
-  if (!$("appPanel").classList.contains("hidden") && !$("viewHome").classList.contains("hidden")) {
-    refreshDash();
-  }
-}, 8000);
-</script>
-</body>
-</html>
-"""
+PORTAL_HTML = _load_portal_html()

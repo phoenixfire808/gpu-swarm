@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew’s private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:45 CDT · Durable project memory + host_protect ship to GitHub.
+**Updated:** 2026-08-04 ~12:50 CDT · Workspace VM MVP (GPU Pool ↔ Hermes agent-vms).
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -33,8 +33,9 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 | 7 | Docs `LOCAL_MODEL.md` | **PASS** |
 | 8 | Host protect on Drew-Home | **PASS** — worker restarted; `host_protect=ON` |
 | 9 | Living docs + Cursor rule | **PASS** — ROADMAP / CHANGELOG / DESIGN / `.cursor/rules` |
+| 10 | Workspace VM bridge | **CODE READY** — offer→CPU/RAM map + Connect/Home UI; light `agent-vm` status only (no vagrant up / no CUDA stress) |
 
-**Demo verdict:** Friends can start a localhost OpenAI-compatible endpoint and list models. Chat completes once Drew runs Ollama on a contributor worker. Desktop stays protected by host_protect defaults.
+**Demo verdict:** Friends can start a localhost OpenAI-compatible endpoint and list models. Chat completes once Drew runs Ollama on a contributor worker. Desktop stays protected by host_protect defaults. Drew can open **Workspace** from the desktop app for a capped Ubuntu VM (GPU stays on host worker).
 
 ---
 
@@ -72,13 +73,32 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 - [x] Packaging: `gpu_pool.spec` + frozen EXE local-endpoint path include host_protect
 - [x] Light unit tests only (`tests/test_host_protect.py`) — **no** CUDA e2e / stress / PyInstaller
 
+### Workspace VM ↔ agent-vms (2026-08-04)
+- [x] `gpu_swarm/agent_vm_bridge.py` — map Contribute/`host_protect` → VM cpus/memory; call Hermes `agent-vm`
+- [x] Desktop: Home **4 · Workspace** + Connect Workspace card (Start/Open, RDP, Halt)
+- [x] `app_backend` APIs: `workspace_status` / `open_workspace` / `halt_workspace` / `apply_workspace_caps`
+- [x] agent-vms: `resources show|apply` + `--cpus`/`--memory-mb` on `up` / `session create|up`
+- [x] Docs: `ADVANCED_VM.md` rewrite · CONNECTING / portal / skill notes
+- [x] Unit tests: `tests/test_agent_vm_bridge.py` (mapping only)
+- [x] Honest GPU: no VirtualBox NVIDIA passthrough — pool worker keeps GPU share
+- [ ] Remaining for full ship: EXE includes bridge; halt+start confirm UX; multi-session UI; optional disk quota; cold `vagrant up` only when Drew asks
+
+---
+
+### Network Hub + chat + suggestions (2026-08-04 ~12:50 CDT)
+- [x] Portal All-in-One Network Hub (`gpu_swarm/portal_hub.html`) — copper/steel peer-mesh aesthetic; live workers from scheduler
+- [x] Pool chat: `GET/POST /api/chat` + `/api/presence` (sqlite, poll ~2.5s, empty state when quiet)
+- [x] Suggestions: `GET/POST /api/suggestions` + PATCH status open/read/done — Review inbox in hub
+- [x] `/api/workspace` slot (real agent-vms probe) · desktop Home “Network Hub” copy + web hub link
+- [x] Light verify: portal 200, chat post/list, suggestion mark read, dashboard workers online — **no CUDA stress**
+- [x] Shipped to GitHub with Workspace MVP (same push)
+
 ---
 
 ## In progress
 
 - [ ] Drew: start Ollama + pull model + worker restart → full chat e2e
-- [ ] Packaging Worker: rebuild EXE (include host_protect + local_endpoint + llm_chat)
-- [ ] **agent-vms ↔ GPU Pool workspace/VM mode** — **in flight (uncommitted local)** — `gpu_swarm/agent_vm_bridge.py` + Connect workspace UI + `llm_ready` DB column edits present on disk; not in `master` yet; Hermes remains VM control plane; no GPU passthrough claims
+- [ ] Packaging Worker: rebuild EXE (include host_protect + local_endpoint + llm_chat + workspace bridge + portal_hub.html)
 - [ ] Keep scorecard/TODO/CHANGELOG in sync on every ship
 
 ---
@@ -86,17 +106,17 @@ Living scorecard for Drew’s private Discord GPU/CPU co-op.
 ## Next (prioritized)
 
 1. **Enable Ollama on Drew-Home worker** — `ollama serve`, `ollama pull llama3.2`, restart worker, smoke chat via local endpoint.
-2. Packaging Worker rebuild EXE.
-3. Member onboarding: `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`.
-4. Continue VM/workspace integration carefully (coordinate; don’t break half-baked edits).
+2. Try Workspace: `start-gpu-pool-app.cmd` → Home → Workspace → Start / Open (RDP 3390).
+3. Packaging Worker rebuild EXE (must include workspace bridge).
+4. Member onboarding: `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`.
 5. Optional: streaming chat on local endpoint.
 
 ### Next 5 Drew should care about right now
 
 1. Run Ollama on the host worker (`llm_ready=yes` in worker log).
-2. Tell aariff01: Connect → Start local model endpoint → paste `OPENAI_BASE_URL`.
-3. Packaging EXE rebuild (must include host_protect).
-4. Review GitHub CHANGELOG/ROADMAP when agents ship.
+2. Open Workspace from the desktop app (capped VM; GPU stays on host worker).
+3. Tell aariff01: Connect → Start local model endpoint → paste `OPENAI_BASE_URL`.
+4. Packaging EXE rebuild (host_protect + workspace).
 5. Keep `.env` / tokens / public endpoint files local — never commit.
 
 ---

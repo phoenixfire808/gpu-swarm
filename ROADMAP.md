@@ -10,17 +10,21 @@ Near-term → later. Detail and live status: [`CURRENT_PROGRESS.md`](CURRENT_PRO
 3. **Packaging Worker EXE** — rebuild `GPUPool.exe` with `host_protect` + local endpoint + `llm_chat` (fastapi bundled).
 4. **Member tip** — friends use `OPENAI_BASE_URL=http://127.0.0.1:8080/v1`.
 5. **Living docs habit** — keep TODO / ROADMAP / CHANGELOG / CURRENT_PROGRESS current on every ship.
+6. **Workspace VM MVP** — shipped in source (GPU Pool → Hermes agent-vm + offer caps). Daily path: Home → Workspace.
+7. **Network Hub + pool chat + suggestions** — shipped in source (`/portal` hub). Friends: Chat tab; Drew: Suggest → Review inbox.
 
 ## Next
 
 | Item | Notes |
 |------|--------|
 | Streaming local endpoint | `stream=true` on `/v1/chat/completions` |
+| Chat WebSocket (optional) | Polling works; WS if tunnel-friendly |
 | Worker `llm_models` → `/status` | Richer OpenAI-compatible `/v1/models` |
 | Stable public URL | Durable tunnel / DNS when Drew wants friends without Tailscale |
 | Allowlisted `whisper_transcribe` | Same job-lease pattern as `llm_chat` |
 | Portal Discord OAuth | Replace invite/password MVP |
-| **agent-vms ↔ GPU Pool integration** | **In progress / planned** — optional workspace/VM mode beside host worker; Hermes owns VMs; **no** fake GPU passthrough (see [`ADVANCED_VM.md`](ADVANCED_VM.md)) |
+| Workspace polish | Halt+start confirm when above offer; multi-session UI; EXE includes bridge |
+| agent-vms phase 2 | Tailscale/VPN + per-session creds (in `agent-vms` repo) |
 
 ## Later
 

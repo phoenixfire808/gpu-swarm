@@ -40,6 +40,7 @@ class WorkerRegister(BaseModel):
     dedicated_disk_mb: int = 0
     dedicated_cpu_cores: float = 0.0
     contributor_name: str | None = None
+    llm_ready: bool = False
 
 
 class WorkerHeartbeat(BaseModel):
@@ -61,6 +62,7 @@ class WorkerHeartbeat(BaseModel):
     dedicated_disk_mb: int | None = None
     dedicated_cpu_cores: float | None = None
     contributor_name: str | None = None
+    llm_ready: bool | None = None
 
 
 # Job payloads must not remotely raise another contributor's offer caps.
