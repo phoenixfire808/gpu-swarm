@@ -7,6 +7,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/) for r
 
 ## [Unreleased]
 
+### Fixed
+
+- **Console window spam (Windows)** — root cause: subprocess spawns (`powershell`, `cmd`, `python`) without `CREATE_NO_WINDOW`, plus Connect tab polling `workspace_status()` every 4s (Hermes `agent-vm` each tick). Added `gpu_swarm/win_subprocess.py`; applied to worker/local-endpoint/pip/prereqs/agent-vm paths; stopped auto workspace refresh on poll; host `start-*.cmd` now use `scripts/run-hidden.cmd` (pythonw + hidden window).
+- **Duplicate stack processes** — trimmed extra nohup-wrapped bot/portal instances when prior run-stack left duplicates.
+
+### Changed
+
+- **Grandma-friendly onboarding** — Welcome wizard, `START_HERE.md`, portal hub hero/login/home copy: numbered “just do this” steps, plain-English tool explanations (Tailscale = private network), big buttons only; Invite / Share / Use / Grow path preserved.
+
 ### Added
 
 - **`START_HERE.md`** — 5-minute friend path + paste-ready Discord growth blurb.

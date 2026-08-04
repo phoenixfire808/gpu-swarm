@@ -10,7 +10,10 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 import webbrowser
+
+from gpu_swarm.win_subprocess import popen_kwargs, run_kwargs
 from pathlib import Path
 from typing import Any
 
@@ -217,6 +220,7 @@ def run_agent_vm(
             timeout=timeout,
             check=False,
             cwd=resolved.get("project") or None,
+            **run_kwargs(),
         )
     except subprocess.TimeoutExpired:
         return {
@@ -388,6 +392,7 @@ def open_rdp_session(
                 [str(mstsc), f"/v:{target}"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                **popen_kwargs(),
             )
             return {
                 "ok": True,

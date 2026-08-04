@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from gpu_swarm.paths import ROOT, is_frozen
+from gpu_swarm.win_subprocess import run_kwargs
 
 SETTINGS_PATH = ROOT / "data" / "joiner_settings.json"
 DEFAULT_SCHEDULER_URL = "http://100.85.165.84:8766"
@@ -105,6 +106,7 @@ def detect_tailscale_ipv4() -> str | None:
             text=True,
             timeout=8,
             check=False,
+            **run_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return None

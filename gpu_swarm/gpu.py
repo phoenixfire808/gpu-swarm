@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+
+from gpu_swarm.win_subprocess import run_kwargs
 from typing import Any
 
 
@@ -30,6 +32,7 @@ def query_gpus() -> list[dict[str, Any]]:
             text=True,
             timeout=30,
             check=False,
+            **run_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return []

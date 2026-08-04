@@ -247,51 +247,46 @@ class WizardFrame(ctk.CTkFrame):
     def _step_welcome(self) -> None:
         self._title(
             "Welcome to GPU Pool",
-            "We'll install what you need automatically. Then: Share my PC · Use the pool · Invite friends.",
+            "Follow the numbered steps. We install what you need — progress stays in this window.",
         )
-        what = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
-        what.pack(fill="x", pady=(0, 8))
+        steps = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
+        steps.pack(fill="x", pady=(0, 8))
         ctk.CTkLabel(
-            what,
-            text="What GPU Pool is for",
+            steps,
+            text="Just do this",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=ACCENT,
         ).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(
-            what,
+            steps,
             text=(
-                "A private co-op for friends — share spare GPU/CPU, run jobs on whoever is online,\n"
-                "chat on the Network Hub, and invite friends so everyone gets more compute.\n"
-                "Not a public marketplace. No Docker.\n\n"
-                "After setup, Home shows three big buttons:\n"
-                "• Share my PC — offer spare GPU/CPU (you set caps; safety ON so Windows stays usable)\n"
-                "• Use the pool — run jobs (no NVIDIA needed on your laptop)\n"
-                "• Invite friends — copy a Discord blurb and grow the network"
+                "1. Click Next — we check your PC and install anything missing\n"
+                "2. Enter invite glitch-factor + your Discord name\n"
+                "3. Pick a big button: Share my PC · Use the pool · Invite friends\n\n"
+                "What is GPU Pool?\n"
+                "A private club for friends — share spare computer power, run jobs together, "
+                "and invite more friends so everyone gets more speed. Not a public store."
             ),
             text_color=MUTED,
             justify="left",
             wraplength=820,
         ).pack(anchor="w", padx=16, pady=(0, 14))
 
-        expect = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
-        expect.pack(fill="x", pady=(0, 8))
+        tools = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=10)
+        tools.pack(fill="x", pady=(0, 8))
         ctk.CTkLabel(
-            expect,
-            text="We'll install what you need (sit back)",
+            tools,
+            text="What we may install (plain English)",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=ACCENT,
         ).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(
-            expect,
+            tools,
             text=(
-                "This wizard installs tools automatically when missing — already-installed apps are skipped.\n"
-                "• Network: Tailscale (optional private path; public portal link is easier for most friends)\n"
-                "• Optional Workspace: VirtualBox + Vagrant (only if you want a Linux desktop)\n"
-                "• Python runtime + deps: live progress (“Downloading…”, “Installing dependencies…”)\n\n"
-                "Windows may show SmartScreen on unsigned builds → More info → Run anyway "
-                "(only if you trust this repo’s GitHub release).\n"
-                "Invite: glitch-factor + your Discord display name. "
-                "Public portal URLs rotate — ask the host for the current link if one fails."
+                "• Tailscale — a private network so friends can connect safely (optional if you have a web link)\n"
+                "• Python + small helpers — runs this app and talks to the pool\n"
+                "• VirtualBox + Vagrant — only if you want an optional Linux desktop (most people skip this)\n\n"
+                "Already installed? We skip it. Windows may ask Yes once (normal)."
             ),
             text_color=MUTED,
             justify="left",
@@ -380,10 +375,8 @@ class WizardFrame(ctk.CTkFrame):
 
     def _step_network_tools(self) -> None:
         self._title(
-            "Network & Workspace tools",
-            "We detect what’s already installed and skip re-downloads. "
-            "Tailscale = private friend network. VirtualBox + Vagrant = optional shared Linux Workspace. "
-            "Contribute / Utilize work without VirtualBox if you use the public portal or Tailscale only.",
+            "Step 2 — Network tools",
+            "We only install what is missing. Most friends use a web link from the host and skip Tailscale.",
         )
         try:
             from gpu_swarm.diagnostics import set_wizard_step
@@ -397,10 +390,10 @@ class WizardFrame(ctk.CTkFrame):
         ctk.CTkLabel(
             why,
             text=(
-                "• Tailscale — join the private pool network (skip if you have the public trycloudflare portal link)\n"
-                "• VirtualBox — runs the shared Workspace VM (capped CPU/RAM; GPU stays on the host worker)\n"
-                "• Vagrant — starts/stops that Workspace via Hermes/agent-vms\n"
-                "UAC prompts are normal once per install — click Yes. Auth keys stay in env vars only (never committed)."
+                "• Tailscale — private network so friends connect safely (skip if you have a web portal link)\n"
+                "• VirtualBox — runs an optional Linux desktop (you can skip this)\n"
+                "• Vagrant — starts that desktop when you want it\n"
+                "Windows may ask Yes once per install — that is normal."
             ),
             text_color=MUTED,
             justify="left",
@@ -429,22 +422,22 @@ class WizardFrame(ctk.CTkFrame):
         row.pack(fill="x", pady=6)
         ctk.CTkButton(
             row,
-            text="Detect installed tools",
+            text="Check my PC",
             width=170,
             fg_color="#2A3544",
             command=lambda: self._run_prereqs(detect_only=True),
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             row,
-            text="Install & connect",
-            width=150,
+            text="Install what I need",
+            width=180,
             fg_color=ACCENT,
             text_color="#0A1210",
             command=lambda: self._run_prereqs(detect_only=False, connect_tailscale=True),
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             row,
-            text="Install Tailscale only",
+            text="Tailscale only",
             width=160,
             fg_color="#2A3544",
             command=lambda: self._run_prereqs(
@@ -3227,7 +3220,7 @@ class MainFrame(ctk.CTkFrame):
                 self._refresh_home_pool()
             elif self._mode == "connect":
                 self._refresh_local_endpoint()
-                self._refresh_workspace()
+                # Workspace status spawns Hermes CLI — refresh manually, not every poll tick.
             self.app._poll_after = self.after(4000, tick)
 
         self.app._poll_after = self.after(4000, tick)

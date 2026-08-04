@@ -476,13 +476,13 @@ function Install-TailscaleTool {
                 [void]$script:Actions.Add("tailscale:authkey-up")
             } catch {
                 Write-WarnMsg "Auth-key join failed: $_  -  falling back to interactive login."
-                Start-Process $ts -ArgumentList "up"
+                Start-Process $ts -ArgumentList "up" -WindowStyle Hidden
                 [void]$script:Actions.Add("tailscale:interactive-up-fallback")
             }
         } else {
             Write-Info "Opening Tailscale login  -  approve in the browser, then return here."
             try {
-                Start-Process $ts -ArgumentList "up"
+                Start-Process $ts -ArgumentList "up" -WindowStyle Hidden
                 [void]$script:Actions.Add("tailscale:interactive-up")
             } catch {
                 Write-WarnMsg "Could not launch tailscale up: $_  -  open the Tailscale app from the Start menu and Log in."

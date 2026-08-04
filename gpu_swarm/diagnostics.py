@@ -24,6 +24,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from gpu_swarm.paths import LOGS_DIR, ROOT, gpu_pool_home, is_frozen, logs_dir
+from gpu_swarm.win_subprocess import run_kwargs
 
 # In-memory last failure context (wizard / join sets these).
 _LAST_TRACEBACK: str = ""
@@ -84,6 +85,7 @@ def _safe_run(cmd: list[str], *, timeout: float = 20) -> str:
             text=True,
             timeout=timeout,
             check=False,
+            **run_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return f"(failed: {exc})"

@@ -480,10 +480,10 @@
       <svg id="meshSvg" viewBox="0 0 1000 280" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <h1 class="brand">GPU <em>Pool</em></h1>
-    <p class="hero-line">Share spare compute. Grow the network. Use friends' GPUs when you need them.</p>
+    <p class="hero-line">Share spare computer power with friends. Use theirs when you need it.</p>
     <p class="hero-sub" id="heroSub">
-      A private co-op for your Discord — plug in spare GPU or CPU, run jobs on whoever is online,
-      chat, and invite friends so everyone gets more compute. No Docker. Invite required.
+      A private club on your Discord — not a public store. Invite required.
+      After you join, pick one big button: Share my PC · Use the pool · Invite friends.
     </p>
     <div class="cta-row" id="heroCta">
       <button type="button" id="heroEnterBtn">Join the pool</button>
@@ -493,22 +493,26 @@
     <p class="mesh-live" id="meshLive">Listening for peers…</p>
 
     <div class="gate" id="loginPanel">
-      <h2>Join in under a minute</h2>
-      <p class="lede" style="margin-top:0.35rem">Enter the invite + your Discord name. We’ll take you to Share / Use / Invite.</p>
+      <h2>Join in 3 steps</h2>
+      <p class="lede" style="margin-top:0.35rem">
+        <strong>1.</strong> Type invite code below &nbsp;·&nbsp;
+        <strong>2.</strong> Your Discord name &nbsp;·&nbsp;
+        <strong>3.</strong> Click Join — then pick Share / Use / Invite
+      </p>
       <label for="inviteCode">Invite code</label>
       <input id="inviteCode" type="text" value="glitch-factor" placeholder="glitch-factor" autocomplete="off" />
       <label for="displayName">Your Discord display name</label>
       <input id="displayName" type="text" placeholder="YourDiscordName" autocomplete="nickname" />
       <details style="margin-top:0.75rem">
-        <summary style="cursor:pointer;color:var(--muted);font-size:0.88rem">Optional: pool password</summary>
+        <summary style="cursor:pointer;color:var(--muted);font-size:0.88rem">Only if the host gave you one: pool password</summary>
         <label for="poolPassword">Pool password</label>
-        <input id="poolPassword" type="password" placeholder="only if a pool admin shared one" autocomplete="current-password" />
+        <input id="poolPassword" type="password" placeholder="leave blank unless the host shared one" autocomplete="current-password" />
       </details>
       <div class="actions">
         <button id="loginBtn" type="button">Join the pool</button>
       </div>
       <div class="err hidden" id="loginErr"></div>
-      <p class="note" id="networkNote">Prefer the host’s public portal link (no Tailscale). Tailscale is an optional private path. Public links rotate when the tunnel restarts — ask for a fresh one if a link fails.</p>
+      <p class="note" id="networkNote">Easiest path: ask the host for the current web link (no extra apps). Tailscale is optional — a private network so friends connect safely. Old web links stop working when the host restarts sharing — ask for a fresh one.</p>
     </div>
   </header>
 
@@ -536,22 +540,22 @@
     <div id="viewHome">
       <div class="section" style="margin-top:0.5rem">
         <h2>What do you want to do?</h2>
-        <p class="lede" id="homePrimaryLede">Three big paths. Pick one — you can switch anytime. More machines in the pool = more compute for everyone.</p>
+        <p class="lede" id="homePrimaryLede">Pick one big button. You can switch anytime. More friends = more power for everyone.</p>
         <div class="action-hero">
           <button type="button" data-go="contribute">
             <span class="k">1 · Contribute</span>
             <span class="t">Share my PC</span>
-            <span class="h">Offer spare GPU or CPU with caps you control. Safety stays on so Windows stays usable.</span>
+            <span class="h">Lend spare GPU or CPU — you choose limits. Safety keeps Windows usable.</span>
           </button>
           <button type="button" data-go="utilize">
-            <span class="k">2 · Utilize</span>
+            <span class="k">2 · Use</span>
             <span class="t">Use the pool</span>
-            <span class="h">Run jobs on friends’ machines. No NVIDIA needed on your laptop.</span>
+            <span class="h">Run jobs on friends' machines. No fancy GPU needed on your laptop.</span>
           </button>
           <button type="button" class="primary-share" data-go="share">
-            <span class="k">3 · Grow</span>
+            <span class="k">3 · Invite</span>
             <span class="t">Invite friends</span>
-            <span class="h">Copy a Discord-ready blurb. Every new machine makes the pool stronger.</span>
+            <span class="h">Copy a short Discord message. Every new PC makes the pool stronger.</span>
           </button>
         </div>
         <ol id="homePrimarySteps" class="hidden" aria-hidden="true"></ol>

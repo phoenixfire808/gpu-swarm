@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from gpu_swarm.paths import BUNDLE_ROOT, ROOT, is_frozen
+from gpu_swarm.win_subprocess import popen_kwargs, run_kwargs
 from gpu_swarm.joiner_settings import (
     DEFAULT_LOCAL_PORTAL_URL,
     DEFAULT_LOCAL_SCHEDULER_URL,
@@ -954,6 +955,7 @@ def install_requirements(
             stderr=subprocess.STDOUT,
             text=True,
             cwd=str(ROOT),
+            **popen_kwargs(),
         )
         assert proc.stdout is not None
         for raw in proc.stdout:
@@ -1073,6 +1075,7 @@ def install_torch_cuda(
             stderr=subprocess.STDOUT,
             text=True,
             cwd=str(ROOT),
+            **popen_kwargs(),
         )
         assert proc.stdout is not None
         for raw in proc.stdout:
@@ -1164,6 +1167,7 @@ def _run_powershell(script: Path, args: list[str] | None = None, timeout: float 
             timeout=timeout,
             check=False,
             cwd=str(ROOT),
+            **run_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"ok": False, "code": -1, "stdout": "", "stderr": str(exc), "script": str(script)}
@@ -1628,10 +1632,6 @@ def start_worker(
     if settings.discord_user:
         cmd.extend(["--discord-user", settings.discord_user])
 
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         if _worker_log_handle is not None:
@@ -1651,7 +1651,7 @@ def start_worker(
             stdout=_worker_log_handle,
             stderr=subprocess.STDOUT,
             text=True,
-            creationflags=creationflags,
+            **popen_kwargs(new_group=True),
         )
     except OSError as exc:
         _worker_proc = None
@@ -2486,6 +2486,7 @@ def _signal_stop_pid(pid: int) -> None:
                     capture_output=True,
                     check=False,
                     timeout=10,
+                    **run_kwargs(),
                 )
             return
         except OSError:
@@ -2494,6 +2495,7 @@ def _signal_stop_pid(pid: int) -> None:
                 capture_output=True,
                 check=False,
                 timeout=10,
+                **run_kwargs(),
             )
             return
     os.kill(pid, signal.SIGTERM)
@@ -2733,10 +2735,6 @@ def start_local_endpoint(
         }
     if listen_port is not None:
         cmd.extend(["--port", str(listen_port)])
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-
     try:
         LOCAL_ENDPOINT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         if _local_endpoint_log_handle is not None:
@@ -2756,7 +2754,7 @@ def start_local_endpoint(
             stdout=_local_endpoint_log_handle,
             stderr=subprocess.STDOUT,
             text=True,
-            creationflags=creationflags,
+            **popen_kwargs(new_group=True),
         )
     except OSError as exc:
         _local_endpoint_proc = None

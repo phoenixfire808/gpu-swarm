@@ -34,6 +34,7 @@ from gpu_swarm.paths import (
     gpu_pool_home,
     is_frozen,
 )
+from gpu_swarm.win_subprocess import popen_kwargs, run_kwargs
 
 # Human-readable step labels (wizard / console).
 STEP_CREATE_FOLDER = "Creating GPUPool folder…"
@@ -96,6 +97,7 @@ def _run(
         check=False,
         cwd=cwd,
         env=env,
+        **run_kwargs(),
     )
 
 
@@ -561,6 +563,7 @@ def install_requirements_into_venv(
             stderr=subprocess.STDOUT,
             text=True,
             cwd=str(req.parent),
+            **popen_kwargs(),
         )
         assert proc.stdout is not None
         for raw in proc.stdout:

@@ -1,81 +1,71 @@
-# Start here — GPU Pool in 5 minutes
+# Start here — GPU Pool (plain steps)
 
-**Private co-op compute for Glitch Factor Discord.**  
-Share spare GPU/CPU · use friends’ machines · invite others so everyone gets more compute.
+**Private compute club for Glitch Factor Discord.**  
+Share spare power · use friends' PCs · invite others.
 
 | | |
 |--|--|
 | **Invite code** | `glitch-factor` |
 | **Windows app** | https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe |
-| **Full login guide** | [`LOGIN.md`](LOGIN.md) |
-| **Download details** | [`DOWNLOAD.md`](DOWNLOAD.md) |
+| **More help** | [`LOGIN.md`](LOGIN.md) · [`DOWNLOAD.md`](DOWNLOAD.md) |
 
 ---
 
-## Why join?
+## Path A — Web browser (easiest)
 
-- **More compute together** — every PC that joins makes the pool stronger  
-- **No NVIDIA? Still useful** — Use the pool, or Share CPU only (VRAM=0)  
-- **You stay in control** — caps you set; host GPU safety ON by default  
-- **Grow it** — Invite friends with one Discord paste  
+**Just do this:**
 
-Not a public marketplace. Invite required. No Docker.
-
----
-
-## Path A — Browser (fastest)
-
-1. Ask a pool member for the **current** public portal link  
-   (`https://….trycloudflare.com/portal` — links **rotate** when the host restarts the tunnel)
-2. Open it → invite **`glitch-factor`** + your Discord display name → **Join the pool**
+1. Ask a friend in the pool for the **current web link** (looks like `https://….trycloudflare.com/portal`)
+2. Open the link → type invite **`glitch-factor`** and your **Discord name** → click **Join the pool**
 3. Pick one big button:
-   - **Share my PC** — offer spare GPU/CPU  
-   - **Use the pool** — run jobs on online friends  
-   - **Invite friends** — copy the Discord blurb and grow the network  
+   - **Share my PC** — lend spare GPU/CPU (you choose how much)
+   - **Use the pool** — run jobs on friends' machines (no fancy GPU needed on your laptop)
+   - **Invite friends** — copy a message and send it on Discord
 
-Optional private path (Tailscale): `http://100.85.165.84:8767/portal`
+*Optional:* Tailscale = private network so friends connect safely. Most people use the web link instead.
 
 ---
 
-## Path B — Windows EXE (automatic install)
+## Path B — Windows app (automatic install)
 
-1. Download: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe  
-2. Run it. If SmartScreen appears → **More info** → **Run anyway** (only if you trust this GitHub repo)  
-3. Sit back — the wizard installs what you need (Python runtime/deps; Tailscale / VirtualBox+Vagrant only if you choose those steps). Progress stays on screen.  
-4. Enter invite **`glitch-factor`** + Discord name → **Save + Join**  
+**Just do this:**
+
+1. Download: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
+2. Double-click it. If Windows warns you → **More info** → **Run anyway** (only if you trust this GitHub repo)
+3. Follow the numbered steps in the app — we install what you need; progress stays on screen
+4. Type invite **`glitch-factor`** + your Discord name → **Save + Join**
 5. Home → **Share my PC** / **Use the pool** / **Invite friends**
 
-First-run files live under `%LOCALAPPDATA%\GPUPool\` (isolated — not your global Python).
+Files live under `%LOCALAPPDATA%\GPUPool\` (separate from your normal Python).
 
 ---
 
-## After you’re in
+## What the buttons mean
 
 | Button | Plain English |
 |--------|----------------|
-| **Share my PC** | Contribute spare GPU/CPU. You set how much. Safety keeps Windows usable. |
-| **Use the pool** | Run allowlisted jobs (`probe`, CUDA probe, chat) on online workers. |
-| **Invite friends** | Copy portal + invite + download link → paste in Discord. |
-| **Connect tools** | Scheduler / local model URLs for agents and scripts. |
-| **Workspace** | Optional Linux desktop (CPU/RAM only — no NVIDIA passthrough). |
-| **Chat / Suggest** | Talk with the pool; send improvement ideas. |
+| **Share my PC** | Lend spare GPU/CPU. You set limits. Safety keeps Windows usable. |
+| **Use the pool** | Run jobs on whoever is online. No NVIDIA needed on your laptop. |
+| **Invite friends** | Copy a short message → paste in Discord → grow the pool. |
+| **Connect tools** | URLs for apps and scripts (optional). |
+| **Workspace** | Optional Linux desktop (CPU only — no GPU inside the VM). |
 
 ---
 
-## Paste this into Discord (grow the pool)
+## Paste into Discord (grow the pool)
 
 ```text
-**GPU Pool** — add your machine, grow the pool, everyone gets more compute.
+**GPU Pool** — add your PC, everyone gets more compute.
 
-Download (Windows): https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
+Download: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
 Start here: https://github.com/phoenixfire808/gpu-swarm/blob/master/START_HERE.md
 
-1) Ask for the current public portal link (or use Tailscale: http://100.85.165.84:8767/portal)
-2) Invite **glitch-factor** + your Discord display name
-3) Home → Share my PC · Use the pool · Invite friends
+1) Ask for the current web portal link
+2) Invite **glitch-factor** + your Discord name
+3) Share my PC · Use the pool · Invite friends
 
-No NVIDIA? Still join — Use the pool or Share CPU (VRAM=0).
-Private co-op — invite required. No Docker.
+No NVIDIA? Still join — Use the pool or Share CPU only.
+Private club — invite required.
 ```
 
-Host: keep `start-public-access.cmd` running so friends can join without Tailscale. URL is in `data/public_endpoints.share.txt` (gitignored; rotates on tunnel restart).
+**Host:** run `start-public-access.cmd` so friends can join without Tailscale. Live link is in `data/public_endpoints.share.txt` (changes when you restart the tunnel).
