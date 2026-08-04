@@ -1,0 +1,286 @@
+"""Worker: advertise GPUs + host resources, heartbeat, lease + run allowlisted jobs."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import platform
+import signal
+import time
+import uuid
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from gpu_swarm import MAX_RESULT_BYTES
+from gpu_swarm.config import WorkerConfig, worker_config
+from gpu_swarm.gpu import inventory_summary
+from gpu_swarm.host import query_host
+from gpu_swarm.jobs import execute_job
+
+DEFAULT_STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "worker_id.txt"
+
+
+def _worker_id_path() -> Path:
+    import os
+
+    override = os.environ.get("GPU_SWARM_WORKER_ID_FILE", "").strip()
+    if override:
+        return Path(override)
+    return DEFAULT_STATE_FILE
+
+
+class Worker:
+    def __init__(self, cfg: WorkerConfig) -> None:
+        self.cfg = cfg
+        self.worker_id = self._load_or_create_id()
+        self._stop = False
+        self._client = httpx.Client(base_url=cfg.scheduler_url.rstrip("/"), timeout=30.0)
+
+    def _load_or_create_id(self) -> str:
+        state_file = _worker_id_path()
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        if state_file.exists():
+            existing = state_file.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+        wid = str(uuid.uuid4())
+        state_file.write_text(wid, encoding="utf-8")
+        return wid
+
+    def stop(self, *_args: Any) -> None:
+        self._stop = True
+        print("\n[worker] stop requested — finishing current cycle…", flush=True)
+
+    def _caps(self) -> dict[str, Any]:
+        """
+        Advertised capacity after soft caps.
+
+        Stable field names for portal / desktop / scheduler:
+          gpus, free_vram_mb, total_vram_mb, has_gpu, max_vram_mb,
+          cpu_cores, max_cpu_percent,
+          ram_total_mb, ram_available_mb, max_ram_mb,
+          disk_free_mb, disk_total_mb, disk_path, max_disk_mb,
+          dedicated_ram_mb, dedicated_disk_mb, dedicated_cpu_cores, contributor_name
+        """
+        inv = inventory_summary()
+        host = query_host()
+
+        free_vram = inv["free_vram_mb"]
+        if self.cfg.max_vram_mb > 0:
+            free_vram = min(free_vram, self.cfg.max_vram_mb)
+
+        ram_available = host["ram_available_mb"]
+        if self.cfg.max_ram_mb > 0:
+            ram_available = min(ram_available, self.cfg.max_ram_mb)
+
+        disk_free = host["disk_free_mb"]
+        if self.cfg.max_disk_mb > 0:
+            disk_free = min(disk_free, self.cfg.max_disk_mb)
+
+        # Portal/desktop dedication ads (aliases of soft caps)
+        dedicated_ram = int(self.cfg.max_ram_mb or 0)
+        dedicated_disk = int(self.cfg.max_disk_mb or 0)
+        dedicated_cpu = float(self.cfg.dedicated_cpu_cores or 0.0)
+        if dedicated_cpu <= 0 and host["cpu_cores"] > 0 and self.cfg.max_cpu_percent > 0:
+            dedicated_cpu = round(host["cpu_cores"] * (self.cfg.max_cpu_percent / 100.0), 2)
+
+        return {
+            "gpus": inv["gpus"],
+            "free_vram_mb": free_vram,
+            "total_vram_mb": inv["total_vram_mb"],
+            "has_gpu": inv["gpu_count"] > 0,
+            "max_vram_mb": self.cfg.max_vram_mb,
+            "cpu_cores": host["cpu_cores"],
+            "max_cpu_percent": self.cfg.max_cpu_percent,
+            "ram_total_mb": host["ram_total_mb"],
+            "ram_available_mb": ram_available,
+            "max_ram_mb": self.cfg.max_ram_mb,
+            "disk_free_mb": disk_free,
+            "disk_total_mb": host["disk_total_mb"],
+            "disk_path": host["disk_path"],
+            "max_disk_mb": self.cfg.max_disk_mb,
+            "dedicated_ram_mb": dedicated_ram,
+            "dedicated_disk_mb": dedicated_disk,
+            "dedicated_cpu_cores": dedicated_cpu,
+            "contributor_name": self.cfg.contributor_name or self.cfg.discord_user or None,
+        }
+
+    def register(self) -> dict[str, Any]:
+        caps = self._caps()
+        body = {
+            "id": self.worker_id,
+            "name": self.cfg.worker_name,
+            "discord_user": self.cfg.discord_user or None,
+            "host": platform.node(),
+            "gpus": caps["gpus"],
+            "free_vram_mb": caps["free_vram_mb"],
+            "total_vram_mb": caps["total_vram_mb"],
+            "max_vram_mb": caps["max_vram_mb"],
+            "max_cpu_percent": caps["max_cpu_percent"],
+            "cpu_cores": caps["cpu_cores"],
+            "ram_total_mb": caps["ram_total_mb"],
+            "ram_available_mb": caps["ram_available_mb"],
+            "max_ram_mb": caps["max_ram_mb"],
+            "disk_free_mb": caps["disk_free_mb"],
+            "disk_total_mb": caps["disk_total_mb"],
+            "disk_path": caps["disk_path"],
+            "max_disk_mb": caps["max_disk_mb"],
+            "dedicated_ram_mb": caps["dedicated_ram_mb"],
+            "dedicated_disk_mb": caps["dedicated_disk_mb"],
+            "dedicated_cpu_cores": caps["dedicated_cpu_cores"],
+            "contributor_name": caps["contributor_name"],
+        }
+        r = self._client.post("/workers/register", json=body)
+        r.raise_for_status()
+        return r.json()
+
+    def heartbeat(self, status: str = "online") -> None:
+        caps = self._caps()
+        r = self._client.post(
+            f"/workers/{self.worker_id}/heartbeat",
+            json={
+                "gpus": caps["gpus"],
+                "free_vram_mb": caps["free_vram_mb"],
+                "total_vram_mb": caps["total_vram_mb"],
+                "cpu_cores": caps["cpu_cores"],
+                "max_cpu_percent": caps["max_cpu_percent"],
+                "ram_total_mb": caps["ram_total_mb"],
+                "ram_available_mb": caps["ram_available_mb"],
+                "max_ram_mb": caps["max_ram_mb"],
+                "disk_free_mb": caps["disk_free_mb"],
+                "disk_total_mb": caps["disk_total_mb"],
+                "disk_path": caps["disk_path"],
+                "max_disk_mb": caps["max_disk_mb"],
+                "dedicated_ram_mb": caps["dedicated_ram_mb"],
+                "dedicated_disk_mb": caps["dedicated_disk_mb"],
+                "dedicated_cpu_cores": caps["dedicated_cpu_cores"],
+                "contributor_name": caps["contributor_name"],
+                "status": status,
+            },
+        )
+        r.raise_for_status()
+
+    def lease(self) -> dict[str, Any] | None:
+        caps = self._caps()
+        r = self._client.post(
+            "/jobs/lease",
+            json={
+                "worker_id": self.worker_id,
+                "free_vram_mb": caps["free_vram_mb"],
+                "has_gpu": caps["has_gpu"],
+                "cpu_cores": caps["cpu_cores"],
+                "ram_available_mb": caps["ram_available_mb"],
+                "disk_free_mb": caps["disk_free_mb"],
+            },
+        )
+        r.raise_for_status()
+        return r.json().get("job")
+
+    def complete(self, job_id: str, result: Any) -> None:
+        raw = json.dumps(result)
+        if len(raw.encode("utf-8")) > MAX_RESULT_BYTES:
+            result = {
+                "truncated": True,
+                "note": f"result capped at {MAX_RESULT_BYTES} bytes",
+                "preview": raw[: MAX_RESULT_BYTES // 2],
+            }
+        r = self._client.post(
+            f"/jobs/{job_id}/complete",
+            json={"worker_id": self.worker_id, "result": result},
+        )
+        r.raise_for_status()
+
+    def fail(self, job_id: str, error: str) -> None:
+        r = self._client.post(
+            f"/jobs/{job_id}/fail",
+            json={"worker_id": self.worker_id, "error": error},
+        )
+        r.raise_for_status()
+
+    def run_forever(self) -> None:
+        signal.signal(signal.SIGINT, self.stop)
+        if hasattr(signal, "SIGTERM"):
+            signal.signal(signal.SIGTERM, self.stop)
+
+        print(f"[worker] connecting to {self.cfg.scheduler_url}", flush=True)
+        self.register()
+        caps = self._caps()
+        names = [g["name"] for g in caps["gpus"]]
+        print(
+            f"[worker] registered id={self.worker_id} name={self.cfg.worker_name}",
+            flush=True,
+        )
+        print(
+            f"[worker] GPUs ({len(names)}): {', '.join(names) or 'none detected'}",
+            flush=True,
+        )
+        print(
+            f"[worker] free_vram={caps['free_vram_mb']} MiB / "
+            f"total={caps['total_vram_mb']} MiB",
+            flush=True,
+        )
+        print(
+            f"[worker] cpu_cores={caps['cpu_cores']} "
+            f"max_cpu_percent={caps['max_cpu_percent']} "
+            f"ram_available={caps['ram_available_mb']}/{caps['ram_total_mb']} MiB "
+            f"disk_free={caps['disk_free_mb']} MiB  (Ctrl+C to stop)",
+            flush=True,
+        )
+        last_hb = 0.0
+        while not self._stop:
+            now = time.time()
+            try:
+                if now - last_hb >= self.cfg.heartbeat_sec:
+                    self.heartbeat("online")
+                    last_hb = now
+                job = self.lease()
+                if job:
+                    jid = job["id"]
+                    jtype = job["job_type"]
+                    print(f"[worker] leased {jtype} job={jid}", flush=True)
+                    self.heartbeat("busy")
+                    last_hb = time.time()
+                    try:
+                        result = execute_job(jtype, job.get("payload") or {})
+                        self.complete(jid, result)
+                        print(f"[worker] completed job={jid}", flush=True)
+                    except Exception as exc:  # noqa: BLE001 — report to scheduler
+                        self.fail(jid, f"{type(exc).__name__}: {exc}")
+                        print(f"[worker] failed job={jid}: {exc}", flush=True)
+                else:
+                    time.sleep(self.cfg.poll_sec)
+            except httpx.HTTPError as exc:
+                print(f"[worker] network error: {exc}", flush=True)
+                time.sleep(max(3.0, self.cfg.poll_sec))
+            except Exception as exc:  # noqa: BLE001
+                print(f"[worker] loop error: {exc}", flush=True)
+                time.sleep(max(3.0, self.cfg.poll_sec))
+        try:
+            self.heartbeat("stopped")
+        except Exception:  # noqa: BLE001
+            pass
+        self._client.close()
+        print("[worker] stopped", flush=True)
+
+
+def run_worker(args: argparse.Namespace | None = None) -> int:
+    cfg = worker_config()
+    if args:
+        if args.name:
+            cfg.worker_name = args.name
+        if args.scheduler_url:
+            cfg.scheduler_url = args.scheduler_url
+        if args.max_vram_mb is not None:
+            cfg.max_vram_mb = args.max_vram_mb
+        if getattr(args, "max_ram_mb", None) is not None:
+            cfg.max_ram_mb = args.max_ram_mb
+        if getattr(args, "max_disk_mb", None) is not None:
+            cfg.max_disk_mb = args.max_disk_mb
+        if getattr(args, "max_cpu_percent", None) is not None:
+            cfg.max_cpu_percent = args.max_cpu_percent
+        if args.discord_user:
+            cfg.discord_user = args.discord_user
+    Worker(cfg).run_forever()
+    return 0
