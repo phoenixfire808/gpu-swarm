@@ -79,7 +79,7 @@ function Ensure-GpuPoolVenv {
             if (-not (Test-Path $VenvPython)) { throw "Portable bootstrap did not create $VenvPython" }
             return $true
         }
-        throw "Python 3.10+ not found. Run wizard Bootstrap portable Python, GPUPool.exe, or: install_joiner_deps.ps1 -BootstrapPortable"
+        throw "Python 3.10-3.12 not found (3.13 skipped by default). Run wizard Bootstrap portable Python, GPUPool.exe, or: install_joiner_deps.ps1 -BootstrapPortable"
     }
     Write-Host "Creating isolated venv: $VenvDir (seed=$seed)"
     New-Item -ItemType Directory -Force -Path $GpuPoolRoot | Out-Null

@@ -118,6 +118,36 @@ Contribute / Utilize / code: [`CONNECTING.md`](CONNECTING.md).
 
 ---
 
+## Supported install matrix (Windows)
+
+| Component | Supported | Notes |
+|-----------|-----------|-------|
+| OS | Windows 10/11 x64 | No Docker |
+| **GPUPool.exe** | Any supported Windows | No Python required for Contribute/Utilize UI + worker |
+| **From source / wizard pip** | CPython **3.10 – 3.12** (prefer **3.12**) | Isolated venv: `%LOCALAPPDATA%\GPUPool\venv` |
+| Portable bootstrap | CPython **3.12.x** (NuGet) | `%LOCALAPPDATA%\GPUPool\python` when system Python is missing/broken |
+| Python **3.13** | Optional / fragile | Not selected by default; torch/CUDA wheels often lag |
+| Joiner deps | `requirements-joiner.txt` | No torch, no Discord — Contribute/Utilize |
+| Full host stack | `requirements.txt` | Scheduler + portal + Discord bot |
+| Optional CUDA torch | `requirements-cuda.txt` | `scripts/install_joiner_deps.ps1 -WithTorchCuda` (cu128 index) |
+
+**Friend install (recommended):** EXE → wizard → Bootstrap portable Python if prompted → invite `glitch-factor`.
+
+**From source:**
+
+```bat
+scripts\install_joiner_deps.cmd
+"%LOCALAPPDATA%\GPUPool\venv\Scripts\python.exe" -m gpu_swarm.app
+```
+
+Optional GPU contributor torch (large):
+
+```bat
+scripts\install_joiner_deps.cmd --with-torch-cuda
+```
+
+---
+
 ## Rules
 
 - Invite code required on the portal (public or Tailscale). Do not disable auth for public mode.

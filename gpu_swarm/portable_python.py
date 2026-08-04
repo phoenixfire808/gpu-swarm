@@ -62,16 +62,22 @@ def _version_ok(exe: str) -> tuple[bool, str]:
     """Return (ok, version_string) for a python executable."""
     try:
         if Path(exe).name.lower() in ("py.exe", "py"):
-            proc = _run(
-                [
-                    exe,
-                    "-3",
-                    "-c",
-                    "import sys; print('%d.%d.%d' % sys.version_info[:3]); "
-                    "raise SystemExit(0 if (3, 10) <= sys.version_info[:2] <= (3, 12) else 2)",
-                ],
-                timeout=12,
-            )
+            proc = None
+            for tag in ("-3.12", "-3.11", "-3.10"):
+                proc = _run(
+                    [
+                        exe,
+                        tag,
+                        "-c",
+                        "import sys; print('%d.%d.%d' % sys.version_info[:3]); "
+                        "raise SystemExit(0 if (3, 10) <= sys.version_info[:2] <= (3, 12) else 2)",
+                    ],
+                    timeout=12,
+                )
+                if proc.returncode == 0:
+                    break
+            if proc is None:
+                return False, ""
         else:
             proc = _run(
                 [
@@ -96,15 +102,18 @@ def _real_executable(candidate: str) -> str | None:
         return None
     name = path.name.lower()
     if name in ("py.exe", "py"):
-        try:
-            proc = _run(
-                [candidate, "-3", "-c", "import sys; print(sys.executable)"],
-                timeout=12,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        resolved = (proc.stdout or "").strip()
-        return resolved if resolved and Path(resolved).exists() else None
+        for tag in ("-3.12", "-3.11", "-3.10"):
+            try:
+                proc = _run(
+                    [candidate, tag, "-c", "import sys; print(sys.executable)"],
+                    timeout=12,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            resolved = (proc.stdout or "").strip()
+            if resolved and Path(resolved).exists():
+                return resolved
+        return None
     return str(path) if path.exists() else shutil.which(candidate)
 
 
@@ -132,7 +141,7 @@ def list_system_python_candidates() -> list[str]:
         if found:
             out.append(found)
     local = Path(os.environ.get("LOCALAPPDATA", ""))
-    for ver in ("Python313", "Python312", "Python311", "Python310"):
+    for ver in ("Python312", "Python311", "Python310"):
         out.append(str(local / "Programs" / "Python" / ver / "python.exe"))
         out.append(f"C:\\{ver}\\python.exe")
     seen: set[str] = set()
@@ -147,7 +156,7 @@ def list_system_python_candidates() -> list[str]:
 
 
 def find_usable_python(*, allow_frozen_self: bool = False) -> dict[str, Any]:
-    """Find a usable CPython 3.10+ for pip / venv work (skip frozen EXE)."""
+    """Find a usable CPython 3.10–3.12 for pip / venv work (skip frozen EXE)."""
     for cand in list_system_python_candidates():
         real = _real_executable(cand)
         if not real:
@@ -187,7 +196,7 @@ def find_usable_python(*, allow_frozen_self: bool = False) -> dict[str, Any]:
         "version": "",
         "source": "",
         "pip_ok": False,
-        "message": "No usable Python 3.10+ found (system Python missing, too old, or broken).",
+        "message": "No usable Python 3.10–3.12 found (system Python missing, unsupported, or broken).",
         "fix": (
             "Click “Bootstrap portable Python” in the wizard, or use GPUPool.exe.\n"
             f"Portable target: {PORTABLE_PYTHON_DIR}\n"
@@ -557,6 +566,7 @@ def python_runtime_report() -> dict[str, Any]:
         "venv_dir": str(VENV_DIR),
         "gpu_pool_home": str(gpu_pool_home()),
         "min_version": f"{MIN_VERSION[0]}.{MIN_VERSION[1]}",
+        "max_version": f"{MAX_VERSION[0]}.{MAX_VERSION[1]}",
         "target_version": PORTABLE_PYTHON_VERSION,
         "message": (
             (
@@ -579,7 +589,7 @@ def python_runtime_report() -> dict[str, Any]:
             )
         ),
         "conflict_hint": (
-            "This machine’s system Python is missing, too old (<3.10), or broken. "
+            "This machine’s system Python is missing, unsupported (need 3.10–3.12), or broken. "
             "GPU Pool will use an isolated portable Python + venv under "
             f"%LOCALAPPDATA%\\GPUPool\\ instead of global site-packages."
             if not found.get("ok") and not frozen
