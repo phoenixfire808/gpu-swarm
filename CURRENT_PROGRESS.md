@@ -1,7 +1,7 @@
 # CURRENT_PROGRESS — GPU Pool (gpu-swarm)
 
 Living scorecard for Drew private Discord GPU/CPU co-op.  
-**Updated:** 2026-08-04 ~12:20 CDT · Public tunnel LIVE + installer prefers `public_endpoints.json`.
+**Updated:** 2026-08-04 ~12:20 CDT · Local model endpoint + Connect Start/Stop UI.
 
 **GitHub:** https://github.com/phoenixfire808/gpu-swarm (public)
 
@@ -88,11 +88,20 @@ Invite: `glitch-factor` · cloudflared pid `41552` · files in `data/public_endp
 - [x] Private-network messaging, Utilize/Connect first-class, portal friends cards
 - [x] Public repo + CONNECTING / DOWNLOAD / member quickstart
 
+### Local model endpoint (2026-08-04)
+- [x] `gpu_swarm/local_endpoint.py` — localhost OpenAI-compatible API → allowlisted `llm_chat`
+- [x] CLI `python -m gpu_swarm local-endpoint` + `start-local-endpoint.cmd`
+- [x] Desktop **Connect**: Start/Stop, status, copy OpenAI base URL, link `LOCAL_MODEL.md`
+- [x] Honest copy: local AI API for apps — **not** a physical GPU device
+- [x] Port pick: prefer 8080, fall back to 11434 when busy (Windows connect+bind check)
+- [x] Verified: start → `/health` + `/v1/models` → stop (bound `127.0.0.1:11434` while :8080 occupied)
+
 ---
 
 ## In progress
 
 - [x] Packaging Worker: published **v0.1.0** GPUPool.exe (portable_python + diagnostics + Home UX)
+- [ ] Rebuild EXE so Connect local-endpoint UI ships in GPUPool.exe
 - [ ] Confirm Discord `/pool` smoke in Glitch Factor (manual; optional)
 - [ ] Post member quickstart + EXE download link in Glitch Factor
 
@@ -101,16 +110,17 @@ Invite: `glitch-factor` · cloudflared pid `41552` · files in `data/public_endp
 ## Next (prioritized)
 
 1. **Member onboarding** — post EXE link + “if join fails → Submit diagnostics”.
-2. Stream smoke: friend downloads EXE → wizard → Join / Utilize.
-3. Whisper / bounded LLM (allowlisted).
-4. Portal Discord OAuth (later).
+2. Stream smoke: friend downloads EXE → wizard → Join / Utilize; Connect → Start local endpoint.
+3. Contributor workers with Ollama for real `llm_chat` completions.
+4. Whisper / more bounded LLM (allowlisted).
+5. Portal Discord OAuth (later).
 
 ### Next 5 Drew should care about right now
 
 1. DM friends: https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe
-2. Tell friends: on failure use **Submit diagnostics** / **Copy log**.
-3. Live smoke portal `POST /api/diagnostics` after friend install.
-4. Plan Whisper/LLM runners.
+2. Tell friends: Connect → **Start local endpoint** → paste `OPENAI_BASE_URL` (see LOCAL_MODEL.md).
+3. Run Ollama (or compatible) on a GPU worker so `llm_chat` jobs complete.
+4. Rebuild/publish EXE after this commit for Connect UI.
 5. Keep `.env` / tokens local — never commit.
 
 ---
@@ -119,8 +129,10 @@ Invite: `glitch-factor` · cloudflared pid `41552` · files in `data/public_endp
 
 | Blocker | Why | Unblock |
 |---------|-----|---------|
-| **Whisper / LLM jobs** | No runners in `jobs.py` | Design narrow contract → runners + UI |
+| **LLM chat quality** | Needs Ollama (or compat) on at least one worker | Install runtime on Drew-Home / friend GPU |
+| **Whisper** | No runners yet | Narrow contract → runners + UI |
 | **Portal OAuth** | MVP invite/password only | Implement when auth story ready |
+| **EXE includes Connect local-endpoint** | v0.1.0 predates this UI | Packaging rebuild |
 
 ---
 

@@ -317,20 +317,30 @@ class Store:
             return None
         free_vram = int(caps.get("free_vram_mb", worker["free_vram_mb"]))
         has_gpu = bool(caps.get("has_gpu", bool(worker.get("gpus"))))
+        llm_ready = bool(caps.get("llm_ready"))
         cur = await self.db.execute(
             """
             SELECT * FROM jobs
             WHERE status='queued'
               AND (require_gpu=0 OR (?=1 AND min_vram_mb <= ?))
             ORDER BY created_at ASC
-            LIMIT 1
+            LIMIT 8
             """,
             (1 if has_gpu else 0, free_vram),
         )
-        row = await cur.fetchone()
-        if not row:
+        rows = await cur.fetchall()
+        if not rows:
             return None
-        job_id = row["id"]
+        chosen = None
+        for row in rows:
+            jtype = str(row["job_type"] or "")
+            if jtype == "llm_chat" and not llm_ready:
+                continue
+            chosen = row
+            break
+        if not chosen:
+            return None
+        job_id = chosen["id"]
         now = time.time()
         await self.db.execute(
             """

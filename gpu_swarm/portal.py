@@ -251,8 +251,9 @@ async def api_config(request: Request) -> dict[str, Any]:
         ),
         "allowed_job_types": sorted(UTILIZE_JOB_TYPES),
         "utilize_note": (
-            "No GPU on your laptop? Fine. v1 allowlisted jobs only: probe and pytorch_cuda_probe. "
-            "They run on pool workers. No arbitrary shell."
+            "No GPU on your laptop? Fine. Allowlisted jobs: probe, pytorch_cuda_probe, llm_chat. "
+            "For AI apps, start the Local Pool Endpoint on your machine "
+            "(OPENAI_BASE_URL=http://127.0.0.1:8080/v1). See LOCAL_MODEL.md."
         ),
         "invite_code_hint": PORTAL_INVITE_CODE,
         "public_endpoints": pub,
@@ -272,8 +273,9 @@ async def api_config(request: Request) -> dict[str, Any]:
                 "/pool", "/workers", "/contribute",
                 "/submit_probe", "/submit_compute", "/job_status",
             ],
-            "docs": "CONNECTING.md · FRIEND_LAPTOP.md",
+            "docs": "CONNECTING.md · LOCAL_MODEL.md · FRIEND_LAPTOP.md",
             "cli": [
+                "python -m gpu_swarm local-endpoint",
                 "python -m gpu_swarm utilize status",
                 "python -m gpu_swarm utilize probe --wait",
                 "python -m gpu_swarm utilize cuda --wait",
@@ -291,7 +293,26 @@ async def api_config(request: Request) -> dict[str, Any]:
                 "POST /jobs   {\"job_type\":\"probe\"}",
                 "GET  /jobs/{id}",
             ],
-            "env_example": f"set GPU_SWARM_SCHEDULER_URL={env_sched}",
+            "local_model": {
+                "title": "Local model endpoint (pool as a local AI API)",
+                "honesty": (
+                    "This is a network GPU via OpenAI-compatible API — "
+                    "not a fake Windows display adapter / PCI device."
+                ),
+                "start": "python -m gpu_swarm local-endpoint   OR   start-local-endpoint.cmd",
+                "url": "http://127.0.0.1:8080/v1",
+                "env": "OPENAI_BASE_URL=http://127.0.0.1:8080/v1",
+                "apps": "Open WebUI · LM Studio · Continue · Cursor",
+                "host_worker": (
+                    "Drew (or any GPU contributor): install Ollama, pull a model, "
+                    "keep ollama serve on :11434, restart the GPU Pool worker "
+                    "so llm_ready=yes. See LOCAL_MODEL.md."
+                ),
+            },
+            "env_example": (
+                f"set GPU_SWARM_SCHEDULER_URL={env_sched}\n"
+                "set OPENAI_BASE_URL=http://127.0.0.1:8080/v1"
+            ),
             "env_note": urls.get("env_note") or (
                 "EXE/portal auto-detects the scheduler — hand-editing "
                 "GPU_SWARM_SCHEDULER_URL is optional. If you set it, include port 8766 "
@@ -305,7 +326,8 @@ async def api_config(request: Request) -> dict[str, Any]:
                 "Run the GPU Pool EXE (auto-detects scheduler) OR open the portal URL Drew shares",
                 "Public HTTPS if tunnel is up; else Tailscale → :8767/portal",
                 f"Sign in with invite code {PORTAL_INVITE_CODE} + your display name",
-                "No NVIDIA? Utilize first (or Contribute CPU-only)",
+                "No NVIDIA? Utilize first — Connect → Start local model endpoint → paste OPENAI_BASE_URL into your AI app",
+                "GPU friends: Contribute worker + run Ollama so llm_chat jobs can land on you",
                 f"Coding env (optional): set GPU_SWARM_SCHEDULER_URL={env_sched}",
             ],
             "rules": [
@@ -313,6 +335,7 @@ async def api_config(request: Request) -> dict[str, Any]:
                 "Scheduler port is 8766 (not portal 8767). Bare IP without port is wrong.",
                 "Public friends use …/pool-api as GPU_SWARM_SCHEDULER_URL when tunnel is on.",
                 "Allowlisted jobs only — no remote shell on contributors.",
+                "Local model endpoint = OpenAI API on localhost, not a PCI GPU driver.",
                 "Never share .env or Discord bot tokens.",
             ],
         },
@@ -1107,6 +1130,11 @@ PORTAL_HTML = r"""<!DOCTYPE html>
         <h3>How friends connect</h3>
         <ol id="friendsConnectSteps" style="margin:0.4rem 0 0.85rem; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
 
+        <h3 id="localModelTitle">Local model endpoint</h3>
+        <p class="note" id="localModelHonesty" style="margin-top:0.35rem">Pool as a local AI API (OpenAI-compatible) — not a Windows GPU driver.</p>
+        <pre id="localModelBlock">—</pre>
+        <p class="lede" id="localModelHost" style="margin-top:0.5rem"></p>
+
         <h3>URLs</h3>
         <div class="url-grid">
           <div class="url-card" id="cardPortalPublic"><span>Portal (public — no Tailscale)</span><code id="urlPortalPublic">—</code></div>
@@ -1240,6 +1268,18 @@ function paintConnect(c) {
   const stepsHtml = friends.map(s => `<li>${escapeHtml(s)}</li>`).join("");
   if ($("friendsConnectSteps")) $("friendsConnectSteps").innerHTML = stepsHtml || "<li>Open public portal URL (or Tailscale) → invite → Contribute or Utilize</li>";
   if ($("friendsHomeSteps")) $("friendsHomeSteps").innerHTML = stepsHtml || "<li>Open public portal URL (or Tailscale) → invite → Contribute or Utilize</li>";
+  const lm = conn.local_model || {};
+  if ($("localModelTitle")) $("localModelTitle").textContent = lm.title || "Local model endpoint";
+  if ($("localModelHonesty")) $("localModelHonesty").textContent = lm.honesty || "OpenAI-compatible localhost API → pool llm_chat jobs. Not a PCI GPU.";
+  if ($("localModelBlock")) {
+    $("localModelBlock").textContent = [
+      lm.start || "python -m gpu_swarm local-endpoint",
+      "URL:  " + (lm.url || "http://127.0.0.1:8080/v1"),
+      "Env:  " + (lm.env || "OPENAI_BASE_URL=http://127.0.0.1:8080/v1"),
+      "Apps: " + (lm.apps || "Open WebUI · LM Studio · Continue · Cursor"),
+    ].join("\n");
+  }
+  if ($("localModelHost")) $("localModelHost").textContent = lm.host_worker || "";
 }
 
 async function loadConfig() {

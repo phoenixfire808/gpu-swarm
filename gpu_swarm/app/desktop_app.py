@@ -1564,6 +1564,70 @@ class MainFrame(ctk.CTkFrame):
                 ),
             ).pack(side="left")
 
+        local_ep = self._card(scroll, "Local model endpoint — pool as a local AI API")
+        ctk.CTkLabel(
+            local_ep,
+            text=(
+                "Start a localhost OpenAI-compatible API that apps can point at "
+                "(Open WebUI / LM Studio / Continue / Cursor). "
+                "This appears as a local AI API for apps — not a physical GPU device."
+            ),
+            text_color=MUTED,
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w")
+        lep_row = ctk.CTkFrame(local_ep, fg_color="transparent")
+        lep_row.pack(fill="x", pady=(10, 4))
+        self.local_ep_start_btn = ctk.CTkButton(
+            lep_row,
+            text="Start local endpoint",
+            width=180,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=self._start_local_endpoint,
+        )
+        self.local_ep_start_btn.pack(side="left", padx=(0, 8))
+        self.local_ep_stop_btn = ctk.CTkButton(
+            lep_row,
+            text="Stop",
+            width=90,
+            fg_color=DANGER,
+            command=self._stop_local_endpoint,
+        )
+        self.local_ep_stop_btn.pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            lep_row,
+            text="Refresh",
+            width=90,
+            fg_color="#2A3544",
+            command=self._refresh_local_endpoint,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            lep_row,
+            text="Copy OpenAI base URL",
+            width=180,
+            fg_color="#2A3544",
+            command=self._copy_local_endpoint_url,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            lep_row,
+            text="Open LOCAL_MODEL.md",
+            width=170,
+            fg_color="#2A3544",
+            command=lambda: self._open_doc(be.LOCAL_MODEL_DOC),
+        ).pack(side="left")
+        self.local_ep_url = ctk.CTkEntry(local_ep, height=36)
+        self.local_ep_url.pack(fill="x", pady=(8, 4))
+        self.local_ep_status_lbl = ctk.CTkLabel(
+            local_ep,
+            text="Local endpoint: checking…",
+            text_color=MUTED,
+            wraplength=900,
+            justify="left",
+        )
+        self.local_ep_status_lbl.pack(anchor="w", pady=(2, 0))
+        self._refresh_local_endpoint()
+
         inner = self._card(scroll, "Connect — plug into the pool from code / tools")
         ctk.CTkLabel(
             inner,
@@ -1607,6 +1671,13 @@ class MainFrame(ctk.CTkFrame):
             width=130,
             fg_color="#2A3544",
             command=lambda: self._open_doc(be.LOCAL_OFFLOAD_DOC),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            docs,
+            text="LOCAL_MODEL.md",
+            width=140,
+            fg_color="#2A3544",
+            command=lambda: self._open_doc(be.LOCAL_MODEL_DOC),
         ).pack(side="left")
 
         row = ctk.CTkFrame(inner, fg_color="transparent")
@@ -2043,6 +2114,138 @@ class MainFrame(ctk.CTkFrame):
             self.connect_box.delete("1.0", "end")
             self.connect_box.insert("1.0", text)
 
+    def _scheduler_url_for_local_endpoint(self) -> str:
+        if hasattr(self, "connect_sched"):
+            url = self.connect_sched.get().strip()
+            if url:
+                return url
+        if hasattr(self, "sched_entry"):
+            url = self.sched_entry.get().strip()
+            if url:
+                return url
+        return (self.settings.scheduler_url or DEFAULT_SCHEDULER_URL).rstrip("/")
+
+    def _refresh_local_endpoint(self) -> None:
+        if not hasattr(self, "local_ep_status_lbl"):
+            return
+
+        def work() -> None:
+            st = be.local_endpoint_status()
+            self.after(0, lambda: self._render_local_endpoint(st))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _render_local_endpoint(self, st: dict[str, Any]) -> None:
+        if not hasattr(self, "local_ep_status_lbl"):
+            return
+        openai = str(
+            st.get("openai_base")
+            or st.get("openai_base_url")
+            or getattr(be, "DEFAULT_OPENAI_BASE_URL", "http://127.0.0.1:8080/v1")
+        )
+        if hasattr(self, "local_ep_url"):
+            self.local_ep_url.delete(0, "end")
+            self.local_ep_url.insert(0, openai)
+        available = st.get("available")
+        if available is None:
+            available = True  # backend stub always tries `python -m gpu_swarm local-endpoint`
+        running = bool(st.get("running"))
+        health = st.get("health")
+        if running and health:
+            status = "running"
+            detail = "Listening — paste OpenAI base URL into your AI app"
+            color = OK_GREEN
+        elif running:
+            status = "starting"
+            detail = "Process up; waiting for /health (see data/local_endpoint.log)"
+            color = WARN
+        elif not available:
+            status = "unavailable"
+            detail = str(st.get("detail") or "Local endpoint module/CLI not available yet")
+            color = WARN
+        else:
+            status = "stopped"
+            detail = "Stopped — Start to expose the pool as a local AI API"
+            color = MUTED
+        pid = st.get("pid")
+        pid_bit = f"  ·  pid {pid}" if pid else ""
+        honesty = str(
+            st.get("honesty")
+            or st.get("blurb")
+            or "Appears as a local AI API for apps — not a physical GPU device."
+        )
+        self.local_ep_status_lbl.configure(
+            text=f"Status: {status}{pid_bit}\n{detail}\n{honesty}",
+            text_color=color,
+        )
+        if hasattr(self, "local_ep_start_btn"):
+            self.local_ep_start_btn.configure(
+                state="disabled" if (running or not available) else "normal"
+            )
+        if hasattr(self, "local_ep_stop_btn"):
+            self.local_ep_stop_btn.configure(state="normal" if running else "disabled")
+
+    def _start_local_endpoint(self) -> None:
+        if hasattr(self, "local_ep_status_lbl"):
+            self.local_ep_status_lbl.configure(text="Starting local endpoint…", text_color=WARN)
+        if hasattr(self, "local_ep_start_btn"):
+            self.local_ep_start_btn.configure(state="disabled")
+        sched = self._scheduler_url_for_local_endpoint()
+
+        def work() -> None:
+            result = be.start_local_endpoint(scheduler_url=sched)
+            self.after(0, lambda: self._local_endpoint_action_done(result, starting=True))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _stop_local_endpoint(self) -> None:
+        if hasattr(self, "local_ep_status_lbl"):
+            self.local_ep_status_lbl.configure(text="Stopping local endpoint…", text_color=WARN)
+        if hasattr(self, "local_ep_stop_btn"):
+            self.local_ep_stop_btn.configure(state="disabled")
+
+        def work() -> None:
+            result = be.stop_local_endpoint()
+            self.after(0, lambda: self._local_endpoint_action_done(result, starting=False))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _local_endpoint_action_done(self, result: dict[str, Any], *, starting: bool) -> None:
+        st = be.local_endpoint_status()
+        # Prefer URLs from the start/stop result when present
+        for key in ("openai_base", "url", "env_line"):
+            if result.get(key):
+                st[key] = result[key]
+        self._render_local_endpoint(st)
+        msg = str(result.get("message") or "")
+        ok = bool(result.get("ok"))
+        if hasattr(self, "connect_lbl"):
+            self.connect_lbl.configure(text=msg, text_color=OK_GREEN if ok else DANGER)
+        openai = result.get("openai_base") or result.get("openai_base_url")
+        if starting and ok and openai:
+            env_line = result.get("env_line") or f"OPENAI_BASE_URL={openai}"
+            self._copy(
+                f"{openai}\n{env_line}",
+                f"Started — copied OpenAI base URL ({openai}).",
+            )
+
+    def _copy_local_endpoint_url(self) -> None:
+        url = ""
+        if hasattr(self, "local_ep_url"):
+            url = self.local_ep_url.get().strip()
+        if not url:
+            st = be.local_endpoint_status()
+            url = str(
+                st.get("openai_base")
+                or getattr(be, "DEFAULT_OPENAI_BASE_URL", "http://127.0.0.1:8080/v1")
+            )
+        env_line = be.get_local_endpoint_env_line() if hasattr(be, "get_local_endpoint_env_line") else f"OPENAI_BASE_URL={url}"
+        if url and "OPENAI_BASE_URL=" not in env_line:
+            env_line = f"OPENAI_BASE_URL={url}"
+        elif url and env_line.startswith("OPENAI_BASE_URL="):
+            env_line = f"OPENAI_BASE_URL={url}"
+        self._copy(f"{url}\n{env_line}", "Copied OpenAI base URL (+ OPENAI_BASE_URL=…).")
+
     def _refresh_pool_utilize(self) -> None:
         def work() -> None:
             url = self._scheduler_url_for_jobs()
@@ -2299,6 +2502,8 @@ class MainFrame(ctk.CTkFrame):
                 self._refresh_pool_utilize()
             elif self._mode == "home":
                 self._refresh_home_pool()
+            elif self._mode == "connect":
+                self._refresh_local_endpoint()
             self.app._poll_after = self.after(4000, tick)
 
         self.app._poll_after = self.after(4000, tick)

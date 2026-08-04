@@ -77,6 +77,7 @@ class LeaseRequest(BaseModel):
     cpu_cores: int | None = None
     ram_available_mb: int | None = None
     disk_free_mb: int | None = None
+    llm_ready: bool = False
 
 
 class JobComplete(BaseModel):
@@ -154,6 +155,8 @@ async def jobs_submit(body: JobSubmit) -> dict[str, Any]:
     require_gpu = body.require_gpu
     if body.job_type == "pytorch_cuda_probe":
         require_gpu = True
+    if body.job_type == "llm_chat":
+        require_gpu = bool(body.require_gpu)
     return await _store().submit_job(
         {
             "job_type": body.job_type,
@@ -183,6 +186,7 @@ async def jobs_lease(body: LeaseRequest) -> dict[str, Any]:
             "cpu_cores": body.cpu_cores,
             "ram_available_mb": body.ram_available_mb,
             "disk_free_mb": body.disk_free_mb,
+            "llm_ready": body.llm_ready,
         },
     )
     if not job:

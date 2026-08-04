@@ -269,6 +269,20 @@ def build_parser() -> argparse.ArgumentParser:
     a = sub.add_parser("app", help="Launch GPU Pool desktop joiner (customtkinter)")
     a.set_defaults(func=cmd_app)
 
+    le = sub.add_parser(
+        "local-endpoint",
+        help="Start localhost OpenAI-compatible endpoint (pool as a local AI API)",
+        description=(
+            "Bind 127.0.0.1 (default :8080) and expose OpenAI-compatible /v1/* that "
+            "forwards chat to the GPU Pool scheduler. Not a physical GPU device — "
+            "see LOCAL_MODEL.md."
+        ),
+    )
+    le.add_argument("--host", default=None, help="Bind host (default 127.0.0.1)")
+    le.add_argument("--port", type=int, default=None, help="Bind port (default 8080; alt 11434)")
+    le.add_argument("--scheduler-url", default=None, help="GPU Pool scheduler base URL")
+    le.set_defaults(func=cmd_local_endpoint)
+
     return p
 
 
@@ -276,6 +290,18 @@ def cmd_app(_args: argparse.Namespace) -> int:
     from gpu_swarm.app import main as app_main
 
     return int(app_main())
+
+
+def cmd_local_endpoint(args: argparse.Namespace) -> int:
+    from gpu_swarm.local_endpoint import run_local_endpoint
+
+    return int(
+        run_local_endpoint(
+            host=args.host,
+            port=args.port,
+            scheduler_url=args.scheduler_url,
+        )
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

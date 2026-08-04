@@ -22,7 +22,7 @@ from typing import Any
 import httpx
 
 # Mirrored allowlist (avoid circular import with gpu_swarm.__init__)
-ALLOWED_JOB_TYPES = frozenset({"probe", "pytorch_cuda_probe"})
+ALLOWED_JOB_TYPES = frozenset({"probe", "pytorch_cuda_probe", "llm_chat"})
 
 DEFAULT_SCHEDULER_URL = "http://100.85.165.84:8766"
 TERMINAL_STATUSES = frozenset({"completed", "failed"})
@@ -97,6 +97,15 @@ class GPUPool:
             gpu_required = True
             if "matrix_size" not in body_payload and "size" not in body_payload:
                 body_payload["matrix_size"] = 1024
+        if jt == "llm_chat":
+            if require_gpu is None:
+                gpu_required = False
+            if "messages" not in body_payload:
+                raise GPUPoolError("llm_chat payload requires messages")
+            if "max_tokens" not in body_payload:
+                body_payload["max_tokens"] = 512
+            if "model" not in body_payload:
+                body_payload["model"] = "gpu-pool"
         body = {
             "job_type": jt,
             "payload": body_payload,
@@ -178,6 +187,34 @@ class GPUPool:
             payload,
             require_gpu=True,
             min_vram_mb=min_vram_mb,
+            submitted_by=submitted_by,
+            wait=wait,
+            wait_timeout=wait_timeout,
+        )
+
+    def submit_llm_chat(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        model: str = "gpu-pool",
+        max_tokens: int = 512,
+        temperature: float | None = None,
+        wait: bool = True,
+        wait_timeout: float = 300.0,
+        submitted_by: str | None = None,
+    ) -> dict[str, Any]:
+        """Allowlisted chat job — runs on a worker with Ollama / OpenAI-compatible runtime."""
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max(1, min(int(max_tokens), 8192)),
+        }
+        if temperature is not None:
+            payload["temperature"] = float(temperature)
+        return self.submit(
+            "llm_chat",
+            payload,
+            require_gpu=False,
             submitted_by=submitted_by,
             wait=wait,
             wait_timeout=wait_timeout,

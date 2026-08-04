@@ -96,8 +96,17 @@ __all__ = [
     "CONNECTING_DOC",
     "CODING_AGENT_EXAMPLE",
     "LOCAL_OFFLOAD_DOC",
+    "LOCAL_MODEL_DOC",
     "PRIVATE_NETWORK_BLURB",
     "FRIENDS_CONNECT_STEPS",
+    "start_local_endpoint",
+    "stop_local_endpoint",
+    "local_endpoint_status",
+    "local_endpoint_available",
+    "get_local_endpoint_env_line",
+    "DEFAULT_LOCAL_ENDPOINT_URL",
+    "DEFAULT_OPENAI_BASE_URL",
+    "DEFAULT_LOCAL_ENDPOINT_PORT",
     # Portable Python + diagnostics (friend installs)
     "ensure_portable_python",
     "python_runtime_report",
@@ -112,7 +121,12 @@ __all__ = [
 PID_FILE = ROOT / "data" / "joiner_worker.pid"
 LOG_FILE = ROOT / "data" / "joiner_worker.log"
 JOINER_WORKER_ID_FILE = ROOT / "data" / "joiner_worker_id.txt"
+LOCAL_ENDPOINT_PID_FILE = ROOT / "data" / "local_endpoint.pid"
+LOCAL_ENDPOINT_LOG_FILE = ROOT / "data" / "local_endpoint.log"
 ENV_FILE = ROOT / ".env"
+DEFAULT_LOCAL_ENDPOINT_PORT = 8080
+DEFAULT_LOCAL_ENDPOINT_URL = f"http://127.0.0.1:{DEFAULT_LOCAL_ENDPOINT_PORT}"
+DEFAULT_OPENAI_BASE_URL = f"{DEFAULT_LOCAL_ENDPOINT_URL}/v1"
 
 # Member-facing copy — public tunnel preferred when live; Tailscale optional.
 PRIVATE_NETWORK_BLURB = (
@@ -133,14 +147,17 @@ def load_public_endpoints() -> dict[str, Any] | None:
     try:
         from gpu_swarm.endpoints import load_public_endpoints as _norm
 
-        return _norm()
+        pub = _norm()
+        if pub:
+            return pub
     except Exception:  # noqa: BLE001
-        try:
-            from gpu_swarm.public_endpoints import load_public_endpoints as _raw
+        pass
+    try:
+        from gpu_swarm.public_endpoints import load_public_endpoints as _raw
 
-            return _raw()
-        except Exception:  # noqa: BLE001
-            return None
+        return _raw()
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def validate_scheduler_url(url: str) -> dict[str, Any]:
@@ -269,6 +286,7 @@ SCRIPT_INSTALL_JOINER_DEPS = SCRIPTS_DIR / "install_joiner_deps.ps1"
 SCRIPT_CHECK_PREREQS_CMD = SCRIPTS_DIR / "check_prereqs.cmd"
 SCRIPT_INSTALL_JOINER_DEPS_CMD = SCRIPTS_DIR / "install_joiner_deps.cmd"
 CONNECTING_DOC = BUNDLE_ROOT / "CONNECTING.md"
+LOCAL_MODEL_DOC = BUNDLE_ROOT / "LOCAL_MODEL.md"
 CODING_AGENT_EXAMPLE = BUNDLE_ROOT / "examples" / "coding_agent_pool.py"
 LOCAL_OFFLOAD_DOC = BUNDLE_ROOT / "examples" / "ollama_or_local_offload.md"
 
@@ -313,6 +331,8 @@ class WorkerRuntimeStatus:
 
 _worker_proc: subprocess.Popen[str] | None = None
 _worker_log_handle: Any | None = None
+_local_endpoint_proc: subprocess.Popen[str] | None = None
+_local_endpoint_log_handle: Any | None = None
 
 
 def load_joiner_settings() -> JoinerSettings:
@@ -1713,6 +1733,22 @@ def list_allowed_jobs() -> list[dict[str, Any]]:
             "safe": True,
             "payload_defaults": {"matrix_size": 1024},
         },
+        {
+            "job_type": "llm_chat",
+            "title": "Local model chat (via pool)",
+            "summary": (
+                "Chat completions on a contributor worker that runs Ollama / OpenAI-compatible "
+                "runtime. Prefer the Local Pool Endpoint (Connect → Start local model endpoint)."
+            ),
+            "require_gpu": False,
+            "discord": "(use local endpoint / SDK)",
+            "safe": True,
+            "payload_defaults": {
+                "model": "gpu-pool",
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 256,
+            },
+        },
     ]
     return [j for j in catalog if j["job_type"] in ALLOWED_JOB_TYPES]
 
@@ -1963,12 +1999,18 @@ def get_connect_from_code_text(scheduler_url: str | None = None) -> str:
         "\n"
         f"Docs:     {doc}\n"
         f"Example:  {example}\n"
-        f"Local LLMs: {offload}  (Ollama/LM Studio stay local; pool = allowlisted jobs)\n"
+        f"Local LLMs: {LOCAL_MODEL_DOC}  (pool as a local OpenAI endpoint)\n"
+        f"Legacy notes: {offload}\n"
         "\n"
         f"GPU_SWARM_SCHEDULER_URL={base}\n"
         f"{public_line}"
         f"Portal (Tailscale): {DEFAULT_PORTAL_URL}\n"
         f"Invite: {PORTAL_INVITE_CODE}\n"
+        "\n"
+        "# 0) Local model endpoint (Open WebUI / LM Studio / Continue / Cursor)\n"
+        "python -m gpu_swarm local-endpoint\n"
+        f"set OPENAI_BASE_URL={DEFAULT_OPENAI_BASE_URL}\n"
+        f"# URL to paste: {DEFAULT_OPENAI_BASE_URL}\n"
         "\n"
         "# 1) Python SDK (same HTTP: POST /jobs, GET /status)\n"
         "from gpu_swarm.client import GPUPool\n"
@@ -1994,7 +2036,7 @@ def get_connect_from_code_text(scheduler_url: str | None = None) -> str:
         f"GET  {base}/jobs/<id>\n"
         "\n"
         "# Read the full Contribute / Utilize / Connect map:\n"
-        "  CONNECTING.md\n"
+        "  CONNECTING.md · LOCAL_MODEL.md\n"
         f"# {PRIVATE_NETWORK_BLURB}\n"
         "# No Docker. No arbitrary shell.\n"
     )
@@ -2204,3 +2246,361 @@ def _signal_stop_pid(pid: int) -> None:
         time.sleep(0.25)
     if _pid_alive(pid):
         os.kill(pid, signal.SIGKILL)
+
+
+def get_local_endpoint_env_line(port: int | None = None) -> str:
+    p = int(port or DEFAULT_LOCAL_ENDPOINT_PORT)
+    return f"OPENAI_BASE_URL=http://127.0.0.1:{p}/v1"
+
+
+def _local_endpoint_cli_registered() -> bool:
+    try:
+        from gpu_swarm.cli import build_parser
+
+        parser = build_parser()
+        for action in getattr(parser, "_actions", []):
+            choices = getattr(action, "choices", None)
+            if isinstance(choices, dict) and "local-endpoint" in choices:
+                return True
+    except Exception:  # noqa: BLE001
+        return False
+    return False
+
+
+def local_endpoint_available() -> dict[str, Any]:
+    """True when module, CLI subcommand, or start-local-endpoint.cmd can start the service."""
+    import importlib.util
+
+    module_ok = importlib.util.find_spec("gpu_swarm.local_endpoint") is not None
+    cli_ok = _local_endpoint_cli_registered()
+    cmd_path = BUNDLE_ROOT / "start-local-endpoint.cmd"
+    cmd_ok = cmd_path.is_file()
+    available = bool(module_ok or cli_ok or cmd_ok)
+    return {
+        "available": available,
+        "module": module_ok,
+        "cli": cli_ok,
+        "cmd": cmd_ok,
+        "cmd_path": str(cmd_path) if cmd_ok else "",
+        "detail": (
+            "Ready — Start local model endpoint on Connect."
+            if available
+            else (
+                "Waiting for gpu_swarm.local_endpoint / `python -m gpu_swarm local-endpoint` "
+                "(see LOCAL_MODEL.md)."
+            )
+        ),
+    }
+
+
+def local_endpoint_status() -> dict[str, Any]:
+    """Whether the desktop-spawned local endpoint subprocess is alive + probe /health."""
+    global _local_endpoint_proc
+    avail = local_endpoint_available()
+    running = False
+    pid: int | None = None
+    if _local_endpoint_proc is not None and _local_endpoint_proc.poll() is None:
+        running = True
+        pid = _local_endpoint_proc.pid
+    else:
+        if LOCAL_ENDPOINT_PID_FILE.is_file():
+            try:
+                pid = int(LOCAL_ENDPOINT_PID_FILE.read_text(encoding="utf-8").strip())
+            except (OSError, ValueError):
+                pid = None
+            if pid and _pid_alive(pid):
+                running = True
+            else:
+                pid = None
+        _local_endpoint_proc = None
+
+    port = DEFAULT_LOCAL_ENDPOINT_PORT
+    health: dict[str, Any] | None = None
+    url = f"http://127.0.0.1:{port}"
+    openai_base = f"{url}/v1"
+    # Probe preferred + alt ports; require GPU Pool health shape (ignore other :8080 apps)
+    http_live = False
+    for probe_port in (port, 11434):
+        probe_url = f"http://127.0.0.1:{probe_port}"
+        try:
+            import httpx
+
+            r = httpx.get(f"{probe_url}/health", timeout=1.5)
+            if r.status_code != 200:
+                continue
+            try:
+                payload = r.json()
+            except Exception:  # noqa: BLE001
+                continue
+            if not isinstance(payload, dict):
+                continue
+            if "scheduler_ok" not in payload and "scheduler_url" not in payload:
+                continue
+            health = payload
+            url = probe_url
+            openai_base = f"{probe_url}/v1"
+            port = probe_port
+            http_live = True
+            break
+        except Exception:  # noqa: BLE001
+            continue
+
+    if http_live:
+        running = True
+    elif running and not http_live:
+        # Process we spawned may still be warming
+        pass
+
+    if running and health:
+        status = "running"
+        detail = (
+            f"Live at {openai_base} · scheduler_ok={health.get('scheduler_ok')} "
+            f"{health.get('detail') or ''}"
+        ).strip()
+    elif running:
+        status = "starting"
+        detail = f"Process up (pid={pid}); waiting for /health on {url}"
+    elif avail.get("available"):
+        status = "stopped"
+        detail = str(avail.get("detail") or "Ready — Start local model endpoint on Connect.")
+    else:
+        status = "unavailable"
+        detail = str(avail.get("detail") or "Local endpoint module missing")
+
+    blurb = (
+        f"Paste into apps: OPENAI_BASE_URL={openai_base}  ·  "
+        "Pool as a local AI API (not a Windows GPU driver). See LOCAL_MODEL.md"
+    )
+    return {
+        "ok": True,
+        "available": bool(avail.get("available")),
+        "running": running,
+        "status": status,
+        "pid": pid,
+        "url": url,
+        "openai_base": openai_base,
+        "openai_base_url": openai_base,
+        "env_line": f"OPENAI_BASE_URL={openai_base}",
+        "health": health,
+        "doc": str(LOCAL_MODEL_DOC),
+        "doc_exists": LOCAL_MODEL_DOC.is_file(),
+        "detail": detail,
+        "blurb": blurb,
+        "honesty": (
+            "Appears as a local AI API for apps (OpenAI-compatible) — not a physical GPU device."
+        ),
+        "availability": avail,
+    }
+
+
+def start_local_endpoint(
+    *,
+    scheduler_url: str | None = None,
+    port: int | None = None,
+) -> dict[str, Any]:
+    """Spawn `python -m gpu_swarm local-endpoint` (or start-local-endpoint.cmd) on localhost."""
+    global _local_endpoint_proc, _local_endpoint_log_handle
+    avail = local_endpoint_available()
+    if not avail.get("available"):
+        return {
+            "ok": False,
+            "message": avail.get("detail")
+            or "Local endpoint not available yet (module/CLI not merged).",
+            "pid": None,
+        }
+
+    st = local_endpoint_status()
+    if st.get("running"):
+        return {
+            "ok": True,
+            "already_running": True,
+            "message": "Local model endpoint already running",
+            **{k: st[k] for k in ("pid", "url", "openai_base", "env_line")},
+        }
+
+    settings = load_joiner_settings()
+    sched = (scheduler_url or settings.scheduler_url or DEFAULT_LOCAL_SCHEDULER_URL).rstrip("/")
+    # Omit --port when unset so local_endpoint.pick_listen_port can fall back (8080→11434)
+    listen_port: int | None = int(port) if port is not None else None
+    env = dict(os.environ)
+    env["PYTHONUNBUFFERED"] = "1"
+    env["GPU_SWARM_SCHEDULER_URL"] = sched
+
+    cmd_path = BUNDLE_ROOT / "start-local-endpoint.cmd"
+    if avail.get("cli"):
+        cmd = [
+            sys.executable,
+            "-m",
+            "gpu_swarm",
+            "local-endpoint",
+            "--host",
+            "127.0.0.1",
+            "--scheduler-url",
+            sched,
+        ]
+    elif avail.get("module"):
+        # Module present before CLI subcommand is registered
+        cmd = [
+            sys.executable,
+            "-m",
+            "gpu_swarm.local_endpoint",
+            "--host",
+            "127.0.0.1",
+            "--scheduler-url",
+            sched,
+        ]
+    elif cmd_path.is_file() and sys.platform == "win32":
+        cmd = [
+            "cmd.exe",
+            "/c",
+            str(cmd_path),
+            "--scheduler-url",
+            sched,
+        ]
+    else:
+        return {
+            "ok": False,
+            "message": "No local-endpoint launcher (module/CLI/cmd missing).",
+            "pid": None,
+        }
+    if listen_port is not None:
+        cmd.extend(["--port", str(listen_port)])
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+    try:
+        LOCAL_ENDPOINT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if _local_endpoint_log_handle is not None:
+            try:
+                _local_endpoint_log_handle.close()
+            except Exception:  # noqa: BLE001
+                pass
+        _local_endpoint_log_handle = open(LOCAL_ENDPOINT_LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115
+        _local_endpoint_log_handle.write(
+            f"\n--- local-endpoint start {time.strftime('%Y-%m-%d %H:%M:%S')} port={listen_port} ---\n"
+        )
+        _local_endpoint_log_handle.flush()
+        _local_endpoint_proc = subprocess.Popen(
+            cmd,
+            cwd=str(ROOT),
+            env=env,
+            stdout=_local_endpoint_log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+            creationflags=creationflags,
+        )
+    except OSError as exc:
+        _local_endpoint_proc = None
+        return {"ok": False, "message": str(exc), "pid": None}
+
+    pid = _local_endpoint_proc.pid
+    LOCAL_ENDPOINT_PID_FILE.write_text(str(pid), encoding="utf-8")
+    # Brief wait for bind
+    time.sleep(0.8)
+    if _local_endpoint_proc.poll() is not None:
+        code = _local_endpoint_proc.returncode
+        tail = ""
+        try:
+            text = LOCAL_ENDPOINT_LOG_FILE.read_text(encoding="utf-8", errors="replace")
+            tail = "\n".join(text.splitlines()[-40:])
+        except OSError:
+            pass
+        hint = ""
+        low = tail.lower()
+        if "invalid choice" in low or "unrecognized arguments" in low:
+            hint = (
+                " CLI does not know `local-endpoint` yet — pull latest gpu_swarm.local_endpoint "
+                "or use start-local-endpoint.cmd when the module lands."
+            )
+        _local_endpoint_proc = None
+        try:
+            LOCAL_ENDPOINT_PID_FILE.unlink()
+        except OSError:
+            pass
+        return {
+            "ok": False,
+            "message": (
+                f"Local endpoint exited immediately (code {code}).{hint} "
+                f"See {LOCAL_ENDPOINT_LOG_FILE}"
+            ),
+            "pid": pid,
+            "log_tail": tail,
+        }
+    # Re-probe to learn actual bind port (8080 may be taken → 11434)
+    live: dict[str, Any] = {}
+    for _ in range(12):
+        if _local_endpoint_proc is not None and _local_endpoint_proc.poll() is not None:
+            break
+        live = local_endpoint_status()
+        if live.get("health"):
+            break
+        time.sleep(0.4)
+    if _local_endpoint_proc is not None and _local_endpoint_proc.poll() is not None:
+        code = _local_endpoint_proc.returncode
+        _local_endpoint_proc = None
+        try:
+            LOCAL_ENDPOINT_PID_FILE.unlink()
+        except OSError:
+            pass
+        return {
+            "ok": False,
+            "message": (
+                f"Local endpoint exited while binding (code {code}). "
+                "Preferred port may be busy — see data/local_endpoint.log "
+                f"({LOCAL_ENDPOINT_LOG_FILE})."
+            ),
+            "pid": pid,
+            "status": local_endpoint_status(),
+        }
+    openai_base = str(live.get("openai_base") or DEFAULT_OPENAI_BASE_URL)
+    url = str(live.get("url") or DEFAULT_LOCAL_ENDPOINT_URL)
+    return {
+        "ok": True,
+        "already_running": False,
+        "message": (
+            f"Local model endpoint started · {openai_base}"
+            if live.get("health")
+            else f"Local model endpoint process started (pid={pid}); waiting for /health"
+        ),
+        "pid": pid,
+        "url": url,
+        "openai_base": openai_base,
+        "openai_base_url": openai_base,
+        "env_line": f"OPENAI_BASE_URL={openai_base}",
+        "scheduler_url": sched,
+        "doc": str(LOCAL_MODEL_DOC),
+        "status": live,
+    }
+
+
+def stop_local_endpoint() -> dict[str, Any]:
+    global _local_endpoint_proc, _local_endpoint_log_handle
+    stopped = False
+    if _local_endpoint_proc is not None and _local_endpoint_proc.poll() is None:
+        _graceful_stop(_local_endpoint_proc)
+        stopped = True
+    _local_endpoint_proc = None
+    if LOCAL_ENDPOINT_PID_FILE.is_file():
+        try:
+            pid = int(LOCAL_ENDPOINT_PID_FILE.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            pid = None
+        if pid and _pid_alive(pid):
+            _signal_stop_pid(pid)
+            stopped = True
+        try:
+            LOCAL_ENDPOINT_PID_FILE.unlink()
+        except OSError:
+            pass
+    if _local_endpoint_log_handle is not None:
+        try:
+            _local_endpoint_log_handle.close()
+        except Exception:  # noqa: BLE001
+            pass
+        _local_endpoint_log_handle = None
+    return {
+        "ok": True,
+        "stopped": stopped,
+        "message": "Local model endpoint stopped" if stopped else "Local model endpoint was not running",
+    }

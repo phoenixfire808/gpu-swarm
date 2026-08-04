@@ -18,6 +18,7 @@ from gpu_swarm.config import WorkerConfig, worker_config
 from gpu_swarm.gpu import inventory_summary
 from gpu_swarm.host import query_host
 from gpu_swarm.jobs import execute_job
+from gpu_swarm.llm_runtime import detect_llm_runtime
 from gpu_swarm.paths import ROOT
 
 DEFAULT_STATE_FILE = ROOT / "data" / "worker_id.txt"
@@ -88,6 +89,7 @@ class Worker:
             dedicated_cpu = round(host["cpu_cores"] * (self.cfg.max_cpu_percent / 100.0), 2)
 
         gpu_available = bool(inv.get("gpu_available", inv["gpu_count"] > 0))
+        llm = detect_llm_runtime(timeout=1.0)
         return {
             "gpus": inv["gpus"],
             "free_vram_mb": free_vram,
@@ -109,6 +111,9 @@ class Worker:
             "dedicated_disk_mb": dedicated_disk,
             "dedicated_cpu_cores": dedicated_cpu,
             "contributor_name": self.cfg.contributor_name or self.cfg.discord_user or None,
+            "llm_ready": bool(llm.get("ready")),
+            "llm_kind": llm.get("kind"),
+            "llm_models": list(llm.get("models") or [])[:32],
         }
 
     def register(self) -> dict[str, Any]:
@@ -177,6 +182,7 @@ class Worker:
                 "cpu_cores": caps["cpu_cores"],
                 "ram_available_mb": caps["ram_available_mb"],
                 "disk_free_mb": caps["disk_free_mb"],
+                "llm_ready": bool(caps.get("llm_ready")),
             },
         )
         r.raise_for_status()
@@ -237,6 +243,19 @@ class Worker:
             f"disk_free={caps['disk_free_mb']} MiB  (Ctrl+C to stop)",
             flush=True,
         )
+        if caps.get("llm_ready"):
+            models = caps.get("llm_models") or []
+            preview = ", ".join(models[:5]) if models else "(models unknown)"
+            print(
+                f"[worker] llm_ready=yes kind={caps.get('llm_kind')} models={preview}",
+                flush=True,
+            )
+        else:
+            print(
+                "[worker] llm_ready=no — llm_chat jobs skipped until Ollama "
+                "(or OpenAI-compatible server) is running locally. See LOCAL_MODEL.md",
+                flush=True,
+            )
         last_hb = 0.0
         while not self._stop:
             now = time.time()
