@@ -441,7 +441,8 @@ def run_portal(host: str | None = None, port: int | None = None) -> None:
     )
 
 
-PORTAL_HTML = r"""<!DOCTYPE html>
+PORTAL_HTML = 
+r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -992,3 +993,4 @@ setInterval(() => {
 </body>
 </html>
 """
+//neeed to fix this it wrong formet and to much cna be optimize more and make better as wwell use less paython dude //
