@@ -1105,3 +1105,10 @@ For each scenario, the host runs it before tagging a release.
 - Focused acceptance passed: Python compile, isolated GPUPool UI import, PowerShell `ALL-PARSE-OK`, helper install/status, and real Quick Tunnel public `/portal` + `/pool-api/status` HTTP 200.
 - Fixed duplicate Windows `creationflags` during the real smoke; sanitized probe results to status/URL/bytes only so portal content and invite text are not logged.
 - Current release task: rebuild `dist\\GPUPool.exe`, artifact-smoke it, commit, and push `master`.
+
+### 2026-08-09 — Release receipt
+
+- Clean PyInstaller build completed successfully with `dist\\GPUPool.exe` at 35,218,966 bytes.
+- Packaged `--worker --help` and `--local-endpoint --help` smoke commands both exited 0.
+- Feature commit `4777dbd` was pushed successfully: `d4083c4..4777dbd master -> origin/master`.
+- This tracker receipt is the only remaining documentation delta and will be committed separately.

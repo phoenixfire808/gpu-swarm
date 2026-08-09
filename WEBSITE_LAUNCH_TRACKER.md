@@ -186,3 +186,12 @@ Until a choice is authorized, local implementation and verification remain safe 
 - Verification receipts: Python compile passed; PowerShell `_check_parse.ps1` passed `ALL-PARSE-OK`; isolated GPUPool venv imported the updated UI; Cloudflare helper install/status passed; real Quick Tunnel smoke passed with public `/portal` HTTP 200 and `/pool-api/status` HTTP 200.
 - Resolved during smoke: duplicate Windows `creationflags` argument in the helper; rerun passed with sanitized status-only probe output.
 - Release task: rebuild `dist\\GPUPool.exe`, inspect artifact, commit coherent worktree, push `master` to `origin`.
+
+### 2026-08-09 — Release receipt
+
+- Clean build command: `env -u PYTHONPATH powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\Drew\\Projects\\gpu-swarm\\build_exe.ps1 -Clean`.
+- Build completed successfully with `dist\\GPUPool.exe` at 35,218,966 bytes.
+- Packaged smoke passed: `GPUPool.exe --worker --help` and `GPUPool.exe --local-endpoint --help` both exited 0.
+- Commit: `4777dbd` (`feat: add guided Cloudflare public access`).
+- Push: `master` successfully advanced on `origin` from `d4083c4` to `4777dbd`.
+- Follow-up tracker receipt commit is being added after this entry.
