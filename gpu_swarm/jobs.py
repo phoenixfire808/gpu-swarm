@@ -183,6 +183,13 @@ def run_llm_chat(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         runtime=rt,
     )
     meta = completion.pop("_gpu_pool_runtime", None) or {}
+    assistant_text = _assistant_text(completion)
+    if not assistant_text.strip():
+        raise RuntimeError(
+            "LLM runtime completed without final assistant text; the model exhausted its "
+            "generation budget in internal reasoning or returned an empty response. "
+            "Retry with a larger output budget or choose another mounted chat model."
+        )
     raw = json.dumps(completion)
     if len(raw.encode("utf-8")) > MAX_RESULT_BYTES - 2000:
         choices = completion.get("choices") or []

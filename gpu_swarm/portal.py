@@ -271,6 +271,25 @@ async def api_config(request: Request) -> dict[str, Any]:
     from gpu_swarm.use_cases import USE_CASES
 
     share = build_share_pack()
+    cloudflare_mode = str((pub or {}).get("mode") or "")
+    cloudflare_url = str((pub or {}).get("portal_path") or "")
+    cloudflare = {
+        "active": bool((pub or {}).get("active")),
+        "mode": cloudflare_mode,
+        "portal_url": cloudflare_url,
+        "named_ready": cloudflare_mode == "cloudflared_named",
+        "status": (
+            "Named Cloudflare Tunnel is live — this stable hostname still depends on the host staying online."
+            if cloudflare_mode == "cloudflared_named"
+            else "Quick Tunnel is live — the temporary URL changes when the host restarts public access."
+            if cloudflare_mode == "cloudflared_quick"
+            else "Cloudflare is available from the host installer. The host can publish a Quick Tunnel or create a named tunnel."
+        ),
+        "quick_command": "launch-public.cmd --no-browser",
+        "installer_command": "scripts\\install_cloudflared.cmd",
+        "named_command": "scripts\\setup_cloudflare_named.cmd -Hostname gpu-pool.example.com -TunnelName gpu-pool -Launch",
+        "host_only_note": "Only the GPU Pool host runs these commands; visitors can use the resulting HTTPS portal but cannot launch the host tunnel from a browser.",
+    }
     return {
         "share": share,
         "use_cases": list(USE_CASES),
@@ -299,6 +318,7 @@ async def api_config(request: Request) -> dict[str, Any]:
         ),
         "invite_code_hint": PORTAL_INVITE_CODE,
         "public_endpoints": pub,
+        "cloudflare": cloudflare,
         "connect": {
             "scheduler_local": DEFAULT_LOCAL_SCHEDULER_URL.rstrip("/"),
             "scheduler_tailscale": sched_tailscale,
@@ -309,6 +329,7 @@ async def api_config(request: Request) -> dict[str, Any]:
             "portal_public": portal_public,
             "portal_this": portal_path,
             "no_tailscale_needed": bool(urls.get("no_tailscale_needed")),
+            "cloudflare": cloudflare,
             "discord_primary": "Glitch Factor",
             "discord_bot": "GPU Pool",
             "discord_commands": [

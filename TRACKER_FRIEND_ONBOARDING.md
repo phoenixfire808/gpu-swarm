@@ -1121,3 +1121,39 @@ For each scenario, the host runs it before tagging a release.
 - Packaged `--worker --help` and `--local-endpoint --help` smoke commands both exited 0.
 - Feature commit `4777dbd` was pushed successfully: `d4083c4..4777dbd master -> origin/master`.
 - Documentation receipt: the release build, feature commit, and push were verified before this tracker update.
+
+### Current packaged app verification — 2026-08-08
+
+- Current `dist\\GPUPool.exe`: `35,218,966` bytes; SHA-256 `f04c85be5c9855d17b5874cd97390ad61176fe1bdf703769b40c9f7a802e59ff`.
+- Packaged `--worker --help` and `--local-endpoint --help` both exited `0` via `Start-Process -Wait` and rendered usage text.
+- Hidden GUI startup stayed alive for 8 seconds and was stopped by its exact PID (`40096`).
+- Startup and command-dispatch verification passed; full foreground visual-layout acceptance was intentionally not claimed because no focus-stealing capture was performed.
+
+### Packaged startup regression found and fixed — 2026-08-08
+
+- Initial verification found a real PyInstaller error dialog: `MainFrame` lacked `_build_availability_controls`.
+- Exact read-only window text: `Failed to execute script 'gpu_pool_entry' due to unhandled exception: 'MainFrame' object has no attribute '_build_availability_controls'`.
+- Added the missing availability controls/status methods to `MainFrame` in `gpu_swarm/app/desktop_app.py`.
+- `py_compile` and AST structure checks passed; corrected PyInstaller rebuild exited `0`.
+- New artifact SHA-256: `4e6506235cc90fd6fb836d7290ac588f2f966be6b580bda41ad571d9ad92e88c`.
+- Worker help, local-endpoint help, and 10-second hidden GUI smoke all passed; no unhandled-exception title appeared. A normal `GPU Pool - Network Hub` instance was observed afterward and left running.
+- Source fix and receipts remain local/uncommitted; no push was performed during this verification request.
+
+### Cloudflare controls completed across installer, app, and website — 2026-08-08
+
+- Guided named-tunnel setup added at `scripts/setup_cloudflare_named.ps1` / `.cmd`: helper install, user-controlled Cloudflare login, tunnel create/reuse, DNS route, GPU Pool-only config, optional launch, and public endpoint verification.
+- Installer spec bundles both setup files; the final EXE resource check found both filenames inside the onefile package.
+- First-run wizard and installed MainFrame Connect surface both expose Quick Tunnel, named Create & Launch, helper install, guide, and status controls.
+- Website `/api/config` and the Connect view now expose Cloudflare mode, public URL, Quick Tunnel command, named setup command, and host-only safety guidance.
+- Python compile, PowerShell parse, invalid-hostname guard, final PyInstaller rebuild, packaged command/GUI smoke, and portal API/template smoke all passed.
+- Final artifact SHA-256: `559952852f595b6d2b2b23f9afed4108293c76e53a0e8fa0cfc4d094a4e51fe8`.
+- No account login, credential creation, DNS mutation, or named tunnel launch was performed; those actions remain user/domain-gated.
+- Source, docs, and receipts remain local/uncommitted; remote remains at the prior pushed commit pending explicit commit/push approval.
+
+### Live public share link — 2026-08-09 02:19Z
+
+- Fresh repository-managed Cloudflare Quick Tunnel created after the stored hostname was found stale/unresolvable.
+- Shareable portal: `https://ppm-shorts-spot-seeks.trycloudflare.com/portal`
+- Independent public checks passed: portal HTTP `200`; `/pool-api/status` HTTP `200`; cloudflared PID `35636` alive.
+- Invite code: `glitch-factor`.
+- The URL is temporary and can change after tunnel restart/expiry; use named Cloudflare setup for a stable hostname.

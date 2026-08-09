@@ -30,6 +30,8 @@ extra_datas = [
     ("scripts/install_joiner_deps.cmd", "scripts"),
     ("scripts/install_cloudflared.ps1", "scripts"),
     ("scripts/install_cloudflared.cmd", "scripts"),
+    ("scripts/setup_cloudflare_named.ps1", "scripts"),
+    ("scripts/setup_cloudflare_named.cmd", "scripts"),
     ("scripts/cloudflare-access.cmd", "scripts"),
     ("scripts/launch_public.py", "scripts"),
     ("launch-public.cmd", "."),

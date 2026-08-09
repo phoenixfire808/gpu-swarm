@@ -72,8 +72,16 @@ Optional env overrides on the worker:
 
 ```bat
 set OLLAMA_HOST=http://127.0.0.1:11434
-set GPU_SWARM_LLM_BASE_URL=http://127.0.0.1:11434/v1
+set GPU_SWARM_LLM_BASE_URL=ollama=http://127.0.0.1:11434
 ```
+
+For the Docker-hosted Ollama runtime used by the current Windows worker, the host mapping is:
+
+```text
+http://127.0.0.1:11435  →  container Ollama :11434
+```
+
+The `ollama=` prefix matters: it selects Ollama's native `/api/chat` adapter and direct-response mode rather than treating Ollama as a generic OpenAI-compatible server.
 
 If no LLM runtime is found, the job fails with clear enablement instructions (not a silent hang).
 
@@ -117,6 +125,26 @@ print(job["result"]["message"])
 - Results are size-capped (`MAX_RESULT_BYTES`).
 - Streaming chat is not implemented yet — turn streaming off in clients.
 - Private Tailscale/LAN pool (plus optional public tunnel when the host runs it).
+
+## Troubleshooting receipts
+
+### Discord job completes with no visible answer
+
+A worker job can reach `completed` while the provider response contains an empty assistant message. The pool now treats that as a failed job and reports the reason in Discord. The common cause is a reasoning-capable model consuming the entire output budget without emitting final content. Use a bounded larger output budget or choose a mounted chat model that returns direct final text; do not expose hidden reasoning as the answer.
+
+### Installed model versus mounted model
+
+`/models` reports provider-installed models and live Ollama residency separately:
+
+- `loaded`: currently resident in the provider runtime.
+- `fit-now`: not resident, but the current local GPU group has enough free VRAM plus a safety reserve estimate.
+- `installed-not-fit-now`: present on disk but not safe to auto-load with current GPU/display usage.
+
+The Discord selector refuses `installed-not-fit-now` models instead of allowing an automatic OOM or desktop freeze.
+
+### Same-worker GPU grouping
+
+A model route labeled `same-worker-multi-gpu` means multiple GPUs are visible to one provider runtime on one physical worker. It does not mean VRAM from different PCs has been merged. Cross-machine model sharding requires a separate distributed inference cluster with explicit tensor/pipeline parallelism, private networking, and failure handling.
 
 ## Related
 

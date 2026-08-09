@@ -41,6 +41,8 @@ class WorkerRegister(BaseModel):
     dedicated_cpu_cores: float = 0.0
     contributor_name: str | None = None
     llm_ready: bool = False
+    llm_models: list[str] = Field(default_factory=list)
+    llm_runtimes: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class WorkerHeartbeat(BaseModel):
@@ -63,6 +65,8 @@ class WorkerHeartbeat(BaseModel):
     dedicated_cpu_cores: float | None = None
     contributor_name: str | None = None
     llm_ready: bool | None = None
+    llm_models: list[str] | None = None
+    llm_runtimes: list[dict[str, Any]] | None = None
 
 
 # Job payloads must not remotely raise another contributor's offer caps.
@@ -186,6 +190,68 @@ async def workers_heartbeat(worker_id: str, body: WorkerHeartbeat) -> dict[str, 
 @app.get("/workers")
 async def workers_list() -> list[dict[str, Any]]:
     return await _store().list_workers(cfg.worker_stale_sec)
+
+
+@app.get("/models")
+async def models_list() -> dict[str, Any]:
+    """Return currently mounted model/provider/worker routes for UI and Discord."""
+    workers = await _store().list_workers(cfg.worker_stale_sec)
+    entries: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for worker in workers:
+        if not worker.get("online") or not worker.get("llm_ready"):
+            continue
+        gpu_list = [item for item in (worker.get("gpus") or []) if isinstance(item, dict)]
+        gpu_group = {
+            "mode": "same-worker-multi-gpu" if len(gpu_list) > 1 else "single-gpu" if gpu_list else "cpu-only",
+            "count": len(gpu_list),
+            "names": [str(item.get("name") or "GPU") for item in gpu_list],
+            "free_vram_mb": sum(int(item.get("memory_free_mb") or 0) for item in gpu_list),
+            "total_vram_mb": sum(int(item.get("memory_total_mb") or 0) for item in gpu_list),
+        }
+        runtime_by_model = {
+            str(item.get("model")): item
+            for item in (worker.get("llm_runtimes") or [])
+            if isinstance(item, dict) and item.get("model")
+        }
+        for model in worker.get("llm_models") or []:
+            model_id = str(model).strip()
+            key = (str(worker.get("id")), model_id)
+            if not model_id or key in seen:
+                continue
+            seen.add(key)
+            runtime = runtime_by_model.get(model_id) or {}
+            model_size_mb = int(runtime.get("model_size_mb") or 0)
+            reserve_mb = max(1024, 768 * int(gpu_group.get("count") or 0))
+            fit_now = not model_size_mb or model_size_mb + reserve_mb <= int(gpu_group.get("free_vram_mb") or 0)
+            mount_state = "loaded" if runtime.get("loaded") else "fit-now" if fit_now else "installed-not-fit-now"
+            entries.append(
+                {
+                    "id": model_id,
+                    "model": model_id,
+                    "provider": runtime.get("provider") or "openai-compatible",
+                    "worker_id": worker.get("id"),
+                    "worker_name": worker.get("name") or "worker",
+                    "contributor_name": worker.get("contributor_name") or worker.get("discord_user") or "",
+                    "free_vram_mb": int(worker.get("free_vram_mb") or 0),
+                    "total_vram_mb": int(worker.get("total_vram_mb") or 0),
+                    "base_url": runtime.get("base_url"),
+                    "model_size_mb": model_size_mb,
+                    "loaded": bool(runtime.get("loaded")),
+                    "loaded_vram_mb": int(runtime.get("loaded_vram_mb") or 0),
+                    "context_length": int(runtime.get("context_length") or 0),
+                    "fit_now": fit_now,
+                    "mount_state": mount_state,
+                    "gpu_group": gpu_group,
+                    "placement_note": (
+                        "Ollama/llama.cpp may split this model across all GPUs visible on this worker."
+                        if gpu_group["mode"] == "same-worker-multi-gpu"
+                        else "Model is mounted on one worker GPU group."
+                    ),
+                    "online": True,
+                }
+            )
+    return {"object": "list", "data": entries, "count": len(entries)}
 
 
 @app.post("/jobs")

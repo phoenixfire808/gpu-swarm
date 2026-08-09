@@ -26,6 +26,7 @@ from gpu_swarm.win_subprocess import popen_kwargs, run_kwargs
 
 DETACHED_PROCESS = 0x00000008
 CREATE_NO_WINDOW = 0x08000000
+CREATE_NEW_CONSOLE = 0x00000010
 URL_RE = re.compile(r"https://[A-Za-z0-9-]+\.trycloudflare\.com")
 DATA = ROOT / "data"
 TUNNEL_LOG = DATA / "cloudflared_portal.log"
@@ -292,6 +293,59 @@ def open_cloudflare_guide() -> dict[str, Any]:
         return {"ok": False, "path": str(guide), "message": str(exc)}
 
 
+def launch_named_setup(
+    *,
+    hostname: str,
+    tunnel_name: str = "gpu-pool",
+    config_path: str = "",
+    launch: bool = True,
+) -> dict[str, Any]:
+    """Open the user-facing named-tunnel setup in a dedicated PowerShell console."""
+    script = _script_path("setup_cloudflare_named.ps1")
+    if not script.is_file():
+        return {"ok": False, "message": f"Named-tunnel setup script missing: {script}"}
+    if not hostname.strip():
+        return {"ok": False, "message": "Enter a Cloudflare-managed hostname first."}
+    cmd = [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(script),
+        "-Hostname",
+        hostname.strip(),
+        "-TunnelName",
+        tunnel_name.strip() or "gpu-pool",
+        "-KeepOpen",
+    ]
+    if config_path.strip():
+        cmd.extend(["-ConfigPath", config_path.strip()])
+    if launch:
+        cmd.append("-Launch")
+    options: dict[str, Any] = {}
+    if os.name == "nt":
+        options["creationflags"] = CREATE_NEW_CONSOLE
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(APP_ROOT),
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+            **options,
+        )
+    except OSError as exc:
+        return {"ok": False, "message": f"Could not open Cloudflare setup window: {exc}"}
+    return {
+        "ok": True,
+        "setup_started": True,
+        "pid": proc.pid,
+        "hostname": hostname.strip(),
+        "tunnel_name": tunnel_name.strip() or "gpu-pool",
+        "message": "Cloudflare named-tunnel setup opened in a separate window. Complete browser login if prompted.",
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="GPU Pool Cloudflare access helper")
     group = parser.add_mutually_exclusive_group(required=True)
@@ -299,15 +353,24 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--named", action="store_true")
     group.add_argument("--install", action="store_true")
     group.add_argument("--guide", action="store_true")
+    group.add_argument("--setup-named", action="store_true")
     parser.add_argument("--hostname", default="")
     parser.add_argument("--tunnel-name", default="gpu-pool")
     parser.add_argument("--config", default="")
+    parser.add_argument("--launch", action="store_true")
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args(argv)
     if args.install:
         result = install_cloudflared_tool()
     elif args.guide:
         result = open_cloudflare_guide()
+    elif args.setup_named:
+        result = launch_named_setup(
+            hostname=args.hostname,
+            tunnel_name=args.tunnel_name,
+            config_path=args.config,
+            launch=args.launch,
+        )
     else:
         result = publish_cloudflare(
             mode="named" if args.named else "quick",

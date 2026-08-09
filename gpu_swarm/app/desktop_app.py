@@ -519,6 +519,13 @@ class WizardFrame(ctk.CTkFrame):
         ).pack(anchor="w", padx=16, pady=(0, 8))
         self.cloudflare_status_lbl = ctk.CTkLabel(cloud, text="Checking Cloudflare helper…", text_color=MUTED, wraplength=820, justify="left")
         self.cloudflare_status_lbl.pack(anchor="w", padx=16, pady=(0, 4))
+        named_fields = ctk.CTkFrame(cloud, fg_color="transparent")
+        named_fields.pack(fill="x", padx=16, pady=(0, 8))
+        self.cloudflare_hostname_entry = ctk.CTkEntry(named_fields, placeholder_text="Stable hostname, e.g. gpu-pool.example.com")
+        self.cloudflare_hostname_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.cloudflare_tunnel_name_entry = ctk.CTkEntry(named_fields, width=170, placeholder_text="Tunnel name")
+        self.cloudflare_tunnel_name_entry.pack(side="left")
+        self.cloudflare_tunnel_name_entry.insert(0, "gpu-pool")
         self.cloudflare_log = ctk.CTkTextbox(cloud, height=118, fg_color=PANEL)
         self.cloudflare_log.pack(fill="x", padx=16, pady=(0, 8))
         self._append_log(self.cloudflare_log, "Cloudflare is optional. Install the helper, then publish a temporary link when the local portal is ready.\n")
@@ -545,6 +552,23 @@ class WizardFrame(ctk.CTkFrame):
             width=170,
             fg_color="#2A3544",
             command=self._open_cloudflare_guide,
+        ).pack(side="left")
+        named_row = ctk.CTkFrame(cloud, fg_color="transparent")
+        named_row.pack(fill="x", padx=16, pady=(0, 12))
+        ctk.CTkButton(
+            named_row,
+            text="Create & launch named tunnel",
+            width=250,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: self._run_cloudflare("named_setup"),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            named_row,
+            text="Refresh Cloudflare status",
+            width=190,
+            fg_color="#2A3544",
+            command=self._refresh_cloudflare_status,
         ).pack(side="left")
         self.after(250, self._refresh_cloudflare_status)
 
@@ -630,6 +654,15 @@ class WizardFrame(ctk.CTkFrame):
         if log_text:
             self._append_log(self.cloudflare_log, str(log_text)[-4000:] + "\n")
         if result.get("ok"):
+            if result.get("setup_started"):
+                self._append_log(self.cloudflare_log, f"SETUP — {result.get('message') or 'Cloudflare setup window opened.'}\n")
+                if hasattr(self, "cloudflare_status_lbl"):
+                    self.cloudflare_status_lbl.configure(
+                        text="Cloudflare setup window opened — finish login/setup there, then refresh status.",
+                        text_color=ACCENT,
+                    )
+                self.after(3000, self._refresh_cloudflare_status)
+                return
             portal = result.get("portal_path") or ""
             self._append_log(self.cloudflare_log, f"OK — {result.get('message') or 'Cloudflare ready'}\n")
             if portal:
@@ -650,16 +683,39 @@ class WizardFrame(ctk.CTkFrame):
     def _run_cloudflare(self, action: str) -> None:
         if self._cloudflare_busy or not hasattr(self, "cloudflare_log"):
             return
+        hostname = ""
+        tunnel_name = "gpu-pool"
+        if action == "named_setup":
+            hostname = self.cloudflare_hostname_entry.get().strip() if hasattr(self, "cloudflare_hostname_entry") else ""
+            tunnel_name = self.cloudflare_tunnel_name_entry.get().strip() if hasattr(self, "cloudflare_tunnel_name_entry") else "gpu-pool"
+            if not hostname:
+                self.cloudflare_status_lbl.configure(text="Enter a Cloudflare-managed hostname before setup.", text_color=WARN)
+                self._append_log(self.cloudflare_log, "Named setup blocked: enter a hostname such as gpu-pool.example.com.\n")
+                return
         self._cloudflare_busy = True
         self.cloudflare_log.delete("1.0", "end")
-        label = "Installing Cloudflare helper" if action == "install" else "Starting temporary HTTPS link"
+        if action == "install":
+            label = "Installing Cloudflare helper"
+        elif action == "named_setup":
+            label = "Opening named Cloudflare tunnel setup"
+        else:
+            label = "Starting temporary HTTPS link"
         self._append_log(self.cloudflare_log, f"{label}…\n\n")
         if hasattr(self, "cloudflare_status_lbl"):
             self.cloudflare_status_lbl.configure(text=f"{label}…", text_color=ACCENT)
 
         def work() -> None:
             try:
-                result = be.install_cloudflared() if action == "install" else be.publish_cloudflare(mode="quick", open_browser=True)
+                if action == "install":
+                    result = be.install_cloudflared()
+                elif action == "named_setup":
+                    result = be.launch_cloudflare_named_setup(
+                        hostname=hostname,
+                        tunnel_name=tunnel_name,
+                        launch=True,
+                    )
+                else:
+                    result = be.publish_cloudflare(mode="quick", open_browser=True)
             except Exception as exc:  # noqa: BLE001
                 result = {"ok": False, "message": f"Cloudflare action error: {exc}"}
             self.app.post_ui(lambda: self._cloudflare_done(result, action))
@@ -674,8 +730,11 @@ class WizardFrame(ctk.CTkFrame):
             if status.get("public_active"):
                 text = f"Cloudflare ON ({status.get('mode')}) — {status.get('portal_path')}"
                 color = OK_GREEN
+            elif status.get("named_config_present"):
+                text = "Named tunnel config found — enter the hostname above and create/launch it."
+                color = OK_GREEN
             elif status.get("tool_installed"):
-                text = "Cloudflare helper installed — publish a temporary link or open the stable hostname guide."
+                text = "Cloudflare helper installed — publish a temporary link or create a named tunnel above."
                 color = OK_GREEN
             else:
                 text = "Cloudflare helper not installed yet — optional; public access needs a running local portal."
@@ -2479,6 +2538,89 @@ class MainFrame(ctk.CTkFrame):
         self.local_ep_status_lbl.pack(anchor="w", pady=(2, 0))
         self._refresh_local_endpoint()
 
+        llm = self._card(scroll, "LLM routing — mounted shared models")
+        ctk.CTkLabel(
+            llm,
+            text=(
+                "Online workers advertise the models they have mounted. Choose one here for local tooling; "
+                "contributors can run Ollama, LM Studio, vLLM, llama.cpp, or another OpenAI-compatible server. "
+                "API keys never belong in this field or in Discord."
+            ),
+            text_color=MUTED,
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w")
+        llm_endpoint_row = ctk.CTkFrame(llm, fg_color="transparent")
+        llm_endpoint_row.pack(fill="x", pady=(10, 4))
+        ctk.CTkLabel(llm_endpoint_row, text="Your provider base URL", text_color=MUTED).pack(side="left")
+        self.llm_provider_entry = ctk.CTkEntry(
+            llm_endpoint_row,
+            height=34,
+            placeholder_text="http://127.0.0.1:11434 or http://127.0.0.1:1234/v1",
+        )
+        self.llm_provider_entry.pack(side="left", fill="x", expand=True, padx=10)
+        ctk.CTkButton(
+            llm_endpoint_row,
+            text="Save provider",
+            width=125,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=self._save_llm_provider,
+        ).pack(side="left")
+        llm_model_row = ctk.CTkFrame(llm, fg_color="transparent")
+        llm_model_row.pack(fill="x", pady=(8, 4))
+        ctk.CTkLabel(llm_model_row, text="Mounted model", text_color=MUTED).pack(side="left")
+        self.llm_model_menu = ctk.CTkOptionMenu(
+            llm_model_row,
+            values=["No online mounted models"],
+            width=460,
+            command=self._select_llm_model,
+        )
+        self.llm_model_menu.pack(side="left", padx=10)
+        ctk.CTkButton(
+            llm_model_row,
+            text="Refresh catalog",
+            width=130,
+            fg_color="#2A3544",
+            command=self._refresh_llm_catalog,
+        ).pack(side="left")
+        self.llm_model_status_lbl = ctk.CTkLabel(
+            llm,
+            text="Mounted model catalog: checking…",
+            text_color=MUTED,
+            wraplength=900,
+            justify="left",
+        )
+        self.llm_model_status_lbl.pack(anchor="w", pady=(4, 0))
+        self._llm_catalog_entries: list[dict[str, Any]] = []
+        self._llm_selected_model = ""
+        self._refresh_llm_catalog()
+
+        cloud = self._card(scroll, "Cloudflare public access")
+        ctk.CTkLabel(
+            cloud,
+            text="Optional HTTPS access for the portal. Quick Tunnel is temporary; named Tunnel uses your Cloudflare-managed hostname.",
+            text_color=MUTED,
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w")
+        self.main_cloudflare_status_lbl = ctk.CTkLabel(cloud, text="Checking Cloudflare status…", text_color=MUTED, wraplength=900, justify="left")
+        self.main_cloudflare_status_lbl.pack(anchor="w", pady=(6, 4))
+        cf_fields = ctk.CTkFrame(cloud, fg_color="transparent")
+        cf_fields.pack(fill="x", pady=(0, 6))
+        self.main_cloudflare_hostname = ctk.CTkEntry(cf_fields, height=32, placeholder_text="Stable hostname, e.g. gpu-pool.example.com")
+        self.main_cloudflare_hostname.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.main_cloudflare_tunnel_name = ctk.CTkEntry(cf_fields, width=150, height=32, placeholder_text="Tunnel name")
+        self.main_cloudflare_tunnel_name.pack(side="left")
+        self.main_cloudflare_tunnel_name.insert(0, "gpu-pool")
+        cf_actions = ctk.CTkFrame(cloud, fg_color="transparent")
+        cf_actions.pack(fill="x", pady=(0, 4))
+        ctk.CTkButton(cf_actions, text="Publish Quick Tunnel", width=170, fg_color=ACCENT, text_color="#0A1210", command=self._main_cloudflare_quick).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(cf_actions, text="Create & launch named", width=185, fg_color=ACCENT, text_color="#0A1210", command=self._main_cloudflare_named).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(cf_actions, text="Install helper", width=120, fg_color="#2A3544", command=self._main_cloudflare_install).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(cf_actions, text="Guide", width=80, fg_color="#2A3544", command=self._open_cloudflare_guide_main).pack(side="left")
+        self._refresh_main_cloudflare()
+
         inner = self._card(scroll, "Connect — plug into the pool from code / tools")
         ctk.CTkLabel(
             inner,
@@ -2717,6 +2859,71 @@ class MainFrame(ctk.CTkFrame):
             anchor="e", pady=(8, 0)
         )
 
+    def _build_availability_controls(self, parent: Any, *, wizard: bool = False) -> None:
+        frame = ctk.CTkFrame(parent, fg_color=PANEL if wizard else "transparent", corner_radius=8)
+        frame.pack(fill="x", pady=(12, 0))
+        pad = 12 if wizard else 0
+        ctk.CTkLabel(
+            frame,
+            text="When should we use your PC?",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=ACCENT,
+        ).pack(anchor="w", padx=pad, pady=(pad, 4))
+        ctk.CTkLabel(
+            frame,
+            text=(
+                "Pick when friends may run jobs. Outside the window the worker still checks in "
+                "but pauses new jobs — same idea as host GPU safety."
+            ),
+            text_color=MUTED,
+            wraplength=860,
+            justify="left",
+            font=ctk.CTkFont(size=11),
+        ).pack(anchor="w", padx=pad, pady=(0, 6))
+        preset = str(getattr(self.settings, "availability_preset", "always") or "always")
+        self.availability_preset_var = ctk.StringVar(value=preset)
+        menu = ctk.CTkOptionMenu(
+            frame,
+            variable=self.availability_preset_var,
+            values=list(PRESET_LABELS.keys()),
+            command=lambda _v: self._update_availability_status_lbl(),
+        )
+        menu.pack(anchor="w", padx=pad, pady=(0, 6))
+        custom_row = ctk.CTkFrame(frame, fg_color="transparent")
+        custom_row.pack(fill="x", padx=pad, pady=(0, 6))
+        ctk.CTkLabel(custom_row, text="Custom start (HH:MM)", text_color=MUTED, font=ctk.CTkFont(size=11)).pack(
+            side="left", padx=(0, 8)
+        )
+        self.avail_start_entry = ctk.CTkEntry(custom_row, width=80, height=28)
+        self.avail_start_entry.pack(side="left", padx=(0, 12))
+        self.avail_start_entry.insert(0, getattr(self.settings, "availability_daily_start", "22:00") or "22:00")
+        ctk.CTkLabel(custom_row, text="Custom end (HH:MM)", text_color=MUTED, font=ctk.CTkFont(size=11)).pack(
+            side="left", padx=(0, 8)
+        )
+        self.avail_end_entry = ctk.CTkEntry(custom_row, width=80, height=28)
+        self.avail_end_entry.pack(side="left")
+        self.avail_end_entry.insert(0, getattr(self.settings, "availability_daily_end", "08:00") or "08:00")
+        self.availability_status_lbl = ctk.CTkLabel(
+            frame, text="", text_color=OK_GREEN, wraplength=860, justify="left"
+        )
+        self.availability_status_lbl.pack(anchor="w", padx=pad, pady=(0, pad))
+        self._update_availability_status_lbl()
+
+    def _update_availability_status_lbl(self) -> None:
+        if not hasattr(self, "availability_status_lbl"):
+            return
+        try:
+            s = be.load_config()
+            _apply_availability_fields(
+                s,
+                self.availability_preset_var.get(),
+                daily_start=self.avail_start_entry.get() if hasattr(self, "avail_start_entry") else "",
+                daily_end=self.avail_end_entry.get() if hasattr(self, "avail_end_entry") else "",
+            )
+            self.availability_status_lbl.configure(text=be.get_availability_status(s).get("label") or "")
+        except Exception as exc:  # noqa: BLE001
+            self.availability_status_lbl.configure(text=f"Schedule: {exc}", text_color=WARN)
+
     def _cap_slider(self, parent: Any, label: str, variable: ctk.Variable, lo: float, hi: float) -> None:
         row = ctk.CTkFrame(parent, fg_color="transparent")
         row.pack(fill="x", pady=3)
@@ -2814,6 +3021,85 @@ class MainFrame(ctk.CTkFrame):
         )
         if hasattr(self, "availability_status_lbl"):
             self._update_availability_status_lbl()
+
+    def _refresh_main_cloudflare(self) -> None:
+        if not hasattr(self, "main_cloudflare_status_lbl"):
+            return
+        try:
+            status = be.cloudflare_status()
+            if status.get("public_active"):
+                text = f"Cloudflare ON ({status.get('mode')}) — {status.get('portal_path')}"
+                color = OK_GREEN
+            elif status.get("named_config_present"):
+                text = "Named tunnel config found — enter the hostname and launch it."
+                color = OK_GREEN
+            elif status.get("tool_installed"):
+                text = "Helper installed — publish a Quick Tunnel or create a named tunnel."
+                color = OK_GREEN
+            else:
+                text = "Helper not installed — Cloudflare is optional and host-controlled."
+                color = MUTED
+            self.main_cloudflare_status_lbl.configure(text=text, text_color=color)
+        except Exception as exc:  # noqa: BLE001
+            self.main_cloudflare_status_lbl.configure(text=f"Cloudflare status unavailable: {exc}", text_color=WARN)
+
+    def _open_cloudflare_guide_main(self) -> None:
+        result = be.open_cloudflare_guide()
+        self.action_lbl.configure(
+            text=result.get("message") or f"Opened {result.get('path') or 'Cloudflare guide'}",
+            text_color=OK_GREEN if result.get("ok") else WARN,
+        )
+
+    def _main_cloudflare_install(self) -> None:
+        self.main_cloudflare_status_lbl.configure(text="Installing Cloudflare helper…", text_color=ACCENT)
+
+        def work() -> None:
+            try:
+                result = be.install_cloudflared()
+            except Exception as exc:  # noqa: BLE001
+                result = {"ok": False, "message": f"Cloudflare install error: {exc}"}
+            self.app.post_ui(lambda: self._main_cloudflare_result(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _main_cloudflare_named(self) -> None:
+        hostname = self.main_cloudflare_hostname.get().strip()
+        tunnel_name = self.main_cloudflare_tunnel_name.get().strip() or "gpu-pool"
+        if not hostname:
+            self.main_cloudflare_status_lbl.configure(text="Enter a Cloudflare-managed hostname first.", text_color=WARN)
+            return
+        result = be.launch_cloudflare_named_setup(hostname=hostname, tunnel_name=tunnel_name, launch=True)
+        self.main_cloudflare_status_lbl.configure(
+            text=result.get("message") or "Named Cloudflare setup opened in a separate window.",
+            text_color=ACCENT if result.get("ok") else WARN,
+        )
+        self.action_lbl.configure(text=result.get("message") or "Cloudflare setup started.", text_color=ACCENT if result.get("ok") else WARN)
+        self.after(4000, self._refresh_main_cloudflare)
+
+    def _main_cloudflare_quick(self) -> None:
+        self.main_cloudflare_status_lbl.configure(text="Starting Cloudflare Quick Tunnel…", text_color=ACCENT)
+
+        def work() -> None:
+            try:
+                result = be.publish_cloudflare(mode="quick", open_browser=True)
+            except Exception as exc:  # noqa: BLE001
+                result = {"ok": False, "message": f"Cloudflare quick-link error: {exc}"}
+            self.app.post_ui(lambda: self._main_cloudflare_result(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _main_cloudflare_result(self, result: dict[str, Any]) -> None:
+        ok = bool(result.get("ok"))
+        portal = result.get("portal_path") or ""
+        message = result.get("message") or ("Cloudflare ready" if ok else "Cloudflare action failed")
+        if ok and portal and hasattr(self, "connect_portal"):
+            self._set_entry(self.connect_portal, str(portal))
+        self.main_cloudflare_status_lbl.configure(
+            text=f"{message}{' — ' + str(portal) if portal else ''}",
+            text_color=OK_GREEN if ok else WARN,
+        )
+        self.action_lbl.configure(text=message, text_color=OK_GREEN if ok else WARN)
+        self._refresh_main_cloudflare()
 
     def _open_portal(self) -> None:
         url = self.portal_entry.get().strip()
@@ -3127,6 +3413,87 @@ class MainFrame(ctk.CTkFrame):
                     text=str(result.get("message")),
                     text_color=color,
                 )
+
+    def _save_llm_provider(self) -> None:
+        if not hasattr(self, "llm_provider_entry"):
+            return
+        result = be.save_llm_provider_url(self.llm_provider_entry.get())
+        if hasattr(self, "llm_model_status_lbl"):
+            self.llm_model_status_lbl.configure(
+                text=result.get("message") or "Provider setting updated.",
+                text_color=OK_GREEN if result.get("ok") else WARN,
+            )
+        if result.get("ok"):
+            self._refresh_llm_catalog()
+
+    def _select_llm_model(self, label: str) -> None:
+        entries = getattr(self, "_llm_catalog_entries", [])
+        for entry in entries:
+            expected = (
+                f"{entry.get('model')} · {entry.get('provider') or 'openai-compatible'} · "
+                f"{entry.get('worker_name') or 'worker'} · "
+                f"{int((entry.get('gpu_group') or {}).get('count') or 0)} GPU(s) · "
+                f"{entry.get('mount_state') or 'unknown'}"
+            )
+            if label == expected:
+                self._llm_selected_model = str(entry.get("model") or "")
+                if hasattr(self, "llm_model_status_lbl"):
+                    self.llm_model_status_lbl.configure(
+                        text=f"Selected `{self._llm_selected_model}`; local tools can use the live pool catalog.",
+                        text_color=OK_GREEN,
+                    )
+                return
+
+    def _refresh_llm_catalog(self) -> None:
+        if not hasattr(self, "llm_model_status_lbl"):
+            return
+        self.llm_model_status_lbl.configure(text="Mounted model catalog: refreshing…", text_color=ACCENT)
+
+        def work() -> None:
+            result = be.get_llm_catalog()
+            self.app.post_ui(lambda: self._render_llm_catalog(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _render_llm_catalog(self, result: dict[str, Any]) -> None:
+        if not hasattr(self, "llm_model_status_lbl"):
+            return
+        entries = [item for item in (result.get("models") or []) if isinstance(item, dict)]
+        self._llm_catalog_entries = entries
+        if not result.get("ok"):
+            self.llm_model_status_lbl.configure(
+                text=f"Mounted model catalog unavailable: {result.get('error') or 'scheduler unreachable'}",
+                text_color=WARN,
+            )
+            self.llm_model_menu.configure(values=["Catalog unavailable"])
+            self.llm_model_menu.set("Catalog unavailable")
+            return
+        if not entries:
+            self.llm_model_menu.configure(values=["No online mounted models"])
+            self.llm_model_menu.set("No online mounted models")
+            self.llm_model_status_lbl.configure(
+                text="No online worker is advertising an LLM mount. Run a local provider and wait for worker heartbeat.",
+                text_color=MUTED,
+            )
+            return
+        labels = [
+            f"{entry.get('model')} · {entry.get('provider') or 'openai-compatible'} · "
+            f"{entry.get('worker_name') or 'worker'} · "
+            f"{int((entry.get('gpu_group') or {}).get('count') or 0)} GPU(s) · "
+            f"{entry.get('mount_state') or 'unknown'}"
+            for entry in entries[:50]
+        ]
+        self.llm_model_menu.configure(values=labels)
+        selected = next(
+            (label for label in labels if str(self._llm_selected_model) and label.startswith(f"{self._llm_selected_model} ·")),
+            labels[0],
+        )
+        self.llm_model_menu.set(selected)
+        self._select_llm_model(selected)
+        self.llm_model_status_lbl.configure(
+            text=f"{len(entries)} online mounted model route(s). Selection is model-routed; exact model presence is checked again at lease time.",
+            text_color=OK_GREEN,
+        )
 
     def _refresh_local_endpoint(self) -> None:
         if not hasattr(self, "local_ep_status_lbl"):

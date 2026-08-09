@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS workers (
     dedicated_disk_mb INTEGER NOT NULL DEFAULT 0,
     dedicated_cpu_cores REAL NOT NULL DEFAULT 0,
     contributor_name TEXT,
+    llm_ready INTEGER NOT NULL DEFAULT 0,
+    llm_models_json TEXT NOT NULL DEFAULT '[]',
+    llm_runtimes_json TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'online',
     last_heartbeat REAL NOT NULL,
     registered_at REAL NOT NULL
@@ -79,6 +82,8 @@ _WORKER_MIGRATIONS: list[tuple[str, str]] = [
     ),
     ("contributor_name", "ALTER TABLE workers ADD COLUMN contributor_name TEXT"),
     ("llm_ready", "ALTER TABLE workers ADD COLUMN llm_ready INTEGER NOT NULL DEFAULT 0"),
+    ("llm_models_json", "ALTER TABLE workers ADD COLUMN llm_models_json TEXT NOT NULL DEFAULT '[]'"),
+    ("llm_runtimes_json", "ALTER TABLE workers ADD COLUMN llm_runtimes_json TEXT NOT NULL DEFAULT '[]'"),
 ]
 
 
@@ -131,9 +136,9 @@ class Store:
                 cpu_cores, ram_total_mb, ram_available_mb, max_ram_mb,
                 disk_free_mb, disk_total_mb, disk_path, max_disk_mb,
                 dedicated_ram_mb, dedicated_disk_mb, dedicated_cpu_cores, contributor_name,
-                llm_ready,
+                llm_ready, llm_models_json, llm_runtimes_json,
                 status, last_heartbeat, registered_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name,
                 discord_user=excluded.discord_user,
@@ -156,6 +161,8 @@ class Store:
                 dedicated_cpu_cores=excluded.dedicated_cpu_cores,
                 contributor_name=excluded.contributor_name,
                 llm_ready=excluded.llm_ready,
+                llm_models_json=excluded.llm_models_json,
+                llm_runtimes_json=excluded.llm_runtimes_json,
                 status='online',
                 last_heartbeat=excluded.last_heartbeat
             """,
@@ -182,6 +189,8 @@ class Store:
                 float(data.get("dedicated_cpu_cores") or 0),
                 data.get("contributor_name"),
                 1 if data.get("llm_ready") else 0,
+                json.dumps(data.get("llm_models") or []),
+                json.dumps(data.get("llm_runtimes") or []),
                 now,
                 now,
             ),
@@ -226,6 +235,8 @@ class Store:
         ded_cpu = data.get("dedicated_cpu_cores")
         contributor = data.get("contributor_name")
         llm_ready = data.get("llm_ready")
+        llm_models = data.get("llm_models")
+        llm_runtimes = data.get("llm_runtimes")
 
         await self.db.execute(
             """
@@ -245,7 +256,9 @@ class Store:
                 dedicated_disk_mb=COALESCE(?, dedicated_disk_mb),
                 dedicated_cpu_cores=COALESCE(?, dedicated_cpu_cores),
                 contributor_name=COALESCE(?, contributor_name),
-                llm_ready=COALESCE(?, llm_ready)
+                llm_ready=COALESCE(?, llm_ready),
+                llm_models_json=COALESCE(?, llm_models_json),
+                llm_runtimes_json=COALESCE(?, llm_runtimes_json)
             WHERE id=?
             """,
             (
@@ -269,6 +282,8 @@ class Store:
                 float(ded_cpu) if ded_cpu is not None else None,
                 contributor,
                 (1 if llm_ready else 0) if llm_ready is not None else None,
+                json.dumps(llm_models) if llm_models is not None else None,
+                json.dumps(llm_runtimes) if llm_runtimes is not None else None,
                 worker_id,
             ),
         )
@@ -358,10 +373,17 @@ class Store:
         chosen = None
         for row in rows:
             jtype = str(row["job_type"] or "")
-            if jtype == "llm_chat" and not llm_ready:
-                continue
             job_preview = _job_row(row)
             payload = job_preview.get("payload") or {}
+            if jtype == "llm_chat":
+                if not llm_ready:
+                    continue
+                requested_model = str(payload.get("model") or "").strip()
+                auto_models = {"", "gpu-pool", "gpu-pool/auto", "local-pool"}
+                if requested_model not in auto_models:
+                    mounted = {str(model).strip() for model in (worker.get("llm_models") or [])}
+                    if requested_model not in mounted:
+                        continue
             # Ignore/skip jobs that demand more RAM/disk than this worker offers.
             min_ram = int(payload.get("min_ram_mb") or payload.get("required_ram_mb") or 0)
             min_disk = int(payload.get("min_disk_mb") or payload.get("required_disk_mb") or 0)
@@ -501,6 +523,13 @@ def _worker_row(row: aiosqlite.Row) -> dict[str, Any]:
     d.setdefault("disk_path", None)
     d.setdefault("contributor_name", None)
     d["llm_ready"] = bool(d.get("llm_ready"))
+    for source, target in (("llm_models_json", "llm_models"), ("llm_runtimes_json", "llm_runtimes")):
+        raw = d.pop(source, "[]")
+        try:
+            value = json.loads(raw or "[]")
+        except (TypeError, json.JSONDecodeError):
+            value = []
+        d[target] = value if isinstance(value, list) else []
     # Keep portal aliases populated even if only max_* was stored
     if not d.get("dedicated_ram_mb") and d.get("max_ram_mb"):
         d["dedicated_ram_mb"] = d["max_ram_mb"]

@@ -266,6 +266,17 @@ def _model_catalog(scheduler_url: str) -> list[str]:
             if mid and mid not in models:
                 models.append(mid)
     try:
+        with httpx.Client(timeout=4.0) as client:
+            response = client.get(f"{scheduler_url.rstrip('/')}/models")
+            response.raise_for_status()
+            catalog = response.json()
+        for item in (catalog or {}).get("data") or []:
+            mid_s = str(item.get("model") or item.get("id") or "").strip() if isinstance(item, dict) else ""
+            if mid_s and mid_s not in models:
+                models.append(mid_s)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
         st = GPUPool(scheduler_url=scheduler_url, timeout=4.0).status()
         for w in st.get("workers") or []:
             if not isinstance(w, dict):

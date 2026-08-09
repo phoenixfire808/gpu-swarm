@@ -757,6 +757,19 @@
         <h2>Connect — reach the pool</h2>
         <p class="lede" id="connectLede">Public HTTPS when the tunnel is on — no Tailscale needed.</p>
         <div id="publicBanner" class="note hidden"><strong>No Tailscale needed</strong> — public access is live. Invite still required.</div>
+        <div id="cloudflareCard" class="note" style="margin-top:1rem; border:1px solid rgba(106,168,181,0.35); padding:0.9rem">
+          <strong>Cloudflare public access</strong>
+          <p id="cloudflareStatus" style="margin:0.45rem 0; color:var(--muted)">Cloudflare is available from the host installer.</p>
+          <div class="url-grid" style="margin-top:0.6rem">
+            <div class="url-row"><span>Mode</span><code id="cloudflareMode">—</code></div>
+            <div class="url-row"><span>Current public portal</span><code id="cloudflarePortal">—</code></div>
+          </div>
+          <h3 style="margin-top:0.9rem">Host quick link</h3>
+          <pre id="cloudflareQuickCommand">launch-public.cmd --no-browser</pre>
+          <h3>Host stable-link setup</h3>
+          <pre id="cloudflareNamedCommand">scripts\setup_cloudflare_named.cmd -Hostname gpu-pool.example.com -TunnelName gpu-pool -Launch</pre>
+          <p id="cloudflareHostNote" class="lede" style="margin:0.65rem 0 0">Only the GPU Pool host runs these commands. Visitors use the resulting HTTPS portal.</p>
+        </div>
         <h3>How friends connect</h3>
         <ol id="friendsConnectSteps" style="margin:0.4rem 0 0.85rem; padding-left:1.2rem; color:var(--muted); line-height:1.55"></ol>
         <h3 id="localModelTitle">Local model endpoint</h3>
@@ -1162,6 +1175,13 @@ function paintConnect(c) {
   const conn = (c && c.connect) || {};
   const friends = conn.friends_connect || [];
   const publicOn = !!(c.public_access || conn.no_tailscale_needed || conn.portal_public);
+  const cloudflare = conn.cloudflare || c.cloudflare || {};
+  if ($("cloudflareStatus")) $("cloudflareStatus").textContent = cloudflare.status || "Cloudflare is available from the host installer.";
+  if ($("cloudflareMode")) $("cloudflareMode").textContent = cloudflare.mode || (cloudflare.active ? "cloudflared" : "off");
+  if ($("cloudflarePortal")) $("cloudflarePortal").textContent = cloudflare.portal_url || conn.portal_public || "(not currently published)";
+  if ($("cloudflareQuickCommand")) $("cloudflareQuickCommand").textContent = cloudflare.quick_command || "launch-public.cmd --no-browser";
+  if ($("cloudflareNamedCommand")) $("cloudflareNamedCommand").textContent = cloudflare.named_command || "scripts/setup_cloudflare_named.cmd -Hostname gpu-pool.example.com -TunnelName gpu-pool -Launch";
+  if ($("cloudflareHostNote")) $("cloudflareHostNote").textContent = cloudflare.host_only_note || "Only the GPU Pool host runs these commands. Visitors use the resulting HTTPS portal.";
   const privateNet = conn.private_network
     || (publicOn
       ? "Public HTTPS access is ON — no Tailscale needed. Invite code still required."

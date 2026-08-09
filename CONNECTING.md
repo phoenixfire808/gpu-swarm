@@ -11,7 +11,7 @@ Primary Discord: **Glitch Factor** · Bot: **GPU Pool**
 | Portal | `http://127.0.0.1:8767/portal` | `https://….trycloudflare.com/portal` | `http://100.85.165.84:8767/portal` |
 | Scheduler / pool API | `http://127.0.0.1:8766` | `https://….trycloudflare.com/pool-api` | `http://100.85.165.84:8766` |
 
-The host enables public URLs with `start-public-access.cmd` (Cloudflare quick tunnel; no account). One public hostname serves the portal; `/pool-api` proxies the scheduler.
+The host enables public URLs with `start-public-access.cmd` or the installer wizard's **Publish temporary HTTPS link** button. This uses a Cloudflare Quick Tunnel with no account. For a stable hostname, the host can use `scripts\setup_cloudflare_named.cmd -Hostname gpu-pool.example.com -TunnelName gpu-pool -Launch` after selecting a Cloudflare-managed domain. One public hostname serves the portal; `/pool-api` proxies the scheduler.
 
 ---
 

@@ -40,14 +40,26 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [ ] Streaming on local endpoint (`stream=true`)
 - [ ] Allowlisted `whisper_transcribe`
 - [ ] Portal Discord OAuth (replace invite/password MVP)
-- [ ] Worker advertise `llm_models` into `/status` for richer `/v1/models`
+- [x] worker advertise `llm_models` into `/status` for richer `/v1/models`
+
+## In progress — Discord setup + shared LLM routing
+- [x] Persist online worker LLM mounts (`provider`, endpoint kind, model IDs, worker identity) in scheduler status.
+- [x] Route `llm_chat` only to workers advertising the requested exact model; keep `gpu-pool/auto` as explicit fallback selection.
+- [x] Add Discord `/setup`, `/route`, `/models`, and `/ask` flows with a model dropdown and setup help.
+- [x] Add desktop LLM routing card with provider instructions, refreshable mounted-model dropdown, and selected-model persistence.
+- [x] Add same-worker GPU-group metadata and larger-model placement guidance.
+- [x] Add installed/loaded/fit-now model residency and safety-margin admission state.
+- [ ] Run a bounded larger-model placement test only when the GPU/display headroom is safe; record per-GPU VRAM and unload receipt.
+- [ ] Add explicit distributed multi-node inference lane only after private-network/Ray/NCCL design and acceptance tests.
+- [x] Document Ollama, LM Studio, vLLM, and generic OpenAI-compatible contributor setup without exposing credentials.
+- [x] Verify bot command wiring, scheduler model catalog, worker advertisement, model-filtered lease behavior, and packaged/source UI imports.
 - [ ] Stable public URL (named Cloudflare tunnel + DNS prepared; `cloudflared tunnel login` certificate still pending)
 - [ ] Workspace: confirm dialog for halt+start when running above offer
 - [ ] Workspace: disk resize / quota (today: scheduling soft-cap only)
 - [ ] Prefer a small default Ollama model for light chat smoke
 
 ## Blocked
-- [ ] Light `llm_chat` completion smoke — only large ~27B GGUF local; host_protect pausing on high util
+- [x] Light `llm_chat` completion smoke — LFM local model served `GPU_FIT_METADATA_OK`; larger 27B placement remains safety-gated
 - [ ] OAuth — blocked until auth priority
 - [x] Exact EXE download URL freshness — v0.1.1 Release asset live
 

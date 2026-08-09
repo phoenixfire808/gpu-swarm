@@ -25,7 +25,7 @@ history. Same for `TRACKER_FRIEND_ONBOARDING.md`.
 | Discord bot `GPU pool#1686` | logged in, slash commands synced to Glitch Factor | bot logs |
 | PowerShell install scripts | all 5 parse clean (UTF-8 BOM, ASCII) | `scripts/_check_parse.ps1` |
 | Persistence (logon startup) | VBS in `%APPDATA%\\...\\Startup\\` runs as fallback because Task Scheduler needs admin and Hermes runs non-elevated | `scripts/GPUPool-Startup.vbs` |
-| Friend install ("buggy, super laggy") | **substantially fixed in source; packaged EXE not yet rebuilt** | this file |
+| Friend install ("buggy, super laggy") | **source and packaged EXE rebuilt/verified** | this file |
 
 ---
 
@@ -1520,3 +1520,19 @@ python scripts\bump_version.py 0.2.0
 - PyInstaller `6.22.0` build exited `0`; artifact size is `18,311,237` bytes and the focused hidden GUI smoke passed.
 - SHA-256: `204aaeee3e737ff9537bb77d9b736d38332e9bb09e0f24a835c21ac774fcc00d`.
 - The source integration and packaged artifact are ready for the requested Git commit/push. Named Cloudflare DNS deployment remains a separate user-domain step.
+
+### 2026-08-08 - Cloudflare controls completed across all surfaces
+
+- Installer, first-run wizard, installed MainFrame Connect, website `/api/config`, and website Connect view now expose the same Quick Tunnel and named-tunnel workflow.
+- Added guided named setup scripts with user-controlled browser login, tunnel create/reuse, DNS routing, config generation, optional launch, and public verification.
+- Final packaged artifact rebuilt successfully; both setup scripts are embedded. Worker help, local-endpoint help, hidden GUI startup, and portal API/template smoke checks passed.
+- Named Cloudflare login, DNS mutation, and credential creation remain intentionally unexecuted until Drew supplies/approves the domain setup.
+- Source and tracker changes remain local/uncommitted pending explicit commit/push.
+
+### 2026-08-09 - Shared LLM routing and release rebuild
+
+- Added native Ollama chat routing, explicit blank-assistant failure handling, visible Discord queue/completion/error states, and provider-prefix persistence.
+- Added installed/loaded/fit-now model metadata and same-worker multi-GPU group reporting. The installed Qwen 27B Q4 model is correctly `installed-not-fit-now` under current Windows display headroom; it was not force-loaded.
+- Live acceptance: scheduler health 200, Discord gateway connected with 10 commands synced, and exact-model worker job returned `GPU_FIT_METADATA_OK`.
+- Rebuilt `dist/GPUPool.exe` successfully with `PYTHONPATH` removed from the Windows build environment. Artifact size: `35,251,884` bytes. SHA-256: `3251c103edbd1d5c53d2fc5d8dbc846c8a120a8505f6423a8a4139ca7247f1a6`.
+- Packaged command-mode smoke passed for `--worker --help` and `--local-endpoint --help`; no `.env` or secrets are bundled.

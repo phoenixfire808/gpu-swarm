@@ -78,6 +78,7 @@ __all__ = [
     "check_prereqs",
     "cloudflare_status",
     "install_cloudflared",
+    "launch_cloudflare_named_setup",
     "publish_cloudflare",
     "open_cloudflare_guide",
     "script_paths",
@@ -99,6 +100,8 @@ __all__ = [
     "get_friends_connect_text",
     "get_share_pack",
     "get_public_access_info",
+    "get_llm_catalog",
+    "save_llm_provider_url",
     "auto_detect_scheduler_url",
     "validate_scheduler_url",
     "load_public_endpoints",
@@ -1148,6 +1151,8 @@ def script_paths() -> dict[str, str]:
         "install_cloudflared_ps1": str(BUNDLE_ROOT / "scripts" / "install_cloudflared.ps1"),
         "install_cloudflared_cmd": str(BUNDLE_ROOT / "scripts" / "install_cloudflared.cmd"),
         "cloudflare_access_cmd": str(BUNDLE_ROOT / "scripts" / "cloudflare-access.cmd"),
+        "setup_cloudflare_named_ps1": str(BUNDLE_ROOT / "scripts" / "setup_cloudflare_named.ps1"),
+        "setup_cloudflare_named_cmd": str(BUNDLE_ROOT / "scripts" / "setup_cloudflare_named.cmd"),
         "cloudflare_guide": str(BUNDLE_ROOT / "cloudflare" / "README.md"),
     }
 
@@ -1178,6 +1183,23 @@ def install_cloudflared() -> dict[str, Any]:
     from gpu_swarm.cloudflare_access import install_cloudflared_tool
 
     return install_cloudflared_tool()
+
+
+def launch_cloudflare_named_setup(
+    *,
+    hostname: str,
+    tunnel_name: str = "gpu-pool",
+    config_path: str = "",
+    launch: bool = True,
+) -> dict[str, Any]:
+    from gpu_swarm.cloudflare_access import launch_named_setup
+
+    return launch_named_setup(
+        hostname=hostname,
+        tunnel_name=tunnel_name,
+        config_path=config_path,
+        launch=launch,
+    )
 
 
 def publish_cloudflare(
@@ -2098,6 +2120,72 @@ def pool_status(scheduler_url: str | None = None, timeout: float = 5.0) -> dict[
         ),
         "allowed_jobs": list_allowed_jobs(),
     }
+
+
+def get_llm_catalog(scheduler_url: str | None = None, timeout: float = 5.0) -> dict[str, Any]:
+    """Fetch the live mounted-model catalog without exposing provider credentials."""
+    import httpx
+
+    settings = load_joiner_settings()
+    base = (scheduler_url or settings.scheduler_url or DEFAULT_LOCAL_SCHEDULER_URL).rstrip("/")
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(f"{base}/models")
+            response.raise_for_status()
+            payload = response.json()
+        models = [item for item in (payload.get("data") or []) if isinstance(item, dict)]
+        return {"ok": True, "url": base, "models": models, "count": len(models), "error": ""}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "url": base, "models": [], "count": 0, "error": str(exc)}
+
+
+def save_llm_provider_url(base_url: str) -> dict[str, Any]:
+    """Persist only a validated non-secret LLM base URL into the local .env."""
+    from urllib.parse import urlsplit
+
+    value = (base_url or "").strip()
+    provider_prefix = ""
+    if "=" in value and value.split("=", 1)[0].lower() in {"ollama", "openai", "vllm", "lmstudio", "llama.cpp"}:
+        provider_prefix, value = value.split("=", 1)
+        provider_prefix = provider_prefix.lower()
+    if value:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+            or any(ch.isspace() for ch in value)
+            or len(value) > 300
+        ):
+            return {"ok": False, "message": "Use a plain http(s) base URL without credentials, query strings, or fragments."}
+        value = value.rstrip("/")
+    stored_value = f"{provider_prefix}={value}" if value and provider_prefix else value
+    key = "GPU_SWARM_LLM_BASE_URL"
+    try:
+        original = ENV_FILE.read_text(encoding="utf-8") if ENV_FILE.exists() else ""
+        lines = original.splitlines(keepends=True)
+        out: list[str] = []
+        seen = False
+        for line in lines:
+            stripped = line.lstrip()
+            if stripped.startswith(f"{key}="):
+                if stored_value:
+                    out.append(f"{key}={stored_value}\n")
+                seen = True
+            else:
+                out.append(line)
+        if stored_value and not seen:
+            if out and not out[-1].endswith("\n"):
+                out.append("\n")
+            out.append(f"{key}={stored_value}\n")
+        ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ENV_FILE.write_text("".join(out), encoding="utf-8")
+        return {"ok": True, "message": f"Saved {key} locally; restart the worker or wait for its next heartbeat.", "value": stored_value}
+    except OSError as exc:
+        return {"ok": False, "message": f"Could not update local .env: {exc}"}
 
 
 def submit_job(

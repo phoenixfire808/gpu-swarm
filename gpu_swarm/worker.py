@@ -129,6 +129,7 @@ class Worker:
             vram_ceiling_mb=int(offered.get("vram_ceiling_mb") or 0),
         )
         llm = detect_llm_runtime(timeout=1.0)
+        llm_mounts = list(llm.get("mounts") or [])[:64]
         sched = status_dict(self._availability)
         return {
             "gpus": inv["gpus"],
@@ -153,7 +154,8 @@ class Worker:
             "contributor_name": self.cfg.contributor_name or self.cfg.discord_user or None,
             "llm_ready": bool(llm.get("ready")),
             "llm_kind": llm.get("kind"),
-            "llm_models": list(llm.get("models") or [])[:32],
+            "llm_models": [str(item.get("model")) for item in llm_mounts if item.get("model")],
+            "llm_runtimes": llm_mounts,
             "host_protect": offered.get("host_protect") or self._host_protect.summary(),
             "host_protect_admit": bool(admission.admit),
             "host_protect_reason": admission.reason,
@@ -188,6 +190,8 @@ class Worker:
             "dedicated_cpu_cores": caps["dedicated_cpu_cores"],
             "contributor_name": caps["contributor_name"],
             "llm_ready": bool(caps.get("llm_ready")),
+            "llm_models": list(caps.get("llm_models") or []),
+            "llm_runtimes": list(caps.get("llm_runtimes") or []),
         }
         r = self._client.post("/workers/register", json=body)
         r.raise_for_status()
@@ -219,6 +223,8 @@ class Worker:
                 "dedicated_cpu_cores": caps["dedicated_cpu_cores"],
                 "contributor_name": caps["contributor_name"],
                 "llm_ready": bool(caps.get("llm_ready")),
+                "llm_models": list(caps.get("llm_models") or []),
+                "llm_runtimes": list(caps.get("llm_runtimes") or []),
                 "status": status,
             },
         )

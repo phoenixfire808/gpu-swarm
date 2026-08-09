@@ -11,8 +11,8 @@ credentials.
 3. In **Public access with Cloudflare**, click **Install Cloudflare helper**.
 4. When the local GPU Pool portal is running, click **Publish temporary HTTPS link**.
 5. Share the generated `/portal` URL and the pool invite code with friends.
-6. If a stable hostname is needed, click **Stable hostname guide** and complete
-   the named-tunnel section below.
+6. For a stable hostname, enter the Cloudflare-managed hostname and tunnel name, then click **Create & launch named tunnel**. The wizard opens a separate setup window for browser login, tunnel creation, DNS routing, config generation, launch, and public verification.
+7. **Stable hostname guide** remains available when you want to inspect the exact files and commands.
 
 ### The two modes
 
@@ -33,6 +33,7 @@ From a full GPU Pool checkout, with the local portal already running on
 ```bat
 python -m gpu_swarm.cloudflare_access --install
 python -m gpu_swarm.cloudflare_access --quick
+scripts\setup_cloudflare_named.cmd -Hostname gpu-pool.example.com -TunnelName gpu-pool -Launch
 ```
 
 Use `--no-browser` when the URL should be printed without opening a browser:
