@@ -1106,6 +1106,15 @@ For each scenario, the host runs it before tagging a release.
 - Fixed duplicate Windows `creationflags` during the real smoke; sanitized probe results to status/URL/bytes only so portal content and invite text are not logged.
 - Current release task: rebuild `dist\\GPUPool.exe`, artifact-smoke it, commit, and push `master`.
 
+### 2026-08-08 — Packaged installer rebuild receipt
+
+- Clean PyInstaller build exited `0` using the existing isolated GPUPool CPython 3.12 venv with `PYTHONPATH` removed; PyInstaller `6.22.0` was installed only in that venv.
+- Artifact: `dist\\GPUPool.exe`, `18,311,237` bytes; SHA-256 `204aaeee3e737ff9537bb77d9b736d38332e9bb09e0f24a835c21ac774fcc00d`.
+- Hidden packaged GUI smoke passed: process stayed alive for 8 seconds and was stopped by its exact PID; exit `0`.
+- `git diff --check` passed. Build output remains ignored; no secrets or runtime endpoint files were staged.
+- The first smoke wrapper had a Bash-to-PowerShell `$` expansion error; the corrected wrapper passed, so this was a test-harness issue only.
+- **Completion:** source Cloudflare installer work is packaged and ready for commit/push. Stable named Cloudflare hosting is not claimed; it still depends on a user-owned hostname/certificate.
+
 ### 2026-08-09 — Release receipt
 
 - Clean PyInstaller build completed successfully with `dist\\GPUPool.exe` at 35,218,966 bytes.

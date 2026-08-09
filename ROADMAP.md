@@ -1513,3 +1513,10 @@ python scripts\bump_version.py 0.2.0
   exposed PyInstaller's unused `pkg_resources.extern` runtime-hook failure.
   `gpu_pool.spec` now excludes unused `pkg_resources` and `setuptools`; rebuild
   and packaged smoke are still required before release distribution.
+
+### 2026-08-08 - Cloudflare installer package accepted
+
+- Rebuilt `dist/GPUPool.exe` from the Cloudflare-enabled source using the isolated GPUPool CPython 3.12 venv with `PYTHONPATH` removed.
+- PyInstaller `6.22.0` build exited `0`; artifact size is `18,311,237` bytes and the focused hidden GUI smoke passed.
+- SHA-256: `204aaeee3e737ff9537bb77d9b736d38332e9bb09e0f24a835c21ac774fcc00d`.
+- The source integration and packaged artifact are ready for the requested Git commit/push. Named Cloudflare DNS deployment remains a separate user-domain step.

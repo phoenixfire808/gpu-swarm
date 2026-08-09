@@ -31,6 +31,8 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [x] Portal newcomer UX + growth docs (`START_HERE.md`, punchy invite blurbs)
 - [x] One-click public website launcher (`launch-public.cmd`) with fresh Quick Tunnel verification
 - [x] End-to-end local/public portal + allowlisted probe smoke (2026-08-08)
+- [x] Cloudflare installer integration: Quick Tunnel default + Named Tunnel guide/config template
+- [x] Clean rebuild and focused packaged GUI smoke for `dist/GPUPool.exe` (2026-08-08)
 - [ ] Post member tip: `OPENAI_BASE_URL=http://127.0.0.1:18080/v1` (or `:8080` when free)
 
 ## Next

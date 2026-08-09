@@ -187,6 +187,25 @@ Until a choice is authorized, local implementation and verification remain safe 
 - Resolved during smoke: duplicate Windows `creationflags` argument in the helper; rerun passed with sanitized status-only probe output.
 - Release task: rebuild `dist\\GPUPool.exe`, inspect artifact, commit coherent worktree, push `master` to `origin`.
 
+### 2026-08-08 — Packaged installer rebuild and acceptance
+
+- Build command: `build_exe.ps1 -Clean -SkipInstallCheck` with `PYTHONPATH` removed and the existing isolated GPUPool CPython 3.12 interpreter selected via `GPU_SWARM_PYTHON`.
+- Installed only the missing build dependency into that venv: PyInstaller `6.22.0`; application dependencies were already present when isolated from Hermes.
+- Build exited `0`; output `dist\\GPUPool.exe` is `18,311,237` bytes (17.5 MB).
+- SHA-256: `204aaeee3e737ff9537bb77d9b736d38332e9bb09e0f24a835c21ac774fcc00d`.
+- Packaged GUI smoke exited `0`: hidden `Start-Process` launch remained alive for 8 seconds, then the exact spawned PID was stopped cleanly.
+- `git diff --check` exited `0`; `dist/` and `build/` remain ignored, and no credentials were added to the repository.
+- One initial smoke wrapper was rejected by PowerShell parsing because Bash expanded `$` variables before PowerShell received them; the corrected wrapper passed. No application failure occurred.
+- **Release status:** source Cloudflare installer integration and packaged EXE rebuild are complete. Named Cloudflare deployment remains separate and still requires a user-owned managed hostname/certificate; Quick Tunnel remains the default.
+
+### Release research receipts — five distinct source domains
+
+1. PyInstaller usage — https://pyinstaller.org/en/stable/usage.html: spec-file builds write the executable under `dist/`, and `--clean` removes prior cache/work files.
+2. Python Packaging User Guide — https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/: packaging configuration and explicit distribution artifacts should remain separate from runtime secrets.
+3. Git commit documentation — https://git-scm.com/docs/git-commit: commits record the staged snapshot and should use an explicit message.
+4. GitHub push documentation — https://docs.github.com/en/get-started/using-git/pushing-commits-to-a-remote-repository: push the named remote and branch, while keeping push-protection boundaries intact.
+5. Microsoft Start-Process documentation — https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process: `-PassThru` returns the launched process and `-WindowStyle Hidden` supports the non-focus smoke used here.
+
 ### 2026-08-09 — Release receipt
 
 - Clean build command: `env -u PYTHONPATH powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\Drew\\Projects\\gpu-swarm\\build_exe.ps1 -Clean`.
