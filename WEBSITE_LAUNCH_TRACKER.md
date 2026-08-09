@@ -213,4 +213,4 @@ Until a choice is authorized, local implementation and verification remain safe 
 - Packaged smoke passed: `GPUPool.exe --worker --help` and `GPUPool.exe --local-endpoint --help` both exited 0.
 - Commit: `4777dbd` (`feat: add guided Cloudflare public access`).
 - Push: `master` successfully advanced on `origin` from `d4083c4` to `4777dbd`.
-- Follow-up tracker receipt commit is being added after this entry.
+- Documentation receipt: the release build, feature commit, and push were verified before this tracker update.

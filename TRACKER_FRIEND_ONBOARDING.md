@@ -1120,4 +1120,4 @@ For each scenario, the host runs it before tagging a release.
 - Clean PyInstaller build completed successfully with `dist\\GPUPool.exe` at 35,218,966 bytes.
 - Packaged `--worker --help` and `--local-endpoint --help` smoke commands both exited 0.
 - Feature commit `4777dbd` was pushed successfully: `d4083c4..4777dbd master -> origin/master`.
-- This tracker receipt is the only remaining documentation delta and will be committed separately.
+- Documentation receipt: the release build, feature commit, and push were verified before this tracker update.
