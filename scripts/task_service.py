@@ -15,6 +15,11 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from gpu_swarm.service_lifecycle import gate_detail, services_enabled
+from gpu_swarm.win_subprocess import popen_kwargs
+
 LOG_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "GPUPool" / "logs"
 PYTHON = Path(r"C:\Python313\pythonw.exe")
 if not PYTHON.exists():
@@ -51,6 +56,10 @@ def main() -> int:
 
     service = sys.argv[1]
     log_path = _log_path(service)
+    if not services_enabled():
+        with log_path.open("a", encoding="utf-8") as log:
+            log.write(f"[task] {service} not started: {gate_detail()}\n")
+        return 0
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     env.pop("PYTHONPATH", None)
@@ -63,6 +72,10 @@ def main() -> int:
         log.write(f"\n--- task service {service} starting cwd={ROOT} ---\n")
         log.flush()
         while True:
+            if not services_enabled():
+                log.write(f"[task] {service} stopping: {gate_detail()}\n")
+                log.flush()
+                return 0
             command = _command(service)
             log.write(f"[task] launching: {command}\n")
             log.flush()
@@ -74,12 +87,28 @@ def main() -> int:
                     stdin=subprocess.DEVNULL,
                     stdout=log,
                     stderr=subprocess.STDOUT,
-                    creationflags=0x08000000,  # CREATE_NO_WINDOW
+                    **popen_kwargs(),
                 )
-                code = child.wait()
+                while child.poll() is None:
+                    if not services_enabled():
+                        log.write(f"[task] {service} stopping child because services were disabled\n")
+                        log.flush()
+                        child.terminate()
+                        try:
+                            child.wait(timeout=8)
+                        except subprocess.TimeoutExpired:
+                            child.kill()
+                            child.wait(timeout=3)
+                        return 0
+                    time.sleep(1)
+                code = child.returncode
             except Exception as exc:
                 log.write(f"[task] launch error: {exc!r}\n")
                 code = -1
+            if not services_enabled():
+                log.write(f"[task] {service} exited while disabled; no retry\n")
+                log.flush()
+                return 0
             log.write(f"[task] {service} exited code={code}; retrying in 10s\n")
             log.flush()
             time.sleep(10)

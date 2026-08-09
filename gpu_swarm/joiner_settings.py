@@ -6,7 +6,7 @@ import json
 import os
 import socket
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,7 @@ from gpu_swarm.paths import ROOT, is_frozen
 from gpu_swarm.win_subprocess import run_kwargs
 
 SETTINGS_PATH = ROOT / "data" / "joiner_settings.json"
+SETUP_COMPLETE_MARKER = ROOT / "data" / "setup-complete.flag"
 DEFAULT_SCHEDULER_URL = "http://100.85.165.84:8766"
 DEFAULT_LOCAL_SCHEDULER_URL = "http://127.0.0.1:8766"
 DEFAULT_PORTAL_URL = "http://100.85.165.84:8767/portal"
@@ -46,6 +47,12 @@ class JoinerSettings:
     max_disk_gb: float = 0.0  # SSD/HDD contribution soft cap
     portal_url: str = DEFAULT_LOCAL_PORTAL_URL
     wizard_completed: bool = False
+    # Local services are opt-in; the desktop controls whether this worker/LLM stack runs.
+    services_enabled: bool = False
+    # If false, app close stops app-owned services and clears the enable gate.
+    keep_services_running: bool = False
+    # Empty means all detected physical GPUs; values are stable nvidia-smi indexes.
+    selected_gpu_ids: list[int] = field(default_factory=list)
     agent_vms_path: str = str(AGENT_VMS_DEFAULT)
     # Host GPU safety ceiling — leave desktop headroom (default ON).
     host_protect: bool = True
@@ -62,6 +69,13 @@ class JoinerSettings:
         # Coerce older joiner_settings.json that omit the field.
         if self.host_protect is None:  # type: ignore[comparison-overlap]
             self.host_protect = True
+        self.services_enabled = bool(self.services_enabled)
+        self.keep_services_running = bool(self.keep_services_running)
+        try:
+            self.selected_gpu_ids = sorted({int(value) for value in (self.selected_gpu_ids or []) if int(value) >= 0})
+        except (TypeError, ValueError):
+            self.selected_gpu_ids = []
+
 
 
 def load_settings() -> JoinerSettings:
@@ -105,6 +119,29 @@ def save_settings(settings: JoinerSettings) -> None:
         json.dumps(asdict(settings), indent=2) + "\n",
         encoding="utf-8",
     )
+    if settings.wizard_completed:
+        try:
+            SETUP_COMPLETE_MARKER.write_text("completed\n", encoding="utf-8")
+        except OSError:
+            pass
+
+
+def setup_complete() -> bool:
+    """Return durable first-run state without forcing the installer on every launch."""
+    if SETUP_COMPLETE_MARKER.is_file():
+        return True
+    try:
+        raw = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(raw, dict) and bool(raw.get("wizard_completed"))
+
+
+def clear_setup_complete() -> None:
+    try:
+        SETUP_COMPLETE_MARKER.unlink()
+    except OSError:
+        pass
 
 
 def detect_tailscale_ipv4() -> str | None:

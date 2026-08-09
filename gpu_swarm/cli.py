@@ -10,7 +10,14 @@ from typing import Any
 
 from gpu_swarm import ALLOWED_JOB_TYPES
 from gpu_swarm.client import DEFAULT_SCHEDULER_URL, GPUPool, GPUPoolError
-from gpu_swarm.config import ROOT, scheduler_config
+from gpu_swarm.config import ROOT, parse_gpu_ids, scheduler_config
+
+
+def _gpu_ids_arg(raw: str) -> tuple[int, ...]:
+    parsed = parse_gpu_ids(raw)
+    if parsed is None or parsed == ():
+        raise argparse.ArgumentTypeError("GPU IDs must be a comma-separated list of non-negative physical indexes")
+    return parsed
 
 
 def _base_url(url: str | None = None) -> str:
@@ -193,6 +200,12 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--max-ram-mb", type=int, default=None)
     w.add_argument("--max-disk-mb", type=int, default=None)
     w.add_argument("--max-cpu-percent", type=float, default=None)
+    w.add_argument(
+        "--selected-gpu-ids",
+        type=_gpu_ids_arg,
+        default=None,
+        help="Comma-separated physical nvidia-smi indexes to advertise (default: all)",
+    )
     w.add_argument(
         "--host-protect",
         dest="host_protect",

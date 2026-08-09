@@ -1536,3 +1536,15 @@ python scripts\bump_version.py 0.2.0
 - Live acceptance: scheduler health 200, Discord gateway connected with 10 commands synced, and exact-model worker job returned `GPU_FIT_METADATA_OK`.
 - Rebuilt `dist/GPUPool.exe` successfully with `PYTHONPATH` removed from the Windows build environment. Artifact size: `35,251,884` bytes. SHA-256: `3251c103edbd1d5c53d2fc5d8dbc846c8a120a8505f6423a8a4139ca7247f1a6`.
 - Packaged command-mode smoke passed for `--worker --help` and `--local-endpoint --help`; no `.env` or secrets are bundled.
+
+### 2026-08-09 - Service lifecycle, GPU selection, and Docker manual re-enable latch
+
+- Added opt-in local service settings: `services_enabled`, `keep_services_running`, and persisted physical `selected_gpu_ids`; app close stops app-owned worker/model activity unless the user explicitly keeps services running.
+- Added durable `setup-complete.flag` handling plus an explicit reset path so onboarding is not automatically repeated on every launch.
+- Added GPU selector wiring in the wizard and main contribution surface. `GPU_SWARM_SELECTED_GPU_IDS` filters worker inventory by stable physical `nvidia-smi` index; invalid IDs fail closed instead of remapping.
+- Added hidden Windows startup info plus `CREATE_NO_WINDOW` to Tailscale and service subprocess paths. Startup supervisors now stop/refrain from restarting children when services are disabled.
+- Added `gpu_swarm/service_lifecycle.py`: explicitly configured Ollama providers are probed through `/api/tags`; an outage writes `data/docker-reenable-required.json`, latches services OFF, logs to `data/service-lifecycle.log`, and requires a successful UI re-enable health check before clearing.
+- Worker heartbeat checks the Docker/Ollama latch and stops on a detected outage; service supervisors see the latch and do not restart it.
+- Focused receipts: all changed Python modules compile; `git diff --check`; `gpu_swarm bot --check`; worker `--selected-gpu-ids` help; GPU-ID parser smoke; controlled `DOCKER_LATCH_SMOKE_OK`.
+- Delegated implementation workers were dispatched with disjoint scopes but both received read-only lanes and modified zero files; parent took over their exact scopes. No worker receipt was accepted without source verification.
+- Source and packaged EXE rebuild/commit/push remain pending for this pass; the prior release commit remains `62be293`.

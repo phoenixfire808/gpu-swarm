@@ -13,8 +13,8 @@ def nvidia_smi_available() -> bool:
     return shutil.which("nvidia-smi") is not None
 
 
-def query_gpus() -> list[dict[str, Any]]:
-    """Return live GPU inventory from nvidia-smi. Empty list if unavailable (CPU-only OK)."""
+def query_gpus(selected_gpu_ids: tuple[int, ...] | None = None) -> list[dict[str, Any]]:
+    """Return live GPU inventory, optionally limited to explicit physical nvidia-smi IDs."""
     if not nvidia_smi_available():
         return []
     query = (
@@ -57,13 +57,20 @@ def query_gpus() -> list[dict[str, Any]]:
                 "driver_version": parts[9],
             }
         )
-    return gpus
+    if selected_gpu_ids is None:
+        return gpus
+    requested = set(selected_gpu_ids)
+    available = {int(gpu["index"]) for gpu in gpus}
+    if not requested.issubset(available):
+        # An explicit stale/invalid physical ID must never silently remap to another card.
+        return []
+    return [gpu for gpu in gpus if int(gpu["index"]) in requested]
 
 
-def inventory_summary() -> dict[str, Any]:
+def inventory_summary(selected_gpu_ids: tuple[int, ...] | None = None) -> dict[str, Any]:
     """Advertise GPUs when present; otherwise cpu-only with gpu_available=false."""
     smi = nvidia_smi_available()
-    gpus = query_gpus()
+    gpus = query_gpus(selected_gpu_ids)
     gpu_count = len(gpus)
     return {
         "gpus": gpus,

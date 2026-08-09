@@ -58,7 +58,64 @@ def _apply_availability_fields(
         setattr(settings, field, val)
 
 
+def _gpu_selection_block(parent: Any, owner: Any, gpus: list[dict[str, Any]], *, wizard: bool = False) -> None:
+    """Render physical GPU checkboxes and keep selection on the owner for _collect()."""
+    frame = ctk.CTkFrame(parent, fg_color=PANEL if wizard else "transparent", corner_radius=8)
+    frame.pack(fill="x", pady=(10, 0))
+    pad = 12 if wizard else 0
+    ctk.CTkLabel(
+        frame,
+        text="Which graphics cards may this worker use?",
+        font=ctk.CTkFont(size=13, weight="bold"),
+        text_color=ACCENT,
+    ).pack(anchor="w", padx=pad, pady=(pad, 3))
+    ctk.CTkLabel(
+        frame,
+        text=(
+            "Checked cards are advertised to the pool. If none are checked, all detected cards are used. "
+            "For Docker-hosted Ollama, this selection also needs a container device mask to isolate the runtime."
+        ),
+        text_color=MUTED,
+        wraplength=860,
+        justify="left",
+        font=ctk.CTkFont(size=11),
+    ).pack(anchor="w", padx=pad, pady=(0, 6))
+    previous = {int(value) for value in (getattr(owner.settings, "selected_gpu_ids", []) or [])}
+    owner.gpu_selection_vars = {}
+    for gpu in gpus:
+        try:
+            index = int(gpu.get("index"))
+        except (TypeError, ValueError):
+            continue
+        var = ctk.BooleanVar(value=(not previous or index in previous))
+        owner.gpu_selection_vars[index] = var
+        name = str(gpu.get("name") or "Unknown GPU")
+        free = int(gpu.get("memory_free_mb") or 0)
+        total = int(gpu.get("memory_total_mb") or 0)
+        ctk.CTkCheckBox(
+            frame,
+            text=f"GPU {index}: {name} · {free:,}/{total:,} MiB free",
+            variable=var,
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", padx=pad, pady=2)
+    if not gpus:
+        ctk.CTkLabel(frame, text="No NVIDIA GPUs detected — worker remains CPU-only.", text_color=WARN).pack(
+            anchor="w", padx=pad, pady=(0, pad)
+        )
+    else:
+        ctk.CTkLabel(frame, text="Leave all checked to use every detected GPU.", text_color=MUTED, font=ctk.CTkFont(size=10)).pack(
+            anchor="w", padx=pad, pady=(2, pad)
+        )
+
+
+def _selected_gpu_ids(owner: Any) -> list[int]:
+    values = [index for index, var in getattr(owner, "gpu_selection_vars", {}).items() if bool(var.get())]
+    # Empty is the stable all-GPU default; never turn a UI mistake into a silent card swap.
+    return sorted(values)
+
+
 def run_app() -> int:
+
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("dark-blue")
     app = GpuPoolApp()
@@ -83,7 +140,7 @@ class GpuPoolApp(ctk.CTk):
         self._container = ctk.CTkFrame(self, fg_color=BG)
         self._container.pack(fill="both", expand=True)
 
-        if not self.settings.wizard_completed:
+        if not be.is_setup_complete():
             self._show_wizard()
         else:
             self._show_main()
@@ -168,7 +225,13 @@ class GpuPoolApp(ctk.CTk):
                 self.after_cancel(self._poll_after)
             except Exception:  # noqa: BLE001
                 pass
+        # Closing the UI must not leave the app-owned worker/model endpoint consuming resources.
+        try:
+            be.shutdown_app_owned_services()
+        except Exception:  # noqa: BLE001
+            pass
         self.destroy()
+
 
 
 # =============================================================================
@@ -1372,6 +1435,7 @@ class WizardFrame(ctk.CTkFrame):
         self._slider_row(self.body, "Max CPU (%)", self.cpu_var, 5, 100, "Soft advertise cap → dedicated_cpu_cores")
         self._slider_row(self.body, "Max RAM (MiB)", self.ram_var, 0, total_ram, f"Host total {total_ram} MiB")
         self._slider_row(self.body, "Max Disk (GiB)", self.disk_var, 0, total_disk, f"Host total {total_disk} GiB")
+        _gpu_selection_block(self.body, self, gpus, wizard=True)
 
         self.host_protect_var = ctk.BooleanVar(value=bool(getattr(self.settings, "host_protect", True)))
         ctk.CTkCheckBox(
@@ -1553,6 +1617,13 @@ class WizardFrame(ctk.CTkFrame):
                 command=self._join_now,
             )
             self.join_now_btn.pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                row,
+                text="Finish setup (services off)",
+                height=40,
+                fg_color="#2A3544",
+                command=self._finish_setup_only,
+            ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             row,
             text="Open portal",
@@ -1604,12 +1675,22 @@ class WizardFrame(ctk.CTkFrame):
             )
         self.on_done()
 
+    def _finish_setup_only(self) -> None:
+        """Complete onboarding without starting any worker or model runtime."""
+        self._persist_partial()
+        self.settings.wizard_completed = True
+        self.settings.services_enabled = False
+        self.settings.keep_services_running = False
+        be.save_config(self.settings)
+        self.on_done()
+
     def _join_now(self) -> None:
         if self._join_busy:
             return
         self._join_busy = True
         self._persist_partial()
         self.settings.wizard_completed = True
+        self.settings.services_enabled = True
         be.save_config(self.settings)
         self.join_now_btn.configure(state="disabled")
         self.join_status.configure(text="Starting worker…", text_color=MUTED)
@@ -1711,6 +1792,8 @@ class WizardFrame(ctk.CTkFrame):
                 self.settings.host_protect = bool(self.host_protect_var.get())
             except Exception:  # noqa: BLE001
                 pass
+        if hasattr(self, "gpu_selection_vars"):
+            self.settings.selected_gpu_ids = _selected_gpu_ids(self)
         be.save_config(self.settings)
 
     def _clear_step_widgets(self) -> None:
@@ -2845,6 +2928,7 @@ class MainFrame(ctk.CTkFrame):
         self._cap_slider(inner, "Max CPU %", self.cpu_var, 5, 100)
         self._cap_slider(inner, "Max RAM MiB", self.ram_var, 0, total_ram)
         self._cap_slider(inner, "Max Disk GiB", self.disk_var, 0, total_disk)
+        _gpu_selection_block(inner, self, gpus)
         self._build_availability_controls(inner)
         self.host_protect_var = ctk.BooleanVar(value=bool(getattr(self.settings, "host_protect", True)))
         ctk.CTkCheckBox(
@@ -2942,6 +3026,22 @@ class MainFrame(ctk.CTkFrame):
 
     def _build_actions(self, parent: Any) -> None:
         inner = self._card(parent, "Pool control")
+        self.services_var = ctk.BooleanVar(value=bool(getattr(self.settings, "services_enabled", False)))
+        self.keep_services_var = ctk.BooleanVar(value=bool(getattr(self.settings, "keep_services_running", False)))
+        ctk.CTkCheckBox(
+            inner,
+            text="Enable local GPU/LLM services (OFF = zero app-owned worker/model activity)",
+            variable=self.services_var,
+            command=self._toggle_services,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(anchor="w", pady=(0, 4))
+        ctk.CTkCheckBox(
+            inner,
+            text="Keep services running after closing this window (default OFF)",
+            variable=self.keep_services_var,
+            command=self._save_settings,
+            font=ctk.CTkFont(size=11),
+        ).pack(anchor="w", pady=(0, 8))
         row = ctk.CTkFrame(inner, fg_color="transparent")
         row.pack(fill="x")
         self.join_btn = ctk.CTkButton(
@@ -2996,6 +3096,11 @@ class MainFrame(ctk.CTkFrame):
         s.max_cpu_percent = float(self.cpu_var.get())
         s.max_ram_mb = int(self.ram_var.get())
         s.max_disk_gb = float(self.disk_var.get())
+        if hasattr(self, "gpu_selection_vars"):
+            s.selected_gpu_ids = _selected_gpu_ids(self)
+        if hasattr(self, "services_var"):
+            s.services_enabled = bool(self.services_var.get())
+            s.keep_services_running = bool(self.keep_services_var.get())
         if getattr(self, "host_protect_var", None) is not None:
             s.host_protect = bool(self.host_protect_var.get())
         if getattr(self, "availability_preset_var", None) is not None:
@@ -3120,6 +3225,7 @@ class MainFrame(ctk.CTkFrame):
     def _rerun_wizard(self) -> None:
         s = be.load_config()
         s.wizard_completed = False
+        be.reset_setup_complete()
         be.save_config(s)
         self.app._show_wizard()
 
@@ -3176,12 +3282,45 @@ class MainFrame(ctk.CTkFrame):
             if hasattr(self, "connect_sched") and label is getattr(self, "connect_status_lbl", None):
                 self._set_entry(self.connect_sched, str(result["url"]))
 
+    def _toggle_services(self) -> None:
+        settings = self._collect()
+        enabled = bool(self.services_var.get())
+        if enabled:
+            result = be.reenable_docker()
+            if not result.get("ok"):
+                self.services_var.set(False)
+                settings.services_enabled = False
+                be.save_config(settings)
+                self.action_lbl.configure(text=result.get("message") or "Docker/Ollama is not healthy yet.", text_color=DANGER)
+                return
+            settings.services_enabled = True
+            be.save_config(settings)
+            self.action_lbl.configure(text="Docker/Ollama healthy — services enabled; press Join pool to start the worker.", text_color=OK_GREEN)
+            return
+        settings.services_enabled = False
+        be.save_config(settings)
+        self.action_lbl.configure(text="Stopping app-owned GPU/LLM services…", text_color=MUTED)
+
+        def work() -> None:
+            result = be.shutdown_app_owned_services()
+            self.app.post_ui(
+                lambda: self.action_lbl.configure(
+                    text="GPU/LLM services OFF — app-owned worker/model processes stopped.",
+                    text_color=OK_GREEN if result.get("ok") else WARN,
+                )
+            )
+
+        threading.Thread(target=work, daemon=True).start()
+
     def _join(self) -> None:
         if self.app._busy:
             return
         self.app._busy = True
         self.action_lbl.configure(text="Starting worker…", text_color=MUTED)
         settings = self._collect()
+        settings.services_enabled = True
+        if hasattr(self, "services_var"):
+            self.services_var.set(True)
         be.save_config(settings)
 
         def work() -> None:
@@ -3210,6 +3349,7 @@ class MainFrame(ctk.CTkFrame):
 
         def work() -> None:
             result = be.stop_worker()
+            be.set_services_enabled(False)
             self.app.post_ui(lambda: self._leave_done(result))
 
         threading.Thread(target=work, daemon=True).start()
@@ -3800,6 +3940,7 @@ class MainFrame(ctk.CTkFrame):
     def _poll_status(self) -> None:
         def work() -> None:
             status = be.get_status()
+            status["docker"] = be.docker_status()
             self.app.post_ui(lambda: self._render_status(status))
 
         threading.Thread(target=work, daemon=True).start()
@@ -3809,7 +3950,11 @@ class MainFrame(ctk.CTkFrame):
         sch = status.get("scheduler") or {}
         ts = status.get("tailscale_ipv4") or "n/a"
         host = status.get("host_resources") or {}
+        docker = status.get("docker") or {}
         lines = [
+            f"Docker/Ollama: {'HEALTHY' if docker.get('healthy') else 'UNAVAILABLE'}"
+            + (" · MANUAL RE-ENABLE REQUIRED" if docker.get("manual_reenable_required") else "")
+            + (f" · {docker.get('reason') or docker.get('detail') or ''}" if not docker.get("healthy") else ""),
             f"Local worker: {'RUNNING' if w.get('running') else 'stopped'}"
             + (f"  pid={w.get('pid')}" if w.get("pid") else ""),
             f"Connected: {'yes' if w.get('connected') else 'no'}  ·  {w.get('detail') or ''}",

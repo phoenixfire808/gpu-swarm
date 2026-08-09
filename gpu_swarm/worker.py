@@ -26,6 +26,7 @@ from gpu_swarm.host_protect import (
 from gpu_swarm.jobs import execute_job
 from gpu_swarm.llm_runtime import detect_llm_runtime
 from gpu_swarm.paths import ROOT
+from gpu_swarm.service_lifecycle import docker_guard
 
 DEFAULT_STATE_FILE = ROOT / "data" / "worker_id.txt"
 
@@ -92,7 +93,7 @@ class Worker:
           dedicated_ram_mb, dedicated_disk_mb, dedicated_cpu_cores, contributor_name
         """
         self._reload_availability()
-        inv = inventory_summary()
+        inv = inventory_summary(self.cfg.selected_gpu_ids)
         host = query_host()
 
         # Soft caps + durable host-protect ceiling (desktop headroom).
@@ -129,6 +130,11 @@ class Worker:
             vram_ceiling_mb=int(offered.get("vram_ceiling_mb") or 0),
         )
         llm = detect_llm_runtime(timeout=1.0)
+        docker_ok, docker_detail = docker_guard(timeout=0.8)
+        if not docker_ok:
+            self._stop = True
+            print(f"[worker] Docker/Ollama outage latched; stopping worker: {docker_detail}", flush=True)
+            llm = {"ready": False, "error": docker_detail, "mounts": []}
         llm_mounts = list(llm.get("mounts") or [])[:64]
         sched = status_dict(self._availability)
         return {
@@ -418,6 +424,8 @@ def run_worker(args: argparse.Namespace | None = None) -> int:
             cfg.availability_daily_end = str(args.availability_daily_end)
         if getattr(args, "availability_until", None) is not None:
             cfg.availability_until = float(args.availability_until)
+        if getattr(args, "selected_gpu_ids", None) is not None:
+            cfg.selected_gpu_ids = tuple(args.selected_gpu_ids)
         if args.discord_user:
             cfg.discord_user = args.discord_user
     Worker(cfg).run_forever()

@@ -14,7 +14,14 @@ import sys
 
 
 def _run_worker(argv: list[str]) -> int:
+    from gpu_swarm.config import parse_gpu_ids
     from gpu_swarm.worker import run_worker
+
+    def parse_selected_gpu_ids(raw: str) -> tuple[int, ...]:
+        parsed = parse_gpu_ids(raw)
+        if parsed is None or parsed == ():
+            raise argparse.ArgumentTypeError("GPU IDs must be a comma-separated list of non-negative physical indexes")
+        return parsed
 
     parser = argparse.ArgumentParser(prog="GPUPool --worker")
     parser.add_argument("--name", default="")
@@ -23,6 +30,12 @@ def _run_worker(argv: list[str]) -> int:
     parser.add_argument("--max-cpu-percent", type=float, default=None)
     parser.add_argument("--max-ram-mb", type=int, default=None)
     parser.add_argument("--max-disk-mb", type=int, default=None)
+    parser.add_argument(
+        "--selected-gpu-ids",
+        type=parse_selected_gpu_ids,
+        default=None,
+        help="Comma-separated physical nvidia-smi indexes to advertise (default: all)",
+    )
     parser.add_argument(
         "--host-protect",
         dest="host_protect",

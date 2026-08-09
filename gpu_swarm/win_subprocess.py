@@ -19,9 +19,22 @@ def creation_flags(*, new_group: bool = False) -> int:
     return flags
 
 
+def hidden_startupinfo() -> subprocess.STARTUPINFO | None:
+    """Force console applications such as Tailscale to start without a visible window."""
+    if sys.platform != "win32":
+        return None
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = subprocess.SW_HIDE
+    return startup
+
+
 def popen_kwargs(*, new_group: bool = False) -> dict:
     flags = creation_flags(new_group=new_group)
-    return {"creationflags": flags} if flags else {}
+    kwargs = {"start_new_session": True}
+    if flags:
+        kwargs.update({"creationflags": flags, "startupinfo": hidden_startupinfo()})
+    return kwargs
 
 
 def run_kwargs(*, new_group: bool = False) -> dict:

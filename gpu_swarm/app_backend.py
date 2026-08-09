@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from gpu_swarm.paths import BUNDLE_ROOT, ROOT, is_frozen
+from gpu_swarm.service_lifecycle import docker_guard, docker_latched, docker_latch_reason, docker_reenable_check, docker_health
 from gpu_swarm.win_subprocess import popen_kwargs, run_kwargs
 from gpu_swarm.joiner_settings import (
     DEFAULT_LOCAL_PORTAL_URL,
@@ -29,6 +30,7 @@ from gpu_swarm.joiner_settings import (
     PORTAL_INVITE_CODE,
     JoinerSettings,
     agent_vms_present,
+    clear_setup_complete,
     default_scheduler_url_for_host,
     detect_python_runtime,
     detect_tailscale_ipv4,
@@ -36,7 +38,9 @@ from gpu_swarm.joiner_settings import (
     portal_url_candidates,
     python_deps_status,
     save_settings,
+    setup_complete,
 )
+
 
 __all__ = [
     "JoinerSettings",
@@ -87,6 +91,12 @@ __all__ = [
     "open_portal_url",
     "resolve_portal_url",
     "save_joiner_settings",
+    "is_setup_complete",
+    "reset_setup_complete",
+    "set_services_enabled",
+    "docker_status",
+    "reenable_docker",
+    "shutdown_app_owned_services",
     "wait_for_worker_online",
     "worker_runtime_status",
     # Utilize (consume) pool
@@ -380,6 +390,64 @@ def save_joiner_settings(settings: JoinerSettings) -> None:
 def load_config() -> JoinerSettings:
     """Alias: load persisted joiner config."""
     return load_joiner_settings()
+
+
+def is_setup_complete() -> bool:
+    return setup_complete()
+
+
+def reset_setup_complete() -> None:
+    clear_setup_complete()
+
+
+def docker_status() -> dict[str, Any]:
+    healthy, detail = docker_health()
+    latched = docker_latched()
+    if latched:
+        healthy = False
+        detail = docker_latch_reason()
+    return {
+        "healthy": healthy,
+        "latched": latched,
+        "reason": docker_latch_reason() if latched else "",
+        "detail": detail,
+        "manual_reenable_required": latched,
+    }
+
+
+def reenable_docker() -> dict[str, Any]:
+    """Clear the Docker outage latch only after a successful health check."""
+    ok, detail = docker_reenable_check()
+    if not ok:
+        return {"ok": False, "message": f"Docker/Ollama is still unavailable: {detail}", "detail": detail}
+    settings = load_joiner_settings()
+    settings.services_enabled = True
+    save_joiner_settings(settings)
+    return {"ok": True, "message": f"Docker/Ollama healthy: {detail}. Services re-enabled.", "detail": detail}
+
+
+def set_services_enabled(enabled: bool, *, keep_running: bool | None = None) -> JoinerSettings:
+    """Persist the local GPU Pool service gate; child launchers read this state."""
+    settings = load_joiner_settings()
+    settings.services_enabled = bool(enabled)
+    if keep_running is not None:
+        settings.keep_services_running = bool(keep_running)
+    save_joiner_settings(settings)
+    return settings
+
+
+def shutdown_app_owned_services(*, keep_running: bool = False) -> dict[str, Any]:
+    """Stop only the worker/local endpoint owned by this desktop joiner."""
+    settings = load_joiner_settings()
+    if keep_running or settings.keep_services_running:
+        return {"ok": True, "kept_running": True, "message": "GPU Pool services left running by preference"}
+    worker = stop_worker()
+    endpoint = stop_local_endpoint()
+    settings.services_enabled = False
+    settings.keep_services_running = False
+    save_joiner_settings(settings)
+    return {"ok": bool(worker.get("ok", True) and endpoint.get("ok", True)), "worker": worker, "endpoint": endpoint}
+
 
 
 def save_config(config: JoinerSettings | dict[str, Any] | None = None, **kwargs: Any) -> JoinerSettings:
@@ -1638,6 +1706,22 @@ def start_worker(
         return {"ok": False, "message": "Worker already running", "pid": pid}
 
     settings = settings or load_joiner_settings()
+    if not bool(getattr(settings, "services_enabled", False)):
+        return {
+            "ok": False,
+            "message": "GPU Pool services are OFF. Enable local services before joining.",
+            "pid": None,
+        }
+    docker_ok, docker_detail = docker_guard()
+    if not docker_ok:
+        settings.services_enabled = False
+        save_joiner_settings(settings)
+        return {
+            "ok": False,
+            "message": f"Docker/Ollama unavailable; services latched OFF. Re-enable after Docker is healthy: {docker_detail}",
+            "pid": None,
+            "docker_reenable_required": True,
+        }
     save_joiner_settings(settings)
 
     # Preflight: scheduler reachable
@@ -1675,6 +1759,9 @@ def start_worker(
     env["GPU_SWARM_MAX_DISK_GB"] = str(float(getattr(settings, "max_disk_gb", 0) or 0))
     host_protect = bool(getattr(settings, "host_protect", True))
     env["GPU_SWARM_HOST_PROTECT"] = "1" if host_protect else "0"
+    env["GPU_SWARM_SERVICES_ENABLED"] = "1"
+    selected_gpu_ids = [str(value) for value in (getattr(settings, "selected_gpu_ids", []) or [])]
+    env["GPU_SWARM_SELECTED_GPU_IDS"] = ",".join(selected_gpu_ids)
     from gpu_swarm.availability_schedule import settings_to_config, to_env_dict
 
     env.update(to_env_dict(settings_to_config(settings)))

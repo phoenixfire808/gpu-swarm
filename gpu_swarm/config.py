@@ -39,6 +39,27 @@ def _env_float(key: str, default: float) -> float:
         return default
 
 
+def parse_gpu_ids(raw: str | None) -> tuple[int, ...] | None:
+    """Parse explicit physical GPU IDs; None means all, invalid input means no GPUs."""
+    value = (raw or "").strip()
+    if not value:
+        return None
+    result: list[int] = []
+    for token in value.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            index = int(token)
+        except ValueError:
+            return ()
+        if index < 0:
+            return ()
+        result.append(index)
+    return tuple(sorted(set(result)))
+
+
+
 @dataclass
 class SchedulerConfig:
     host: str = "127.0.0.1"
@@ -61,6 +82,8 @@ class WorkerConfig:
     heartbeat_sec: float = 10.0
     poll_sec: float = 2.0
     preferred_gpu: int | None = None
+    # None means all physical GPUs; an explicit tuple limits inventory advertisement.
+    selected_gpu_ids: tuple[int, ...] | None = None
     start_token: str = ""
     portal_url: str = "http://127.0.0.1:8767"
     # Host GPU safety (desktop headroom). Default ON — see host_protect.py.
@@ -103,6 +126,7 @@ def worker_config() -> WorkerConfig:
             preferred = int(pref)
         except ValueError:
             preferred = None
+    selected_gpu_ids = parse_gpu_ids(_env("GPU_SWARM_SELECTED_GPU_IDS"))
     # Accept dedicated_* aliases from portal-generated env
     ram = _env_int("GPU_SWARM_MAX_RAM_MB", 0) or _env_int("GPU_SWARM_DEDICATED_RAM_MB", 0)
     disk = _env_int("GPU_SWARM_MAX_DISK_MB", 0) or _env_int("GPU_SWARM_DEDICATED_DISK_MB", 0)
@@ -137,6 +161,7 @@ def worker_config() -> WorkerConfig:
         heartbeat_sec=_env_float("GPU_SWARM_HEARTBEAT_SEC", 10.0),
         poll_sec=_env_float("GPU_SWARM_POLL_SEC", 2.0),
         preferred_gpu=preferred,
+        selected_gpu_ids=selected_gpu_ids,
         start_token=_env("GPU_SWARM_START_TOKEN"),
         portal_url=_env("GPU_SWARM_PORTAL_URL", "http://127.0.0.1:8767")
         or "http://127.0.0.1:8767",

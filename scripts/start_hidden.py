@@ -23,6 +23,11 @@ DETACHED_PROCESS = 0x00000008
 CREATE_NO_WINDOW = 0x08000000
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from gpu_swarm.service_lifecycle import gate_detail, services_enabled
+from gpu_swarm.win_subprocess import popen_kwargs
+
 LOG_DIR = Path(os.environ.get("LOCALAPPDATA", r"C:\Users\Drew\AppData\Local")) \
           / "GPUPool" / "logs"
 
@@ -56,6 +61,9 @@ def main() -> int:
     if ns.help or not ns.subcommand:
         parser.print_help()
         return 0
+    if not services_enabled():
+        print(f"GPU Pool service start suppressed: {gate_detail()}")
+        return 0
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOG_DIR / f"{ns.subcommand}.log"
@@ -80,7 +88,7 @@ def main() -> int:
             stdin=subprocess.DEVNULL,
             stdout=lf,
             stderr=subprocess.STDOUT,
-            creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW,
+            **popen_kwargs(),
             close_fds=True,
         )
 
