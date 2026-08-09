@@ -37,7 +37,7 @@ Asset name: **`GPUPool.exe`** (~29 MB onefile). Includes hub, Invite friends, ho
 | Path | Tailscale? | How |
 |------|------------|-----|
 | **Public portal URL** (preferred) | **No** | Open the host’s current `https://….trycloudflare.com/portal` → invite **`glitch-factor`** + display name → Utilize (or Contribute CPU) |
-| **From source (ready-to-go tip)** | Optional | `scripts\install-prereqs.cmd` → `start-gpu-pool-app.cmd` → wizard **Network & Workspace** → invite → Contribute/Utilize |
+| **From source (ready-to-go tip)** | Optional | `start-gpu-pool-app.cmd` → wizard **Python & Deps** → invite → Contribute/Utilize; optional network tools are separate |
 | **Installer / EXE** | Optional | Download EXE → wizard (v0.1.1+ includes prereqs step; **v0.1.0 stale**) → public `/pool-api` when present; else Tailscale |
 | **Tailscale** (optional private path) | Yes | Auto via `install-prereqs` or manual install → `http://100.85.165.84:8767/portal` |
 
@@ -51,10 +51,10 @@ the host starts public access on the host with `start-public-access.cmd` (Cloudf
 
 ## Prerequisites
 
-1. **Access** — public portal URL **or** Tailscale. Automate with `scripts\install-prereqs.cmd` (detects/installs Tailscale; optional VirtualBox+Vagrant for Workspace). Already-installed tools are skipped.
+1. **Access** — public portal URL is enough. Tailscale is an optional private-network fallback; `scripts\install-prereqs.cmd` only installs it when you explicitly choose that path. Already-installed tools are skipped.
 2. **Invite code** — `glitch-factor` (Glitch Factor Discord). Use it with your display name at portal login / app join.
 3. **NVIDIA drivers** — only if you want to **Contribute a GPU**. **No GPU?** Skip — Utilize / CPU contribute still work.
-4. **Workspace (optional)** — VirtualBox + Vagrant via the same `install-prereqs` script; UAC once; then Home → Workspace.
+4. **Workspace (optional)** — VirtualBox + Vagrant only when you explicitly run `scripts\install-prereqs.cmd -WorkspaceTools`; UAC once; then Home → Workspace.
 
 ---
 
@@ -69,7 +69,7 @@ Installers and the desktop wizard print **plain step labels** and keep logs on s
 5. **Checking GPU…** — optional; Utilize works without NVIDIA
 6. **Setup ready.** / **Connecting to pool…** — after you Save + Join
 
-PowerShell also shows a progress bar (`Write-Progress`). First-run EXE bootstrap writes `%LOCALAPPDATA%\GPUPool\logs\first-run-bootstrap.log`.
+Install progress stays in the wizard. The EXE does not start downloads before the wizard is ready; portable Python and package installation begin only after you choose Bootstrap.
 
 ---
 
@@ -104,10 +104,7 @@ Paste-ready Discord blurb (includes no-GPU path): [`DISCORD_MEMBER_QUICKSTART.md
 
 1. Download **[GPUPool.exe](https://github.com/phoenixfire808/gpu-swarm/releases/latest/download/GPUPool.exe)** (or open [Releases](https://github.com/phoenixfire808/gpu-swarm/releases)).
 2. Run it. Windows SmartScreen may warn on **unsigned** builds → **More info** → **Run anyway** if you trust this repo’s release.
-3. **Sit back** — we’ll install what you need:
-   - Portable Python + deps under `%LOCALAPPDATA%\GPUPool\` (isolated; never your global Python)
-   - Optional: Tailscale (private network) and VirtualBox + Vagrant (Workspace) — already-installed tools are skipped
-   - Live step labels + percent / package names stay on screen
+3. **Choose setup.** The normal friend path needs no Tailscale, VirtualBox, or Vagrant. If the wizard reports missing runtime support, click **Bootstrap portable Python** and leave that one install running. Live step labels and package progress stay on screen
 4. Prefer the **public portal / pool-api** URL a pool member shared. Tailscale is optional.
 5. Wizard path:
    - **Welcome** — plain-language overview; three big destinations after join

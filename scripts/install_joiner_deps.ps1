@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Idempotent joiner dependency install into %LOCALAPPDATA%\GPUPool\venv
@@ -6,8 +6,8 @@
 .DESCRIPTION
   Prefer isolated venv over broken system Python / global site-packages.
   Core deps: requirements-joiner.txt (fallback requirements.txt).
-  Optional CUDA torch: -WithTorchCuda → requirements-cuda.txt
-  Supported: Windows x64 + CPython 3.10–3.12 (prefer 3.12). 3.13 not used by default.
+  Optional CUDA torch: -WithTorchCuda -> requirements-cuda.txt
+  Supported: Windows x64 + CPython 3.10-3.12 (prefer 3.12). 3.13 not used by default.
 
   Always prints human-readable step labels + Write-Progress so friends can see
   what is happening (download / folder / packages / GPU check).
@@ -99,7 +99,7 @@ function Ensure-GpuPoolVenv {
     $seed = Resolve-SeedPython
     if (-not $seed) {
         if ($BootstrapPortable) {
-            Write-GpuPoolStep "Downloading Python runtime…" -Detail "Bootstrapping portable CPython via gpu_swarm.portable_python"
+            Write-GpuPoolStep "Downloading Python runtime..." -Detail "Bootstrapping portable CPython via gpu_swarm.portable_python"
             $launcher = Get-Command py -ErrorAction SilentlyContinue
             if (-not $launcher) { throw "No seed Python to bootstrap portable runtime. Use GPUPool.exe." }
             & py -3 -c "from gpu_swarm.portable_python import ensure_portable_python; import json; print(json.dumps(ensure_portable_python(with_venv=True, with_requirements=False)))"
@@ -108,9 +108,9 @@ function Ensure-GpuPoolVenv {
         }
         throw "Python 3.10-3.12 not found (3.13 skipped by default). Run wizard Bootstrap portable Python, GPUPool.exe, or: install_joiner_deps.ps1 -BootstrapPortable"
     }
-    Write-GpuPoolStep "Creating GPUPool folder…" -Detail $GpuPoolRoot
+    Write-GpuPoolStep "Creating GPUPool folder..." -Detail $GpuPoolRoot
     New-Item -ItemType Directory -Force -Path $GpuPoolRoot | Out-Null
-    Write-GpuPoolStep "Creating isolated Python environment…" -Detail ("seed={0} → {1}" -f $seed, $VenvDir)
+    Write-GpuPoolStep "Creating isolated Python environment..." -Detail ("seed={0} -> {1}" -f $seed, $VenvDir)
     if (Test-Path $VenvDir) { Remove-Item -Recurse -Force $VenvDir }
     & $seed -m venv $VenvDir
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $VenvPython)) {
@@ -122,7 +122,7 @@ function Ensure-GpuPoolVenv {
 function Invoke-VenvPip {
     param(
         [Parameter(Mandatory = $true)][string[]]$PipArgs,
-        [string]$ProgressLabel = "Installing dependencies…"
+        [string]$ProgressLabel = "Installing dependencies..."
     )
     $all = @("-m", "pip") + $PipArgs
     if ($Quiet) {
@@ -185,12 +185,12 @@ raise SystemExit(0 if torch.cuda.is_available() else 1)
 }
 
 Write-Host ""
-Write-Host "GPU Pool — friend install helper" -ForegroundColor Cyan
+Write-Host "GPU Pool - friend install helper" -ForegroundColor Cyan
 Write-Host "What this does: prepares an isolated Python folder so you can Contribute" -ForegroundColor DarkGray
 Write-Host "(share spare GPU/CPU) or Utilize (run jobs). No Docker. Logs stay on screen." -ForegroundColor DarkGray
 Write-Host ("Folder: {0}" -f $GpuPoolRoot) -ForegroundColor DarkGray
 
-Write-GpuPoolStep "Checking for a usable Python…" -PercentComplete 5
+Write-GpuPoolStep "Checking for a usable Python..." -PercentComplete 5
 [void](Ensure-GpuPoolVenv)
 $env:GPU_SWARM_PYTHON = $VenvPython
 $script:PyArgs = @($VenvPython)
@@ -200,17 +200,17 @@ $probe = Test-JoinerImports
 $actions = New-Object System.Collections.Generic.List[string]
 
 if ($Force -or -not $probe.ok) {
-    Write-GpuPoolStep "Installing dependencies…" -Detail ("from {0} (pip output below — leave this window open)" -f $ReqJoiner) -PercentComplete 40
-    $code = Invoke-VenvPip -PipArgs @("install", "-r", $ReqJoiner) -ProgressLabel "Installing dependencies from requirements-joiner.txt…"
+    Write-GpuPoolStep "Installing dependencies..." -Detail ("from {0} (pip output below - leave this window open)" -f $ReqJoiner) -PercentComplete 40
+    $code = Invoke-VenvPip -PipArgs @("install", "-r", $ReqJoiner) -ProgressLabel "Installing dependencies from requirements-joiner.txt..."
     if ($code -ne 0) {
         Write-Host ""
-        Write-Host "INSTALL FAILED — pip exit $code. Scroll up for the error; do not close this window yet." -ForegroundColor Red
+        Write-Host "INSTALL FAILED - pip exit $code. Scroll up for the error; do not close this window yet." -ForegroundColor Red
         Write-Error "pip install -r requirements-joiner failed (exit $code)"
         exit $code
     }
     [void]$actions.Add("pip_install_joiner_requirements")
 } else {
-    Write-GpuPoolStep "Dependencies already installed — skipping pip." -PercentComplete 50 -Detail "Use -Force to repair/reinstall"
+    Write-GpuPoolStep "Dependencies already installed - skipping pip." -PercentComplete 50 -Detail "Use -Force to repair/reinstall"
     [void]$actions.Add("skip_requirements_satisfied")
 }
 
@@ -218,15 +218,15 @@ $torchResult = $null
 if ($WithTorchCuda) {
     $t = Test-TorchCuda
     if ($t.ok -and -not $Force) {
-        Write-GpuPoolStep "CUDA PyTorch already available — skipping." -PercentComplete 75 -Detail $t.message
+        Write-GpuPoolStep "CUDA PyTorch already available - skipping." -PercentComplete 75 -Detail $t.message
         [void]$actions.Add("skip_torch_cuda_present")
         $torchResult = $t
     } else {
-        Write-GpuPoolStep "Downloading CUDA PyTorch (large)…" -Detail ("index {0} — several GB; keep window open" -f $TorchIndexUrl) -PercentComplete 70
+        Write-GpuPoolStep "Downloading CUDA PyTorch (large)..." -Detail ("index {0} - several GB; keep window open" -f $TorchIndexUrl) -PercentComplete 70
         if (Test-Path $ReqCuda) {
-            $code = Invoke-VenvPip -PipArgs @("install", "-r", $ReqCuda, "--index-url", $TorchIndexUrl) -ProgressLabel "Installing CUDA torch…"
+            $code = Invoke-VenvPip -PipArgs @("install", "-r", $ReqCuda, "--index-url", $TorchIndexUrl) -ProgressLabel "Installing CUDA torch..."
         } else {
-            $code = Invoke-VenvPip -PipArgs @("install", "torch", "--index-url", $TorchIndexUrl) -ProgressLabel "Installing CUDA torch…"
+            $code = Invoke-VenvPip -PipArgs @("install", "torch", "--index-url", $TorchIndexUrl) -ProgressLabel "Installing CUDA torch..."
         }
         if ($code -ne 0) {
             Write-Host "CUDA torch install FAILED (exit $code). Contribute/Utilize still work without it." -ForegroundColor Red
@@ -238,14 +238,14 @@ if ($WithTorchCuda) {
     }
 }
 
-Write-GpuPoolStep "Checking GPU…" -PercentComplete 90 -Detail "nvidia-smi optional — Utilize works without NVIDIA"
+Write-GpuPoolStep "Checking GPU..." -PercentComplete 90 -Detail "nvidia-smi optional - Utilize works without NVIDIA"
 $nvidia = Get-Command nvidia-smi -ErrorAction SilentlyContinue
 if ($nvidia) {
     try {
         $gpuLine = & nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>$null | Select-Object -First 3
         if ($gpuLine) {
             Write-Host "GPU detected:" -ForegroundColor Green
-            $gpuLine | ForEach-Object { Write-Host ("  • {0}" -f $_) }
+            $gpuLine | ForEach-Object { Write-Host ("  * {0}" -f $_) }
         } else {
             Write-Host "nvidia-smi present but no GPU lines (drivers ok?)." -ForegroundColor Yellow
         }
@@ -253,7 +253,7 @@ if ($nvidia) {
         Write-Host "nvidia-smi check skipped: $_" -ForegroundColor Yellow
     }
 } else {
-    Write-Host "No NVIDIA GPU tools on this PC — fine. Use Utilize (or Contribute with VRAM=0)." -ForegroundColor Yellow
+    Write-Host "No NVIDIA GPU tools on this PC - fine. Use Utilize (or Contribute with VRAM=0)." -ForegroundColor Yellow
 }
 
 $final = Test-JoinerImports
@@ -274,11 +274,11 @@ $summary = [ordered]@{
 }
 $summary | ConvertTo-Json -Depth 5
 if (-not $final.ok) {
-    Write-Host "FAILED — missing: $($final.missing -join ', ')" -ForegroundColor Red
+    Write-Host "FAILED - missing: $($final.missing -join ', ')" -ForegroundColor Red
     exit 1
 }
 Write-Host ""
-Write-Host "OK — isolated install finished." -ForegroundColor Green
+Write-Host "OK - isolated install finished." -ForegroundColor Green
 Write-Host "Next: start-gpu-pool-app.cmd  OR  download GPUPool.exe from GitHub Releases." -ForegroundColor Cyan
 Write-Host "Login: invite code glitch-factor + your Discord display name. See LOGIN.md" -ForegroundColor DarkGray
 exit 0

@@ -53,26 +53,16 @@ def _run_local_endpoint(argv: list[str]) -> int:
 
 
 def _first_run_portable_bootstrap() -> None:
-    """
-    GPUPool.exe first-run hook for isolated Python.
+    """Select an already-installed isolated interpreter without doing network work.
 
-    - If %LOCALAPPDATA%\\GPUPool\\venv already exists → set GPU_SWARM_PYTHON (instant).
-    - If a healthy system/portable Python exists → reuse (no download).
-    - Otherwise schedule background bootstrap so the UI opens immediately;
-      wizard “Bootstrap portable Python” / torch install can also trigger it.
-    Progress lines are appended to %LOCALAPPDATA%\\GPUPool\\logs\\first-run-bootstrap.log
-    so friends can see what happened if setup looks stuck.
+    The setup wizard is the single owner of downloads, venv creation, and pip.
+    Starting a background bootstrap here made first-run EXE startup compete with
+    the wizard and allowed duplicate downloads when the user clicked Bootstrap.
     """
     import os
-    import threading
 
     try:
-        from gpu_swarm.portable_python import (
-            ensure_portable_python,
-            find_usable_python,
-            venv_python_exe,
-        )
-        from gpu_swarm.paths import gpu_pool_home
+        from gpu_swarm.portable_python import find_usable_python, venv_python_exe
 
         vpy = venv_python_exe()
         if vpy.is_file():
@@ -81,48 +71,8 @@ def _first_run_portable_bootstrap() -> None:
         found = find_usable_python()
         if found.get("ok") and found.get("pip_ok") and found.get("executable"):
             os.environ.setdefault("GPU_SWARM_PYTHON", str(found["executable"]))
-            return
-
-        log_path = gpu_pool_home() / "logs" / "first-run-bootstrap.log"
-
-        def _bg() -> None:
-            try:
-                log_path.parent.mkdir(parents=True, exist_ok=True)
-
-                def _progress(label: str, detail: dict) -> None:
-                    pct = detail.get("percent")
-                    pkg = detail.get("package") or detail.get("current") or ""
-                    bit = label
-                    if pkg:
-                        bit = f"{label} — {pkg}"
-                    if pct is not None:
-                        bit = f"{bit} ({pct}%)"
-                    try:
-                        with open(log_path, "a", encoding="utf-8") as fh:
-                            fh.write(bit + "\n")
-                    except OSError:
-                        pass
-
-                with open(log_path, "a", encoding="utf-8") as fh:
-                    fh.write("=== First-run bootstrap starting ===\n")
-                ensure_portable_python(
-                    with_venv=True,
-                    with_requirements=False,
-                    dry_run=False,
-                    on_progress=_progress,
-                )
-                with open(log_path, "a", encoding="utf-8") as fh:
-                    fh.write("=== First-run bootstrap finished ===\n")
-            except Exception:  # noqa: BLE001
-                try:
-                    with open(log_path, "a", encoding="utf-8") as fh:
-                        fh.write("=== First-run bootstrap FAILED ===\n")
-                except OSError:
-                    pass
-                return
-
-        threading.Thread(target=_bg, daemon=True).start()
     except Exception:  # noqa: BLE001
+        # The wizard will show the actionable bootstrap step if detection fails.
         return
 
 
@@ -132,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         return _run_worker(argv[1:])
     if argv and argv[0] == "--local-endpoint":
         return _run_local_endpoint(argv[1:])
-    # First-run: wire portable Python path (background download if needed).
+    # First-run: select an already-installed portable Python path only.
     _first_run_portable_bootstrap()
     from gpu_swarm.app.desktop_app import run_app
 

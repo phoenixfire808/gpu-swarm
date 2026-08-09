@@ -76,6 +76,10 @@ __all__ = [
     "install_joiner_deps",
     "install_prereqs",
     "check_prereqs",
+    "cloudflare_status",
+    "install_cloudflared",
+    "publish_cloudflare",
+    "open_cloudflare_guide",
     "script_paths",
     "is_worker_running",
     "load_joiner_settings",
@@ -1141,7 +1145,58 @@ def script_paths() -> dict[str, str]:
         "install_joiner_deps_cmd": str(SCRIPT_INSTALL_JOINER_DEPS_CMD),
         "install_prereqs_ps1": str(SCRIPT_INSTALL_PREREQS),
         "install_prereqs_cmd": str(SCRIPT_INSTALL_PREREQS_CMD),
+        "install_cloudflared_ps1": str(BUNDLE_ROOT / "scripts" / "install_cloudflared.ps1"),
+        "install_cloudflared_cmd": str(BUNDLE_ROOT / "scripts" / "install_cloudflared.cmd"),
+        "cloudflare_access_cmd": str(BUNDLE_ROOT / "scripts" / "cloudflare-access.cmd"),
+        "cloudflare_guide": str(BUNDLE_ROOT / "cloudflare" / "README.md"),
     }
+
+def cloudflare_status() -> dict[str, Any]:
+    """Return UI-safe Cloudflare helper and current endpoint state."""
+    from gpu_swarm.cloudflare_access import resolve_cloudflared
+
+    pub = load_public_endpoints() or {}
+    config = Path.home() / ".cloudflared" / "gpu-pool.yml"
+    tool = resolve_cloudflared() or ""
+    return {
+        "tool_installed": bool(tool),
+        "tool_path": tool,
+        "public_active": bool(pub.get("active")),
+        "mode": pub.get("mode") or "",
+        "portal_path": pub.get("portal_path") or "",
+        "named_config_present": config.is_file(),
+        "named_config": str(config),
+        "message": (
+            f"Public access ON · {pub.get('portal_path')}"
+            if pub.get("active")
+            else "Cloudflare helper ready — publish a temporary link or configure a named hostname."
+        ),
+    }
+
+
+def install_cloudflared() -> dict[str, Any]:
+    from gpu_swarm.cloudflare_access import install_cloudflared_tool
+
+    return install_cloudflared_tool()
+
+
+def publish_cloudflare(
+    *,
+    mode: str = "quick",
+    hostname: str = "",
+    tunnel_name: str = "gpu-pool",
+    config_path: str = "",
+    open_browser: bool = False,
+) -> dict[str, Any]:
+    from gpu_swarm.cloudflare_access import publish_cloudflare as _publish
+
+    return _publish(mode=mode, hostname=hostname, tunnel_name=tunnel_name, config_path=config_path, open_browser=open_browser)
+
+
+def open_cloudflare_guide() -> dict[str, Any]:
+    from gpu_swarm.cloudflare_access import open_cloudflare_guide as _open
+
+    return _open()
 
 
 def _run_powershell(script: Path, args: list[str] | None = None, timeout: float = 600.0) -> dict[str, Any]:
@@ -1276,13 +1331,17 @@ def install_prereqs(
     skip_virtualbox: bool = False,
     skip_vagrant: bool = False,
     connect_tailscale: bool = False,
+    workspace_tools: bool = False,
     prefer_script: bool = True,
     timeout: float = 1800.0,
 ) -> dict[str, Any]:
     """
-    Detect/install Tailscale + optional VirtualBox/Vagrant (Workspace).
-    Prefer scripts/install-prereqs.ps1. Never reads or writes Discord secrets.
-    Tailscale auth key only via process env TS_AUTHKEY / GPU_SWARM_TAILSCALE_AUTHKEY.
+    Detect/install optional network and Workspace tools.
+
+    The common Contribute/Utilize path installs nothing beyond the GPUPool
+    runtime. Tailscale and Workspace (VirtualBox/Vagrant) are explicit opt-ins;
+    this prevents a friendly joiner install from launching multi-gigabyte or UAC
+    workflows that the user did not request.
     """
     if prefer_script and SCRIPT_INSTALL_PREREQS.is_file():
         args: list[str] = ["-Json"]
@@ -1296,6 +1355,10 @@ def install_prereqs(
             args.append("-SkipVagrant")
         if connect_tailscale:
             args.append("-ConnectTailscale")
+        if workspace_tools:
+            args.append("-WorkspaceTools")
+        else:
+            args.extend(["-SkipVirtualBox", "-SkipVagrant"])
         raw = _run_powershell(SCRIPT_INSTALL_PREREQS, args=args, timeout=timeout)
         parsed = _parse_json_tail(raw.get("stdout") or "")
         if isinstance(parsed, dict):

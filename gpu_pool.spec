@@ -28,6 +28,13 @@ extra_datas = [
     ("scripts/check_prereqs.cmd", "scripts"),
     ("scripts/install_joiner_deps.ps1", "scripts"),
     ("scripts/install_joiner_deps.cmd", "scripts"),
+    ("scripts/install_cloudflared.ps1", "scripts"),
+    ("scripts/install_cloudflared.cmd", "scripts"),
+    ("scripts/cloudflare-access.cmd", "scripts"),
+    ("scripts/launch_public.py", "scripts"),
+    ("launch-public.cmd", "."),
+    ("cloudflare/README.md", "cloudflare"),
+    ("cloudflare/gpu-pool.tunnel.yml.example", "cloudflare"),
     ("examples/coding_agent_pool.py", "examples"),
     ("examples/ollama_or_local_offload.md", "examples"),
 ]
@@ -36,6 +43,10 @@ extra_datas += ctk_datas + dark_datas
 # Joiner EXE does not need scheduler/portal server stacks at import time.
 # Exclude heavy optional stacks that PyInstaller may pull via site-packages.
 excludes = [
+    # PyInstaller's pkg_resources runtime hook is incompatible with the
+    # current setuptools/pkg_resources split and is not used by GPUPool.
+    "pkg_resources",
+    "setuptools",
     "torch",
     "torchvision",
     "torchaudio",
@@ -87,6 +98,7 @@ a = Analysis(
         "gpu_swarm.app",
         "gpu_swarm.app.desktop_app",
         "gpu_swarm.app_backend",
+        "gpu_swarm.cloudflare_access",
         "gpu_swarm.joiner_settings",
         "gpu_swarm.portable_python",
         "gpu_swarm.win_subprocess",

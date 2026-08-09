@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Detect / install friend join prerequisites: Tailscale, VirtualBox, Vagrant.
@@ -18,7 +18,7 @@
   Skip that component entirely.
 
 .PARAMETER WorkspaceTools
-  Ensure VirtualBox + Vagrant (default ON unless -Skip*).
+  Ensure VirtualBox + Vagrant only when explicitly requested with -WorkspaceTools.
 
 .PARAMETER ConnectTailscale
   After install/detect, run `tailscale up` (auth key or interactive login).
@@ -32,7 +32,7 @@ param(
     [switch]$SkipVirtualBox,
     [switch]$SkipVagrant,
     [switch]$SkipExtensionPack,
-    [switch]$WorkspaceTools = $true,
+    [switch]$WorkspaceTools,
     [switch]$ConnectTailscale,
     [switch]$Json,
     [switch]$Quiet,
@@ -504,6 +504,7 @@ if (-not (Test-IsAdmin)) {
     Write-Info "Running as normal user  -  installs that need admin will show a UAC prompt."
 }
 
+$doTailscale = $ConnectTailscale -and -not $SkipTailscale
 $doWorkspace = [bool]$WorkspaceTools -and -not ($SkipVirtualBox -and $SkipVagrant)
 $result = [ordered]@{
     ok = $true
@@ -518,22 +519,27 @@ $result = [ordered]@{
     script = "scripts/install-prereqs.ps1"
 }
 
-if (-not $SkipTailscale) {
+# Default is detection-only: friends should not auto-install Tailscale/VirtualBox/Vagrant.
+# Tailscale is only installed when -ConnectTailscale is passed; VirtualBox/Vagrant only when -WorkspaceTools.
+if ($doTailscale) {
     $result.tailscale = Install-TailscaleTool
 } else {
-    $result.tailscale = @{ ok = $true; skipped = $true; message = "skipped" }
+    $info = Get-TailscaleInfo
+    $info["skipped"] = $true
+    $info["message"] = "skipped (use -ConnectTailscale to install/join)"
+    $result.tailscale = $info
 }
 
 if ($doWorkspace -and -not $SkipVirtualBox) {
     $result.virtualbox = Install-VirtualBox
 } else {
-    $result.virtualbox = @{ ok = $true; skipped = $true; message = "skipped (not required for Contribute/Utilize)" }
+    $result.virtualbox = @{ ok = $true; skipped = $true; message = "skipped (use -WorkspaceTools to install)" }
 }
 
 if ($doWorkspace -and -not $SkipVagrant) {
     $result.vagrant = Install-VagrantTool
 } else {
-    $result.vagrant = @{ ok = $true; skipped = $true; message = "skipped (not required for Contribute/Utilize)" }
+    $result.vagrant = @{ ok = $true; skipped = $true; message = "skipped (use -WorkspaceTools to install)" }
 }
 
 Write-Step "Summary  -  what to click next" "Join the pool; Workspace is optional." 100

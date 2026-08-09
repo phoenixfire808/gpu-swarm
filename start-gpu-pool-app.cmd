@@ -98,7 +98,7 @@ set "GPU_SWARM_PYTHON=%PYEXE%"
 REM Ensure joiner UI deps exist (skip if already importable). Prefer venv installs (no --user).
 "%PYEXE%" -c "import customtkinter, httpx, psutil" 1>nul 2>nul
 if errorlevel 1 (
-  echo Installing missing packages from requirements.txt into isolated env ...
+  echo Installing missing joiner packages from requirements-joiner.txt into isolated env ...
   echo %PYEXE% | find /I "\GPUPool\venv\" >nul
   if not errorlevel 1 (
     "%PYEXE%" -m pip install -r "%REPO%\requirements.txt"
@@ -107,7 +107,7 @@ if errorlevel 1 (
   )
   if errorlevel 1 (
     echo FIX: Bootstrap portable Python in the wizard, or:
-    echo   "%PYEXE%" -m pip install -r requirements.txt
+    echo   "%PYEXE%" -m pip install -r requirements-joiner.txt
     echo Then use Copy log / Submit diagnostics if it still fails.
     pause
     exit /b 1

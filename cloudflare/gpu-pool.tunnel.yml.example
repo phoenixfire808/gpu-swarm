@@ -1,0 +1,11 @@
+# GPU Pool named tunnel template.
+# Copy to %USERPROFILE%\.cloudflared\gpu-pool.yml and replace placeholders.
+# Keep the real file and credential JSON outside the repository.
+
+tunnel: REPLACE_WITH_TUNNEL_NAME_OR_UUID
+credentials-file: C:/Users/YourWindowsName/.cloudflared/REPLACE_WITH_TUNNEL_UUID.json
+
+ingress:
+  - hostname: gpu-pool.example.com
+    service: http://127.0.0.1:8767
+  - service: http_status:404

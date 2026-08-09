@@ -29,6 +29,8 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 ## Now
 - [x] Packaging Worker: publish Windows EXE **v0.1.1** (hub + Invite friends + host_protect + START_HERE)
 - [x] Portal newcomer UX + growth docs (`START_HERE.md`, punchy invite blurbs)
+- [x] One-click public website launcher (`launch-public.cmd`) with fresh Quick Tunnel verification
+- [x] End-to-end local/public portal + allowlisted probe smoke (2026-08-08)
 - [ ] Post member tip: `OPENAI_BASE_URL=http://127.0.0.1:18080/v1` (or `:8080` when free)
 
 ## Next
@@ -37,7 +39,7 @@ Updated: 2026-08-04 · GitHub: https://github.com/phoenixfire808/gpu-swarm
 - [ ] Allowlisted `whisper_transcribe`
 - [ ] Portal Discord OAuth (replace invite/password MVP)
 - [ ] Worker advertise `llm_models` into `/status` for richer `/v1/models`
-- [ ] Stable public URL (durable tunnel / DNS)
+- [ ] Stable public URL (named Cloudflare tunnel + DNS prepared; `cloudflared tunnel login` certificate still pending)
 - [ ] Workspace: confirm dialog for halt+start when running above offer
 - [ ] Workspace: disk resize / quota (today: scheduling soft-cap only)
 - [ ] Prefer a small default Ollama model for light chat smoke

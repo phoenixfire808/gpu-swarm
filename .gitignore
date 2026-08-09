@@ -32,3 +32,4 @@ DISCORD_BOT_TOKEN_PASTE.txt
 tokens/
 *.credentials.json
 .cloudflared/
+FRIEND_HANDBOFF.md

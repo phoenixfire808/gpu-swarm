@@ -41,7 +41,7 @@ function Find-Python {
             return @{ ok = $true; exe = $w.Source; version = "$ver"; path = $w.Source; source = 'PATH' }
         }
     }
-    return @{ ok = $false; exe = ''; version = ''; path = ''; message = 'Python 3.10+ not found — bootstrap portable Python or use GPUPool.exe' }
+    return @{ ok = $false; exe = ''; version = ''; path = ''; message = 'Python 3.10+ not found - bootstrap portable Python or use GPUPool.exe' }
 }
 
 function Test-NvidiaSmi {
@@ -165,7 +165,7 @@ function Get-TailscaleProbe {
         $ipOut = & $exe ip -4 2>$null | Select-Object -First 1
         if ($ipOut -match '100\.\d+\.\d+\.\d+') { $ipv4 = $Matches[0]; $loggedIn = $true }
     } catch {}
-    $msg = if ($loggedIn) { "Tailscale OK ($ipv4)" } else { 'Tailscale installed — login still needed' }
+    $msg = if ($loggedIn) { "Tailscale OK ($ipv4)" } else { 'Tailscale installed - login still needed' }
     return @{ ok = $true; installed = $true; logged_in = $loggedIn; ipv4 = $ipv4; path = $exe; message = $msg }
 }
 
@@ -176,7 +176,7 @@ $disk = Get-DiskInfo
 $virtualbox = Get-VirtualBoxProbe
 $vagrant = Get-VagrantProbe
 $tailscale = Get-TailscaleProbe
-# NVIDIA / Tailscale / Workspace tools optional — share path needs python+scheduler+disk
+# NVIDIA / Tailscale / Workspace tools optional - share path needs python+scheduler+disk
 $overall = [bool]($python.ok -and $scheduler.ok -and $disk.ok)
 $result = [ordered]@{
     ok = $overall
@@ -193,7 +193,7 @@ $result = [ordered]@{
     workspace_tools_ready = [bool]($virtualbox.ok -and $vagrant.ok)
     checked_at = (Get-Date).ToString('o')
     script = 'scripts/check_prereqs.ps1'
-    note = 'No NVIDIA? Utilize or CPU contribute. No Tailscale? Use public portal. Workspace needs VirtualBox+Vagrant — run scripts/install-prereqs.cmd'
+    note = 'No NVIDIA? Utilize or CPU contribute. No Tailscale? Use public portal. Workspace needs VirtualBox+Vagrant - run scripts/install-prereqs.cmd'
 }
 
 if ($Text -and -not $Json) {
@@ -202,7 +202,7 @@ if ($Text -and -not $Json) {
     Write-Output ("overall:      {0}" -f (Format-Pass $overall))
     Write-Output ("python:       {0}  {1} ({2})" -f (Format-Pass $python.ok), $python.version, $python.exe)
     Write-Output ("nvidia-smi:   {0}  {1}" -f (Format-Opt $nvidia.ok), $nvidia.message)
-    if (-not $nvidia.ok) { Write-Output "note:         No NVIDIA — Utilize or CPU contribute still OK" }
+    if (-not $nvidia.ok) { Write-Output "note:         No NVIDIA - Utilize or CPU contribute still OK" }
     Write-Output ("scheduler:    {0}  {1}" -f (Format-Pass $scheduler.ok), $scheduler.message)
     Write-Output ("disk:         {0}  {1}" -f (Format-Pass $disk.ok), $disk.message)
     Write-Output ("tailscale:    {0}  {1}" -f (Format-Opt $tailscale.ok), $tailscale.message)

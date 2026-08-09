@@ -78,7 +78,7 @@ If login suddenly fails after it worked before, ask the host whether the invite 
 
 ### Path B — Tailscale portal (private network)
 
-1. **Automated (preferred):** from a gpu-swarm checkout run `scripts\install-prereqs.cmd` (or wizard step **Network & Workspace** → **Install & connect**). It detects Tailscale, installs if missing, then opens login. Approve UAC if asked; finish the **one** Tailscale browser login. Optional unattended: set `GPU_SWARM_TAILSCALE_AUTHKEY` (never commit).
+1. **Optional private-network path:** from a gpu-swarm checkout run `scripts\install-prereqs.cmd` (or wizard **Network & Workspace** → **Install optional Tailscale**). It does not install VirtualBox/Vagrant unless you explicitly choose **Workspace tools (optional)**. Approve UAC if asked; finish the one Tailscale browser login.
 2. Or install manually from [Tailscale](https://tailscale.com/download) and join the Glitch Factor tailnet (ask the host).
 3. Open exactly:  
    `http://100.85.165.84:8767/portal`
@@ -101,7 +101,7 @@ start-gpu-pool-app.cmd
 **5-minute overview:** [`START_HERE.md`](START_HERE.md) · details: [`DOWNLOAD.md`](DOWNLOAD.md).
 
 1. Run EXE / app. SmartScreen on unsigned EXE → **More info** → **Run anyway** (only if you trust this repo’s release).
-2. **We’ll install what you need** — wizard installs Python runtime/deps automatically; Tailscale and VirtualBox+Vagrant only if you use those steps (already-installed tools are skipped). Progress stays on screen.
+2. **We’ll install what you choose** — the normal public-portal path needs no network tools. Bootstrap portable Python only if prompted; Tailscale and VirtualBox/Vagrant are explicit optional buttons, and progress stays on screen.
 3. Prefer the **public pool-api / portal** URL a pool member shared when the tunnel is up; else Tailscale.
 4. Enter invite **`glitch-factor`** + your Discord display name.
 5. Set **your** resource caps (VRAM can be **0** if you have no NVIDIA GPU) → **Save + Join**.

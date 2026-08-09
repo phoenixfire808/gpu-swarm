@@ -22,10 +22,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 from typing import Any, Callable
-from urllib.request import urlretrieve
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from gpu_swarm.paths import (
     BUNDLE_ROOT,
@@ -255,31 +257,79 @@ def _download(
     on_progress: ProgressFn | None = None,
     label: str = STEP_DOWNLOAD_PYTHON,
 ) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    last_pct = [-1]
+    """Download atomically with a timeout and bounded retries.
 
-    def _hook(block_num: int, block_size: int, total_size: int) -> None:
-        if total_size <= 0:
-            _emit(on_progress, label, percent=None, bytes=block_num * block_size)
+    ``urlretrieve`` had no useful read timeout and wrote directly to the final
+    path. A stalled or interrupted first run could therefore look frozen and
+    leave a corrupt archive that the next run treated as real work. Stream to a
+    sidecar file, retry transient network failures, then replace atomically.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    partial = dest.with_name(dest.name + ".part")
+    last_pct = -1
+    last_unknown_emit = 0
+
+    def emit_progress(done: int, total: int) -> None:
+        nonlocal last_pct, last_unknown_emit
+        if total <= 0:
+            if done - last_unknown_emit < 1024 * 1024 and done > 0:
+                return
+            last_unknown_emit = done
+            _emit(on_progress, label, percent=None, bytes=done)
             return
-        done = min(block_num * block_size, total_size)
-        pct = int(done * 100 / total_size)
-        if pct == last_pct[0] and pct not in (0, 100):
+        pct = int(min(done, total) * 100 / total)
+        if pct == last_pct or (pct - last_pct < 2 and pct not in (0, 100)):
             return
-        if pct - last_pct[0] < 2 and pct not in (0, 100):
-            return
-        last_pct[0] = pct
+        last_pct = pct
         _emit(
             on_progress,
             label,
             percent=pct,
-            bytes=done,
-            total_bytes=total_size,
+            bytes=min(done, total),
+            total_bytes=total,
             package=f"CPython {PORTABLE_PYTHON_VERSION}",
         )
 
-    urlretrieve(url, str(dest), reporthook=_hook)  # noqa: S310 — fixed NuGet URL
-    _emit(on_progress, label, percent=100, package=f"CPython {PORTABLE_PYTHON_VERSION}")
+    last_error: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            partial.unlink(missing_ok=True)
+            request = Request(
+                url,
+                headers={
+                    "User-Agent": "GPU-Pool-installer/1.0",
+                    "Accept": "application/octet-stream",
+                },
+            )
+            with urlopen(request, timeout=45) as response, partial.open("wb") as out:
+                header = response.headers.get("Content-Length") or "0"
+                total = int(header) if header.isdigit() else 0
+                done = 0
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+                    done += len(chunk)
+                    emit_progress(done, total)
+                if total and done < total:
+                    raise IOError(f"download ended early ({done}/{total} bytes)")
+            os.replace(partial, dest)
+            _emit(on_progress, label, percent=100, package=f"CPython {PORTABLE_PYTHON_VERSION}")
+            return
+        except (HTTPError, URLError, OSError, TimeoutError, IOError) as exc:
+            last_error = exc
+            partial.unlink(missing_ok=True)
+            if attempt >= 3:
+                break
+            _emit(
+                on_progress,
+                "Download interrupted — retrying…",
+                attempt=attempt + 1,
+                message=str(exc),
+            )
+            time.sleep(2 ** attempt)
+    raise RuntimeError(f"download failed after 3 attempts: {last_error}")
 
 
 def _extract_nuget_python(
@@ -648,7 +698,13 @@ def ensure_portable_python(
     found = find_usable_python()
     need_download = force_download or not found.get("ok") or not found.get("pip_ok")
 
-    if found.get("ok") and found.get("source") == "venv" and found.get("pip_ok") and not force_download:
+    if (
+        found.get("ok")
+        and found.get("source") == "venv"
+        and found.get("pip_ok")
+        and not force_download
+        and not with_requirements
+    ):
         _emit(on_progress, STEP_DONE, percent=100, message=found["message"])
         result = {
             "ok": True,

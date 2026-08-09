@@ -199,6 +199,8 @@ class WizardFrame(ctk.CTkFrame):
         self._no_gpu = False
         self._join_busy = False
         self._prereq_busy = False
+        self._deps_busy = False
+        self._cloudflare_busy = False
         self._build()
         self._render_step()
 
@@ -432,10 +434,10 @@ class WizardFrame(ctk.CTkFrame):
         ctk.CTkLabel(
             why,
             text=(
-                "• Tailscale — private network so friends connect safely (skip if you have a web portal link)\n"
-                "• VirtualBox — runs an optional Linux desktop (you can skip this)\n"
-                "• Vagrant — starts that desktop when you want it\n"
-                "Windows may ask Yes once per install — that is normal."
+                "Nothing is required for the public portal path.\n"
+                "• Tailscale — optional private-network fallback\n"
+                "• VirtualBox + Vagrant — optional Workspace only (large install; never automatic)\n"
+                "The normal friend path skips all three and opens the portal."
             ),
             text_color=MUTED,
             justify="left",
@@ -471,26 +473,80 @@ class WizardFrame(ctk.CTkFrame):
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             row,
-            text="Install what I need",
-            width=180,
+            text="Install optional Tailscale",
+            width=190,
             fg_color=ACCENT,
             text_color="#0A1210",
-            command=lambda: self._run_prereqs(detect_only=False, connect_tailscale=True),
-        ).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(
-            row,
-            text="Tailscale only",
-            width=160,
-            fg_color="#2A3544",
             command=lambda: self._run_prereqs(
                 detect_only=False,
                 connect_tailscale=True,
                 skip_virtualbox=True,
                 skip_vagrant=True,
             ),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="Workspace tools (optional)",
+            width=210,
+            fg_color="#2A3544",
+            command=lambda: self._run_prereqs(
+                detect_only=False,
+                workspace_tools=True,
+                skip_tailscale=True,
+            ),
         ).pack(side="left")
 
         self.after(200, lambda: self._run_prereqs(detect_only=True))
+
+        cloud = ctk.CTkFrame(self.body, fg_color="#13261F", corner_radius=10)
+        cloud.pack(fill="x", pady=(10, 0))
+        ctk.CTkLabel(
+            cloud,
+            text="Public access with Cloudflare (optional)",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=ACCENT,
+        ).pack(anchor="w", padx=16, pady=(12, 4))
+        ctk.CTkLabel(
+            cloud,
+            text=(
+                "Make this PC's GPU Pool portal available over HTTPS. Quick link = one click, no account, "
+                "temporary URL. Stable hostname = your Cloudflare account/domain. Credentials stay on this PC. "
+                "Only the portal is published; scheduler access remains behind /pool-api."
+            ),
+            text_color=MUTED,
+            wraplength=820,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+        self.cloudflare_status_lbl = ctk.CTkLabel(cloud, text="Checking Cloudflare helper…", text_color=MUTED, wraplength=820, justify="left")
+        self.cloudflare_status_lbl.pack(anchor="w", padx=16, pady=(0, 4))
+        self.cloudflare_log = ctk.CTkTextbox(cloud, height=118, fg_color=PANEL)
+        self.cloudflare_log.pack(fill="x", padx=16, pady=(0, 8))
+        self._append_log(self.cloudflare_log, "Cloudflare is optional. Install the helper, then publish a temporary link when the local portal is ready.\n")
+        cloud_row = ctk.CTkFrame(cloud, fg_color="transparent")
+        cloud_row.pack(fill="x", padx=16, pady=(0, 12))
+        ctk.CTkButton(
+            cloud_row,
+            text="Install Cloudflare helper",
+            width=190,
+            fg_color="#2A3544",
+            command=lambda: self._run_cloudflare("install"),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            cloud_row,
+            text="Publish temporary HTTPS link",
+            width=215,
+            fg_color=ACCENT,
+            text_color="#0A1210",
+            command=lambda: self._run_cloudflare("quick"),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            cloud_row,
+            text="Stable hostname guide",
+            width=170,
+            fg_color="#2A3544",
+            command=self._open_cloudflare_guide,
+        ).pack(side="left")
+        self.after(250, self._refresh_cloudflare_status)
 
     def _run_prereqs(
         self,
@@ -499,6 +555,7 @@ class WizardFrame(ctk.CTkFrame):
         connect_tailscale: bool = False,
         skip_virtualbox: bool = False,
         skip_vagrant: bool = False,
+        workspace_tools: bool = False,
     ) -> None:
         if self._prereq_busy:
             return
@@ -514,12 +571,16 @@ class WizardFrame(ctk.CTkFrame):
             self.prereq_status_lbl.configure(text=f"{mode}…", text_color=ACCENT)
 
         def work() -> None:
-            result = be.install_prereqs(
-                detect_only=detect_only,
-                connect_tailscale=connect_tailscale,
-                skip_virtualbox=skip_virtualbox,
-                skip_vagrant=skip_vagrant,
-            )
+            try:
+                result = be.install_prereqs(
+                    detect_only=detect_only,
+                    connect_tailscale=connect_tailscale,
+                    skip_virtualbox=skip_virtualbox,
+                    skip_vagrant=skip_vagrant,
+                    workspace_tools=workspace_tools,
+                )
+            except Exception as exc:  # noqa: BLE001
+                result = {"ok": False, "message": f"Prerequisite check error: {exc}", "warnings": ["Use the public portal path and skip optional tools."]}
             self.app.post_ui(lambda: self._prereqs_done(result, detect_only=detect_only))
 
         threading.Thread(target=work, daemon=True).start()
@@ -562,6 +623,74 @@ class WizardFrame(ctk.CTkFrame):
                 text_color=OK_GREEN if (ts.get("logged_in") or detect_only) else WARN,
             )
         self._append_log(self.prereq_log, f"\n{summary}\n")
+
+    def _cloudflare_done(self, result: dict[str, Any], action: str) -> None:
+        self._cloudflare_busy = False
+        log_text = result.get("log_text") or ""
+        if log_text:
+            self._append_log(self.cloudflare_log, str(log_text)[-4000:] + "\n")
+        if result.get("ok"):
+            portal = result.get("portal_path") or ""
+            self._append_log(self.cloudflare_log, f"OK — {result.get('message') or 'Cloudflare ready'}\n")
+            if portal:
+                self.settings.portal_url = str(portal)
+                be.save_config(self.settings)
+                self._append_log(self.cloudflare_log, f"Portal: {portal}\n")
+            if hasattr(self, "cloudflare_status_lbl"):
+                self.cloudflare_status_lbl.configure(
+                    text=f"Cloudflare ON — {portal or result.get('path') or 'helper ready'}",
+                    text_color=OK_GREEN,
+                )
+        else:
+            self._append_log(self.cloudflare_log, f"FAILED — {result.get('message') or result.get('error') or 'Cloudflare action failed'}\n")
+            if hasattr(self, "cloudflare_status_lbl"):
+                self.cloudflare_status_lbl.configure(text="Cloudflare action needs attention — see the log.", text_color=WARN)
+        self._refresh_cloudflare_status()
+
+    def _run_cloudflare(self, action: str) -> None:
+        if self._cloudflare_busy or not hasattr(self, "cloudflare_log"):
+            return
+        self._cloudflare_busy = True
+        self.cloudflare_log.delete("1.0", "end")
+        label = "Installing Cloudflare helper" if action == "install" else "Starting temporary HTTPS link"
+        self._append_log(self.cloudflare_log, f"{label}…\n\n")
+        if hasattr(self, "cloudflare_status_lbl"):
+            self.cloudflare_status_lbl.configure(text=f"{label}…", text_color=ACCENT)
+
+        def work() -> None:
+            try:
+                result = be.install_cloudflared() if action == "install" else be.publish_cloudflare(mode="quick", open_browser=True)
+            except Exception as exc:  # noqa: BLE001
+                result = {"ok": False, "message": f"Cloudflare action error: {exc}"}
+            self.app.post_ui(lambda: self._cloudflare_done(result, action))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _refresh_cloudflare_status(self) -> None:
+        if not hasattr(self, "cloudflare_status_lbl") or self._cloudflare_busy:
+            return
+        try:
+            status = be.cloudflare_status()
+            if status.get("public_active"):
+                text = f"Cloudflare ON ({status.get('mode')}) — {status.get('portal_path')}"
+                color = OK_GREEN
+            elif status.get("tool_installed"):
+                text = "Cloudflare helper installed — publish a temporary link or open the stable hostname guide."
+                color = OK_GREEN
+            else:
+                text = "Cloudflare helper not installed yet — optional; public access needs a running local portal."
+                color = MUTED
+            self.cloudflare_status_lbl.configure(text=text, text_color=color)
+        except Exception as exc:  # noqa: BLE001
+            self.cloudflare_status_lbl.configure(text=f"Cloudflare status unavailable: {exc}", text_color=WARN)
+
+    def _open_cloudflare_guide(self) -> None:
+        result = be.open_cloudflare_guide()
+        if hasattr(self, "cloudflare_log"):
+            if result.get("ok"):
+                self._append_log(self.cloudflare_log, f"Opened stable hostname guide: {result.get('path')}\n")
+            else:
+                self._append_log(self.cloudflare_log, f"Guide: {result.get('message') or result.get('path')}\n")
 
     def _set_portal(self, url: str) -> None:
         if hasattr(self, "portal_entry"):
@@ -739,6 +868,9 @@ class WizardFrame(ctk.CTkFrame):
         self.app.post_ui(apply)
 
     def _bootstrap_python(self) -> None:
+        if self._deps_busy:
+            return
+        self._deps_busy = True
         self.deps_log.delete("1.0", "end")
         if hasattr(self, "deps_progress"):
             self.deps_progress.set(0)
@@ -751,16 +883,20 @@ class WizardFrame(ctk.CTkFrame):
         )
 
         def work() -> None:
-            result = be.bootstrap_portable_python(
-                dry_run=False,
-                with_requirements=True,
-                on_progress=self._on_install_progress,
-            )
+            try:
+                result = be.bootstrap_portable_python(
+                    dry_run=False,
+                    with_requirements=True,
+                    on_progress=self._on_install_progress,
+                )
+            except Exception as exc:  # noqa: BLE001
+                result = {"ok": False, "message": f"Bootstrap error: {exc}", "fix": "Use Copy log and retry."}
             self.app.post_ui(lambda: self._bootstrap_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
     def _bootstrap_done(self, result: dict[str, Any]) -> None:
+        self._deps_busy = False
         if hasattr(self, "deps_progress") and result.get("ok"):
             self.deps_progress.set(1.0)
         self._append_log(self.deps_log, result.get("message") or str(result))
@@ -793,18 +929,25 @@ class WizardFrame(ctk.CTkFrame):
         )
 
     def _install_deps(self) -> None:
+        if self._deps_busy:
+            return
+        self._deps_busy = True
         self.deps_log.delete("1.0", "end")
         if hasattr(self, "deps_progress"):
             self.deps_progress.set(0)
         self._append_log(self.deps_log, "Checking deps / installing missing packages…\n")
 
         def work() -> None:
-            result = be.install_requirements(on_progress=self._on_install_progress)
+            try:
+                result = be.install_requirements(on_progress=self._on_install_progress)
+            except Exception as exc:  # noqa: BLE001
+                result = {"ok": False, "message": f"Dependency install error: {exc}", "fix": "Use Copy log and retry."}
             self.app.post_ui(lambda: self._deps_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
     def _deps_done(self, result: dict[str, Any]) -> None:
+        self._deps_busy = False
         if hasattr(self, "deps_progress") and result.get("ok"):
             self.deps_progress.set(1.0)
         self._append_log(self.deps_log, result.get("message") or str(result))
@@ -919,6 +1062,9 @@ class WizardFrame(ctk.CTkFrame):
             pass
 
     def _install_torch(self) -> None:
+        if self._deps_busy:
+            return
+        self._deps_busy = True
         if hasattr(self, "deps_progress"):
             self.deps_progress.set(0)
         self._append_log(
@@ -928,12 +1074,16 @@ class WizardFrame(ctk.CTkFrame):
         )
 
         def work() -> None:
-            result = be.install_torch_cuda(on_progress=self._on_install_progress)
+            try:
+                result = be.install_torch_cuda(on_progress=self._on_install_progress)
+            except Exception as exc:  # noqa: BLE001
+                result = {"ok": False, "message": f"CUDA install error: {exc}", "fix": "Use Copy log and retry."}
             self.app.post_ui(lambda: self._torch_done(result))
 
         threading.Thread(target=work, daemon=True).start()
 
     def _torch_done(self, result: dict[str, Any]) -> None:
+        self._deps_busy = False
         if hasattr(self, "deps_progress") and result.get("ok"):
             self.deps_progress.set(1.0)
         self._append_log(self.deps_log, result.get("message") or str(result))

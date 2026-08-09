@@ -1,8 +1,8 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Start a Cloudflare quick tunnel to the portal (8767).
-  One public HTTPS URL — portal UI + /pool-api proxy to scheduler.
+  One public HTTPS URL -- portal UI + /pool-api proxy to scheduler.
   No Cloudflare account required (trycloudflare.com).
 
 .NOTES
@@ -10,7 +10,13 @@
     data/public_endpoints.json
     data/public_endpoints.share.txt
   Keep this window open while friends need access.
+
+  2026-08-07 fix: replaced literal arrow chars with ASCII in user-facing
+  strings so they don't get mojibake-decoded by Windows PowerShell's default
+  cp1252 console encoding. Also forced UTF-8 OutputEncoding at the top of the
+  script body (statements MUST come after param() in 5.1 or parsing fails).
 #>
+
 param(
     [int]$PortalPort = 8767,
     [string]$LocalPortal = "http://127.0.0.1:8767",
@@ -18,6 +24,10 @@ param(
     [switch]$AlsoScheduler,
     [int]$SchedulerPort = 8766
 )
+
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+$OutputEncoding = [System.Text.UTF8Encoding]::new()
+
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
@@ -29,7 +39,7 @@ $PidPath = Join-Path $DataDir "cloudflared_portal.pid"
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 
 $install = Join-Path $PSScriptRoot "install_cloudflared.ps1"
-$ExePath = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $install
+$ExePath = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $install -Quiet | Select-Object -Last 1
 if (-not $ExePath -or -not (Test-Path $ExePath)) {
     throw "cloudflared.exe missing after install_cloudflared.ps1"
 }
@@ -40,7 +50,7 @@ if (-not $SkipPortalCheck) {
         if ($r.StatusCode -ne 200) { throw "portal health HTTP $($r.StatusCode)" }
         Write-Host "[public] portal OK at $LocalPortal/health"
     } catch {
-        Write-Host "[public] WARNING: portal not reachable at $LocalPortal — start start-portal.cmd first"
+        Write-Host "[public] WARNING: portal not reachable at $LocalPortal -- start start-portal.cmd first"
         Write-Host "         $($_.Exception.Message)"
     }
 }
@@ -61,7 +71,7 @@ if (Test-Path $PidPath) {
 }
 
 $target = "http://127.0.0.1:$PortalPort"
-Write-Host "[public] starting quick tunnel → $target"
+Write-Host "[public] starting quick tunnel -> $target"
 Write-Host "[public] no Cloudflare login required (trycloudflare.com)"
 Write-Host "[public] leave this window open; Ctrl+C to stop"
 Write-Host ""
@@ -146,19 +156,19 @@ $payload = [ordered]@{
     portal_local         = $LocalPortal
     updated_at           = $updated
     invite_code          = "glitch-factor"
-    note                 = "Public HTTPS via Cloudflare quick tunnel — no Tailscale needed. Invite code still required. Use pool_api_public_url for scheduler API (portal /pool-api proxy)."
+    note                 = "Public HTTPS via Cloudflare quick tunnel -- no Tailscale needed. Invite code still required. Use pool_api_public_url for scheduler API (portal /pool-api proxy)."
     cloudflared_pid      = $proc.Id
 }
 $payload | ConvertTo-Json -Depth 5 | Set-Content -Path $JsonPath -Encoding utf8
 
 $share = @"
-GPU Pool — public access (no Tailscale needed)
+GPU Pool -- public access (no Tailscale needed)
 ----------------------------------------------
 Portal:     $portalPath
 Pool API:   $poolApi  (proxies scheduler; allowlisted jobs only)
 Invite:     glitch-factor
 
-Laptop / no NVIDIA: open Portal → sign in with invite + display name → Utilize.
+Laptop / no NVIDIA: open Portal -> sign in with invite + display name -> Utilize.
 Optional: Contribute CPU/RAM/disk with VRAM=0.
 Tailscale is optional while this tunnel is running.
 Updated:    $updated
@@ -167,7 +177,7 @@ Set-Content -Path $SharePath -Value $share -Encoding utf8
 
 Write-Host ""
 Write-Host "============================================================"
-Write-Host " PUBLIC ACCESS READY — share with pool members (e.g. YourDiscordName)"
+Write-Host " PUBLIC ACCESS READY -- share with pool members (e.g. YourDiscordName)"
 Write-Host "============================================================"
 Write-Host " Portal:   $portalPath"
 Write-Host " Pool API: $poolApi"
